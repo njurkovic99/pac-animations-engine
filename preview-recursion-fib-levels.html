@@ -1,0 +1,1055 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>recursion-fib-levels — preview</title>
+<style>/* pac-animations — design system
+   15 tokens replacing the 188 distinct color values found across the
+   original 25 animation files. */
+
+:root {
+  /* surfaces */
+  --bg:            #0f1117;
+  --panel:         #171a23;
+  --panel-header:  #1e222d;
+  --border:        #2b3040;
+
+  /* text */
+  --text:          #d8dce6;
+  --text-dim:      #8b93a7;
+
+  /* accents — one blue, not four */
+  --accent:        #4a90e2;
+  --accent-soft:   rgba(74, 144, 226, 0.18);
+
+  /* semantic state */
+  --ok:            #4caf82;
+  --warn:          #e0a33a;
+  --error:         #e2564a;
+  --highlight:     #d4a13c;
+
+  /* structural */
+  --radius:        6px;
+  --gap:           14px;
+  --mono:          "SF Mono", "Cascadia Code", Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.pac-root { padding: var(--gap); max-width: 1200px; margin: 0 auto; }
+
+.pac-title { font-size: 17px; font-weight: 600; margin: 0 0 4px; }
+.pac-sub   { color: var(--text-dim); font-size: 13px; margin: 0 0 var(--gap); }
+
+/* ---- layout ---- */
+.pac-stage {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--gap);
+  position: relative;          /* anchor origin for the arrow overlay */
+}
+.pac-stage[data-cols="1"] { grid-template-columns: 1fr; }
+.pac-stage[data-cols="2"] { grid-template-columns: 1fr 1fr; }
+
+/* ---- panel chrome ---- */
+.pac-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.pac-panel-head {
+  background: var(--panel-header);
+  padding: 7px 11px;
+  font-size: 12px;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.pac-panel-body { padding: 11px; overflow: auto; flex: 1; min-height: 0; }
+
+/* ---- controls ---- */
+.pac-controls {
+  display: flex; gap: 8px; align-items: center;
+  margin: var(--gap) 0; flex-wrap: wrap;
+}
+.pac-btn {
+  background: var(--panel-header);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 7px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.pac-btn:hover:not(:disabled) { border-color: var(--accent); }
+.pac-btn:disabled { opacity: .38; cursor: default; }
+.pac-btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.pac-progress { color: var(--text-dim); font-size: 12px; margin-left: auto; }
+
+.pac-narrate {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 11px 13px;
+  margin-top: var(--gap);
+  min-height: 42px;
+}
+
+/* ---- CODE panel ---- */
+.pac-lang-tabs { display: flex; gap: 4px; }
+.pac-lang-tab {
+  background: none; border: 1px solid transparent; color: var(--text-dim);
+  font-size: 11px; padding: 2px 8px; border-radius: 4px; cursor: pointer;
+}
+.pac-lang-tab[aria-selected="true"] {
+  color: var(--text); border-color: var(--border); background: var(--panel);
+}
+.pac-code { font-family: var(--mono); font-size: 12.5px; line-height: 1.65; }
+.pac-code-line { display: flex; padding: 0 4px; border-radius: 3px; white-space: pre; }
+.pac-code-line.is-active { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+.pac-code-num { color: var(--text-dim); width: 2.2em; text-align: right; margin-right: 12px; user-select: none; }
+
+/* ---- STREAM panel ---- */
+.pac-stream { font-family: var(--mono); font-size: 12.5px; line-height: 1.7; }
+.pac-stream-line { white-space: pre; }
+.pac-stream-line.dir-in   { color: var(--warn); }
+.pac-stream-line.dir-out  { color: var(--text); }
+.pac-stream-line.is-new   { background: var(--accent-soft); border-radius: 3px; }
+.pac-stream-cursor { color: var(--accent); animation: pac-blink 1s steps(2) infinite; }
+@keyframes pac-blink { 50% { opacity: 0; } }
+
+/* ---- CELLS panel ---- */
+.pac-cells { display: flex; flex-wrap: wrap; gap: 6px; }
+.pac-cells[data-render="row"] { flex-direction: column; gap: 3px; }
+.pac-cell {
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 5px 9px; font-family: var(--mono); font-size: 12.5px;
+  min-width: 40px; text-align: center; background: var(--bg);
+}
+.pac-cell-label { display: block; font-size: 10px; color: var(--text-dim); }
+.pac-cell[data-role="active"]   { border-color: var(--accent); background: var(--accent-soft); }
+.pac-cell[data-role="compared"] { border-color: var(--highlight); }
+.pac-cell[data-role="ok"]       { border-color: var(--ok); }
+.pac-cell[data-role="error"]    { border-color: var(--error); color: var(--error); }
+.pac-cell[data-role="empty"]    { opacity: .35; }
+
+.pac-cells[data-render="row"] .pac-cell {
+  display: flex; justify-content: space-between; text-align: left; min-width: 0;
+}
+.pac-cells[data-render="row"] .pac-cell-label { display: inline; }
+
+/* ---- NODES panel ---- */
+.pac-nodes { width: 100%; display: block; }
+.pac-node-box {
+  fill: var(--bg); stroke: var(--border); stroke-width: 1;
+  transition: fill .15s, stroke .15s;
+}
+.pac-node[data-state="pending"]  { opacity: .18; }
+.pac-node[data-state="entering"] .pac-node-box { stroke: var(--accent); fill: var(--accent-soft); }
+.pac-node[data-state="active"]   .pac-node-box { stroke: var(--accent); fill: var(--accent-soft); }
+.pac-node[data-state="exited"]   .pac-node-box { stroke: var(--ok); }
+.pac-node-label { fill: var(--text); font-family: var(--mono); font-size: 12px; text-anchor: middle; }
+.pac-node-meta  { fill: var(--text-dim); font-family: var(--mono); font-size: 9.5px; text-anchor: middle; }
+.pac-node[data-state="pending"] .pac-node-label { fill: var(--text-dim); }
+.pac-edge { stroke: var(--border); stroke-width: 1.2; fill: none; }
+.pac-edge[data-state="taken"] { stroke: var(--accent); }
+
+/* ---- CHART panel ---- */
+.pac-chart-axis { stroke: var(--border); }
+.pac-chart-tick { fill: var(--text-dim); font-size: 9px; }
+.pac-chart-series { fill: none; stroke-width: 1.8; }
+
+/* ---- arrow overlay ---- */
+.pac-overlay { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+.pac-arrow { stroke: var(--accent); stroke-width: 1.6; fill: none; }
+.pac-arrow[data-style="stale"] { stroke: var(--error); stroke-dasharray: 4 3; }
+
+/* ---- predict gate ---- */
+.pac-predict {
+  background: var(--panel); border: 1px solid var(--highlight);
+  border-radius: var(--radius); padding: 14px; margin-top: var(--gap);
+}
+.pac-predict-q { margin: 0 0 10px; font-weight: 600; }
+.pac-predict-opts { display: flex; gap: 8px; flex-wrap: wrap; }
+.pac-predict-opt { font-family: var(--mono); }
+.pac-predict-verdict { margin-top: 10px; font-size: 13px; }
+.pac-predict-verdict[data-ok="true"]  { color: var(--ok); }
+.pac-predict-verdict[data-ok="false"] { color: var(--warn); }
+
+/* ---- metrics ---- */
+.pac-metrics { display: flex; gap: 16px; font-size: 12px; color: var(--text-dim); }
+.pac-metrics b { color: var(--text); font-weight: 600; font-family: var(--mono); }
+
+/* ---- beginner profile: enforced, not advisory ---- */
+.pac-root[data-profile="beginner"] .pac-addresses { display: none; }
+
+.pac-banner {
+  border-radius: var(--radius); padding: 9px 12px; margin-bottom: var(--gap);
+  font-size: 13px; border: 1px solid var(--warn); color: var(--warn);
+  background: rgba(224, 163, 58, .08);
+}
+</style></head>
+<body><div id="pac"></div>
+<script type="module">
+const codePanel = (() => { /* CODE panel — listings with per-language variants.
+ *
+ * Step data: { line: 7 }  or  { line: {pseudo: 5, java: 7, cpp: 7} }
+ *
+ * Because each trace addresses its OWN listing's line numbers, the listings
+ * never need to stay line-aligned with each other. That constraint would have
+ * been unmaintainable across ~64 files and five years. */
+
+function mount(body, spec, ctx, tools) {
+  spec._langs = Object.keys(spec.listings);
+  if (spec._langs.length > 1) {
+    tools.innerHTML = `<span class="pac-lang-tabs">${spec._langs.map(l =>
+      `<button class="pac-lang-tab" data-lang="${l}">${spec.labels?.[l] ?? l}</button>`
+    ).join('')}</span>`;
+    tools.addEventListener('click', e => {
+      const l = e.target.dataset?.lang;
+      if (l) ctx.engine.setLanguage(l);
+    });
+  }
+  body.innerHTML = '<div class="pac-code"></div>';
+}
+
+function render(body, data, ctx, { lang }) {
+  const spec = ctx.spec;
+  const use = spec.listings[lang] ? lang : spec._langs[0];
+
+  ctx.engine.root.querySelectorAll('.pac-lang-tab').forEach(t =>
+    t.setAttribute('aria-selected', String(t.dataset.lang === use)));
+
+  const active = (data?.line && typeof data.line === 'object') ? data.line[use] : data?.line;
+
+  body.querySelector('.pac-code').innerHTML = spec.listings[use].map((src, k) => {
+    const n = k + 1;
+    return `<div class="pac-code-line${n === active ? ' is-active' : ''}">` +
+           `<span class="pac-code-num">${n}</span><span>${esc(src)}</span></div>`;
+  }).join('');
+}
+
+const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+ return { mount, render }; })();
+const cellsPanel = (() => { /* CELLS panel — 1D/2D grid. Absorbs arrays, sorting bars, hash buckets,
+ * matrices, memory blocks, variable tables, stack frames, vtables.
+ * Step data: { render: 'box'|'bar'|'row', cells: [{value,label,role,anchor}] } */
+
+function mount(body) { body.innerHTML = '<div class="pac-cells"></div>'; }
+
+function render(body, data, ctx) {
+  const wrap = body.querySelector('.pac-cells');
+  const mode = data?.render ?? 'box';
+  wrap.dataset.render = mode;
+  wrap.innerHTML = '';
+  const max = Math.max(1, ...(data?.cells ?? []).map(c => +c.value || 0));
+
+  for (const c of data?.cells ?? []) {
+    const el = document.createElement('div');
+    el.className = 'pac-cell';
+    if (c.role) el.dataset.role = c.role;
+    if (mode === 'bar') el.style.height = `${20 + 70 * (+c.value / max)}px`;
+    el.innerHTML = (c.label ? `<span class="pac-cell-label">${esc(c.label)}</span>` : '') +
+                   `<span>${esc(c.value)}</span>`;
+    wrap.appendChild(el);
+    if (c.anchor) ctx.anchor(c.anchor, el);
+  }
+}
+
+const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+ return { mount, render }; })();
+const nodesPanel = (() => { /* NODES panel — nodes with typed edges.
+ *
+ * One renderer for: linked lists, doubly linked lists, BSTs, heaps-as-trees,
+ * recursion call trees, class hierarchies, object graphs, GC reachability,
+ * UML diagrams, flowcharts, adjacency lists. They differ in node template,
+ * edge template, and layout -- and in nothing else.
+ *
+ * Step data:
+ *   { layout:   'tree' | 'linear' | 'graph',
+ *     template: 'plain' | 'record',
+ *     nodes: [{id, parent, label, meta[], state, fields[], slot, row}],
+ *     edges: [{from, to, state}] }       // implied by `parent` for trees
+ *
+ * Snapshots include not-yet-visited nodes as state 'pending', so layout is
+ * computed over the whole structure and nodes never jump between steps.
+ *
+ * For `record` nodes, every field publishes its own anchor:
+ *     list.n25.prev   list.n25.next   list.n25
+ * which is what lets the arrow overlay draw pointer links as DATA. */
+
+const NW = 74, NH = 40, HGAP = 16, VGAP = 62, PAD = 20;
+const RW = 112, RH = 38, RGAP = 46, RROW = 84;   // record geometry
+
+function mount(body) {
+  body.innerHTML = `<svg class="pac-nodes" xmlns="http://www.w3.org/2000/svg"></svg>`;
+}
+
+function render(body, data, ctx) {
+  const svg = body.querySelector('svg');
+  if (!data?.nodes?.length) { svg.innerHTML = ''; return; }
+
+  const record = data.template === 'record';
+  const w = record ? RW : NW, h = record ? RH : NH;
+  const pos = layout(data, record);
+
+  const xs = [...pos.values()].map(p => p.x), ys = [...pos.values()].map(p => p.y);
+  const W = Math.max(...xs) + w / 2 + PAD, H = Math.max(...ys) + h + PAD + 12;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('height', Math.min(H, 440));
+
+  const edges = (data.edges ?? impliedEdges(data.nodes)).map(e => {
+    const a = pos.get(e.from), b = pos.get(e.to);
+    if (!a || !b) return '';
+    return `<path class="pac-edge" data-state="${e.state ?? ''}" d="M ${a.x} ${a.y + h} L ${b.x} ${b.y}"/>`;
+  }).join('');
+
+  svg.innerHTML = edges + data.nodes.map(n => {
+    const p = pos.get(n.id);
+    return record ? recordNode(n, p) : plainNode(n, p);
+  }).join('');
+
+  const id = ctx.spec.id;
+  svg.querySelectorAll('[data-anchor]').forEach(el => ctx.anchor(`${id}.${el.dataset.anchor}`, el));
+}
+
+function plainNode(n, p) {
+  const meta = (n.meta ?? []).map((m, k) =>
+    `<text class="pac-node-meta" x="${p.x}" y="${p.y + 31 + k * 11}">${esc(m)}</text>`).join('');
+  return `<g class="pac-node" data-state="${n.state ?? 'pending'}" data-anchor="${n.id}">
+    <rect class="pac-node-box" x="${p.x - NW / 2}" y="${p.y}" width="${NW}" height="${NH}" rx="4"/>
+    <text class="pac-node-label" x="${p.x}" y="${p.y + 17}">${esc(n.label)}</text>
+    ${meta}</g>`;
+}
+
+/** [ prev | value | next ] — the shape of lists.9.gif, made addressable. */
+function recordNode(n, p) {
+  const fields = n.fields ?? ['prev', 'value', 'next'];
+  const x0 = p.x - RW / 2;
+  let cx = x0;
+  const cells = fields.map(f => {
+    const fw = (f === 'value' ? 0.42 : 0.29) * RW;
+    const val = f === 'value' ? n.label : (n[f] == null ? '\u2205' : '\u25cf');
+    const g = `<g data-anchor="${n.id}.${f}">
+        <rect class="pac-node-box" x="${cx}" y="${p.y}" width="${fw}" height="${RH}"/>
+        <text class="pac-node-label" x="${cx + fw / 2}" y="${p.y + 24}">${esc(val)}</text></g>`;
+    cx += fw;
+    return g;
+  }).join('');
+  const meta = (n.meta ?? []).map((m, k) =>
+    `<text class="pac-node-meta" x="${p.x}" y="${p.y + RH + 13 + k * 11}">${esc(m)}</text>`).join('');
+  return `<g class="pac-node" data-state="${n.state ?? 'exited'}" data-anchor="${n.id}">${cells}${meta}</g>`;
+}
+
+/* ---- layout ---- */
+
+function layout(data, record) {
+  const mode = data.layout ?? 'tree';
+  const pos = new Map();
+  const w = record ? RW : NW;
+
+  if (mode === 'linear') {
+    const gap = record ? RGAP : 34;
+    data.nodes.forEach((n, k) => pos.set(n.id, {
+      x: PAD + w / 2 + (n.slot ?? k) * (w + gap),
+      y: PAD + (n.row ?? 0) * RROW,
+    }));
+    return pos;
+  }
+
+  if (mode === 'graph') {
+    const R = 30 + data.nodes.length * 13;
+    data.nodes.forEach((n, k) => {
+      const t = (k / data.nodes.length) * 2 * Math.PI - Math.PI / 2;
+      pos.set(n.id, { x: R + PAD + R * Math.cos(t), y: R + PAD + R * Math.sin(t) });
+    });
+    return pos;
+  }
+
+  const kids = new Map();
+  for (const n of data.nodes) {
+    if (n.parent == null) continue;
+    if (!kids.has(n.parent)) kids.set(n.parent, []);
+    kids.get(n.parent).push(n.id);
+  }
+  let leaf = 0;
+  const walk = (id, d) => {
+    const cs = kids.get(id) ?? [];
+    if (!cs.length) { pos.set(id, { x: PAD + NW / 2 + leaf++ * (NW + HGAP), y: PAD + d * VGAP }); return; }
+    cs.forEach(c => walk(c, d + 1));
+    const cx = cs.map(c => pos.get(c).x);
+    pos.set(id, { x: (Math.min(...cx) + Math.max(...cx)) / 2, y: PAD + d * VGAP });
+  };
+  data.nodes.filter(n => n.parent == null).forEach(r => walk(r.id, 0));
+  return pos;
+}
+
+function impliedEdges(nodes) {
+  return nodes.filter(n => n.parent != null)
+    .map(n => ({ from: n.parent, to: n.id, state: n.state === 'pending' ? '' : 'taken' }));
+}
+
+const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+ return { mount, render }; })();
+const streamPanel = (() => { /* STREAM panel — append-only text, two directions.
+ * Step data: { lines: [{text, dir, indent, isNew}], cursor: bool }
+ * `dir: 'in'` renders a prompt / visible pause / echoed input. No file in the
+ * original 25 modelled input at all, yet every CS1 assignment is prompt-driven. */
+
+function mount(body) { body.innerHTML = '<div class="pac-stream"></div>'; }
+
+function render(body, data) {
+  const lines = data?.lines ?? [];
+  const html = lines.map(l =>
+    `<div class="pac-stream-line dir-${l.dir ?? 'out'}${l.isNew ? ' is-new' : ''}">${
+      ' '.repeat((l.indent ?? 0) * 4)}${esc(l.text)}</div>`).join('');
+  const cur = data?.cursor ? '<div class="pac-stream-line dir-in"><span class="pac-stream-cursor">&#9608;</span></div>' : '';
+  body.querySelector('.pac-stream').innerHTML = html + cur;
+  body.scrollTop = body.scrollHeight;
+}
+
+const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+ return { mount, render }; })();
+const chartPanel = (() => { /* CHART panel — series over n.
+ * Required, not optional: ds7 grades a plot of execution time vs. n.
+ * Step data: { series: [{name, color, points:[[x,y],..]}], xLabel, yLabel, marker: x } */
+
+function mount(body) {
+  body.innerHTML = `<svg class="pac-chart" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200"></svg>`;
+}
+
+function render(body, data) {
+  const svg = body.querySelector('svg');
+  if (!data?.series?.length) { svg.innerHTML = ''; return; }
+  const W = 320, H = 200, L = 34, B = 24;
+  const pts = data.series.flatMap(s => s.points);
+  const mx = Math.max(...pts.map(p => p[0]), 1), my = Math.max(...pts.map(p => p[1]), 1);
+  const X = x => L + (x / mx) * (W - L - 8);
+  const Y = y => (H - B) - (y / my) * (H - B - 10);
+
+  const paths = data.series.map(s =>
+    `<path class="pac-chart-series" stroke="${s.color ?? 'var(--accent)'}"
+       d="${s.points.map((p, k) => `${k ? 'L' : 'M'} ${X(p[0])} ${Y(p[1])}`).join(' ')}"/>
+     <text class="pac-chart-tick" x="${X(s.points.at(-1)[0]) - 4}" y="${Y(s.points.at(-1)[1]) - 5}"
+       fill="${s.color ?? 'var(--accent)'}" text-anchor="end">${s.name}</text>`).join('');
+
+  const marker = data.marker != null
+    ? `<line class="pac-chart-axis" x1="${X(data.marker)}" y1="10" x2="${X(data.marker)}" y2="${H - B}"
+         stroke-dasharray="3 3"/>` : '';
+
+  svg.innerHTML = `
+    <line class="pac-chart-axis" x1="${L}" y1="10" x2="${L}" y2="${H - B}"/>
+    <line class="pac-chart-axis" x1="${L}" y1="${H - B}" x2="${W - 8}" y2="${H - B}"/>
+    <text class="pac-chart-tick" x="${W - 8}" y="${H - 8}" text-anchor="end">${data.xLabel ?? 'n'}</text>
+    <text class="pac-chart-tick" x="4" y="14">${data.yLabel ?? ''}</text>
+    ${marker}${paths}`;
+}
+
+ return { mount, render }; })();
+const { Overlay } = (() => { /* Arrow overlay — the piece cpoint1.html faked with four hand-tuned Beziers
+ * and four colliding `arrowhead2` marker ids. Change a font size there and the
+ * arrows pointed at nothing.
+ *
+ * Renderers publish named anchors. Arrows are DATA:
+ *     { from: 'vars.p', to: 'list.n3', style: 'pointer'|'stale'|'ok' }
+ *
+ * Anchors are global across panels, because a pointer variable lives in CELLS
+ * while the node it points at lives in NODES. Coordinates are resolved against
+ * live DOM boxes at draw time, so nothing is ever cached or hand-tuned.
+ *
+ * Self-referencing arrows (a corrupted node pointing at itself) get a loop.
+ * That case is not decorative -- it is the failure mode of a doubly-linked
+ * insertion performed in the wrong order. */
+
+const NS = 'http://www.w3.org/2000/svg';
+
+class Overlay {
+  constructor(stage) {
+    this.stage = stage;
+    this.svg = document.createElementNS(NS, 'svg');
+    this.svg.setAttribute('class', 'pac-overlay');
+    this.svg.innerHTML = `<defs>
+      <marker id="pac-arrowhead" viewBox="0 0 8 8" refX="7.5" refY="4"
+              markerWidth="5.5" markerHeight="5.5" orient="auto">
+        <path d="M 0 0 L 8 4 L 0 8 z" fill="context-stroke"/>
+      </marker></defs>`;
+    stage.appendChild(this.svg);
+    this._ro = new ResizeObserver(() => this._redraw());
+    this._ro.observe(stage);
+    this._last = [[], new Map()];
+  }
+
+  draw(arrows, panels) { this._last = [arrows, panels]; this._redraw(); }
+
+  _redraw() {
+    const [arrows, panels] = this._last;
+    this._clear();
+    if (!arrows?.length) return;
+
+    const o = this.stage.getBoundingClientRect();
+    this.svg.setAttribute('viewBox', `0 0 ${o.width} ${o.height}`);
+
+    const find = name => {
+      for (const p of panels.values()) {
+        const el = p.ctx.anchors.get(name);
+        if (el) {
+          const r = el.getBoundingClientRect();
+          return { l: r.left - o.left, r: r.right - o.left,
+                   t: r.top - o.top, b: r.bottom - o.top,
+                   cx: r.left + r.width / 2 - o.left,
+                   cy: r.top + r.height / 2 - o.top };
+        }
+      }
+      return null;
+    };
+
+    const html = arrows.map(a => {
+      const f = find(a.from), t = find(a.to);
+      if (!f || !t) return '';
+      const style = a.style ?? 'pointer';
+
+      // Self-loop: a node whose pointer has been made to reference itself.
+      if (Math.abs(f.cx - t.cx) < 3 && Math.abs(f.cy - t.cy) < 3 ||
+          (a.from.split('.')[1] === a.to.split('.')[1] && a.from !== a.to && t.l <= f.cx && f.cx <= t.r)) {
+        const x = f.cx, y = f.t;
+        return path(`M ${x} ${y} C ${x + 26} ${y - 30}, ${x - 26} ${y - 30}, ${x - 1} ${y - 1}`, style);
+      }
+
+      // Leave from the side that faces the target; enter on the facing side.
+      const goingRight = t.cx > f.cx;
+      const x1 = goingRight ? f.r : f.l;
+      const x2 = goingRight ? t.l : t.r;
+      const y1 = f.cy, y2 = t.cy;
+
+      // prev-pointers travel leftwards: bow them below, so they never overlap
+      // the next-pointers travelling rightwards above.
+      const bend = a.bend ?? (goingRight ? 'up' : 'down');
+      const dx = Math.max(22, Math.abs(x2 - x1) * 0.35);
+      const lift = Math.abs(y2 - y1) < 6 ? (bend === 'down' ? 26 : -26) : 0;
+
+      return path(`M ${x1} ${y1} C ${x1 + (goingRight ? dx : -dx)} ${y1 + lift},
+                     ${x2 - (goingRight ? dx : -dx)} ${y2 + lift}, ${x2} ${y2}`, style);
+    }).join('');
+
+    this.svg.insertAdjacentHTML('beforeend', html);
+  }
+
+  _clear() { this.svg.querySelectorAll('.pac-arrow').forEach(p => p.remove()); }
+}
+
+const path = (d, style) =>
+  `<path class="pac-arrow" data-style="${style}" marker-end="url(#pac-arrowhead)" d="${d}"/>`;
+
+ return { Overlay }; })();
+/* pac-animations — engine
+ *
+ * Drives one or more generators in lockstep, renders declarative step
+ * snapshots into registered panels, derives metrics from step tags.
+ *
+ * Core decisions (see PANEL-INVENTORY.md):
+ *  - Steps are SNAPSHOTS, not deltas. render(step) is idempotent, so
+ *    stepping backwards is just render(steps[i-1]). No undo stack.
+ *  - A generator that yields literals IS a step array. Precomputed,
+ *    live, and race animations share one driver.
+ *  - Counters are DERIVED from step tags. Nothing increments by hand.
+ *  - Exactly one setInterval, cleared in exactly one place.
+ */
+
+
+
+
+
+
+
+
+const RENDERERS = {
+  code: codePanel, cells: cellsPanel, nodes: nodesPanel,
+  stream: streamPanel, chart: chartPanel,
+};
+
+const MAX_STEPS = 5000;
+const AUTOPLAY_MS = 900;
+
+class Engine {
+  constructor(root, spec) {
+    this.root = root;
+    this.spec = spec;
+    this.lang = spec.languages?.[0] ?? null;
+    this.timer = null;                 // the ONLY timer handle
+    this.panels = new Map();
+    this.overlay = null;
+    this.trace = spec.initialTrace ?? 'correct';
+    this.i = 0;
+    this.steps = [];
+    this.predictAnswered = new Set();
+    this._build();
+    this.loadTrace(this.trace);
+  }
+
+  /* ---------- materialisation ---------- */
+
+  /** Run a generator (or n of them, in lockstep) into a flat snapshot array. */
+  materialise(traceName) {
+    const t = this.spec.traces[traceName];
+    if (!t) throw new Error(`no trace "${traceName}"`);
+
+    // Single generator.
+    if (typeof t === 'function') return take(t(), MAX_STEPS);
+
+    // Race: { racers: {name: genFn}, merge(frames) -> step }
+    const gens = Object.entries(t.racers).map(([k, g]) => [k, g()]);
+    const out = [];
+    while (out.length < MAX_STEPS) {
+      const frame = {};
+      let live = 0;
+      for (const [k, g] of gens) {
+        const r = g.next();
+        if (!r.done) { frame[k] = r.value; live++; }
+      }
+      if (!live) break;
+      out.push(t.merge(frame, out.length));
+    }
+    return out;
+  }
+
+  loadTrace(name, { banner = null } = {}) {
+    this.stop();
+    this.trace = name;
+    this.steps = this.materialise(name);
+    this.i = 0;
+    this.banner.textContent = banner ?? '';
+    this.banner.hidden = !banner;
+    this.render();
+  }
+
+  /* ---------- derived metrics ---------- */
+
+  metrics(upTo = this.i) {
+    const counts = {};
+    for (let k = 0; k <= upTo && k < this.steps.length; k++) {
+      const tag = this.steps[k].tag;
+      if (tag) counts[tag] = (counts[tag] ?? 0) + 1;
+    }
+    return counts;
+  }
+
+  /* ---------- stepping ---------- */
+
+  get step()   { return this.steps[this.i] ?? {}; }
+  get atEnd()  { return this.i >= this.steps.length - 1; }
+  get gated()  { return this.step.type === 'predict' && !this.predictAnswered.has(this.i); }
+
+  next() {
+    if (this.gated || this.atEnd) return this.stop();
+    this.i++;
+    this.render();
+    if (this.gated) this.stop();
+  }
+
+  prev() {
+    this.stop();
+    if (this.i > 0) { this.i--; this.render(); }
+  }
+
+  reset() {
+    this.stop();
+    this.i = 0;
+    this.predictAnswered.clear();
+    this.render();
+  }
+
+  play() {
+    if (this.timer || this.atEnd) return;
+    this.timer = setInterval(() => this.next(), AUTOPLAY_MS);
+    this.render();
+  }
+
+  /** The single clearInterval in the codebase. Seven of the original
+   *  thirteen files never called it at all. */
+  stop() {
+    if (this.timer) { clearInterval(this.timer); this.timer = null; }
+    this.render();
+  }
+
+  /* ---------- construction ---------- */
+
+  _build() {
+    const s = this.spec;
+    this.root.className = 'pac-root';
+    this.root.dataset.profile = s.profile ?? 'standard';
+
+    this.root.innerHTML = `
+      <h1 class="pac-title"></h1>
+      <p class="pac-sub"></p>
+      <div class="pac-banner" hidden></div>
+      <div class="pac-stage"></div>
+      <div class="pac-controls">
+        <button class="pac-btn" data-act="prev">&larr; Back</button>
+        <button class="pac-btn pac-btn-primary" data-act="next">Next Step &rarr;</button>
+        <button class="pac-btn" data-act="play">Play</button>
+        <button class="pac-btn" data-act="reset">Reset</button>
+        <span class="pac-metrics"></span>
+        <span class="pac-progress"></span>
+      </div>
+      <div class="pac-narrate"></div>
+      <div class="pac-predict" hidden></div>`;
+
+    this.root.querySelector('.pac-title').textContent = s.title ?? '';
+    this.root.querySelector('.pac-sub').textContent = s.subtitle ?? '';
+    this.banner   = this.root.querySelector('.pac-banner');
+    this.stage    = this.root.querySelector('.pac-stage');
+    this.narrate  = this.root.querySelector('.pac-narrate');
+    this.predictEl= this.root.querySelector('.pac-predict');
+    this.metricsEl= this.root.querySelector('.pac-metrics');
+    this.progress = this.root.querySelector('.pac-progress');
+
+    if (s.columns) this.stage.dataset.cols = s.columns;
+
+    // Beginner profile is enforced here, not left to authorial restraint.
+    const panels = (s.panels ?? []).slice();
+    if (s.profile === 'beginner' && panels.length > 3) {
+      console.warn(`beginner profile caps panels at 3; dropping ${panels.length - 3}`);
+      panels.length = 3;
+    }
+
+    for (const p of panels) {
+      const el = document.createElement('section');
+      el.className = 'pac-panel';
+      el.innerHTML = `<div class="pac-panel-head"><span>${p.title ?? p.type}</span>
+                        <span class="pac-panel-tools"></span></div>
+                      <div class="pac-panel-body"></div>`;
+      this.stage.appendChild(el);
+      const r = RENDERERS[p.type];
+      if (!r) throw new Error(`unknown panel type "${p.type}"`);
+      const ctx = {
+        engine: this,
+        spec: p,
+        anchors: new Map(),
+        anchor: (name, node) => ctx.anchors.set(name, node),
+      };
+      r.mount?.(el.querySelector('.pac-panel-body'), p, ctx,
+                el.querySelector('.pac-panel-tools'));
+      this.panels.set(p.id ?? p.type, { spec: p, el, renderer: r, ctx });
+    }
+
+    this.overlay = new Overlay(this.stage);
+
+    this.root.querySelector('.pac-controls').addEventListener('click', e => {
+      const act = e.target.dataset?.act;
+      if (!act) return;
+      if (act === 'play') this.timer ? this.stop() : this.play();
+      else this[act]();
+    });
+
+    // Back-stepping via keyboard, because beginners miss steps.
+    window.addEventListener('keydown', e => {
+      if (e.key === 'ArrowRight') this.next();
+      if (e.key === 'ArrowLeft')  this.prev();
+    });
+  }
+
+  setLanguage(lang) { this.lang = lang; this.render(); }
+
+  /* ---------- render ---------- */
+
+  render() {
+    const step = this.step;
+
+    for (const [id, p] of this.panels) {
+      const data = step.panels?.[id];
+      p.ctx.anchors.clear();
+      p.renderer.render(p.el.querySelector('.pac-panel-body'),
+                        data, p.ctx, { lang: this.lang, step });
+    }
+
+    this.overlay.draw(step.arrows ?? [], this.panels);
+
+    this.narrate.textContent = step.narrate ?? '';
+    this.progress.textContent = `${Math.min(this.i + 1, this.steps.length)} / ${this.steps.length}`;
+
+    const m = this.metrics();
+    this.metricsEl.innerHTML = Object.entries(m)
+      .filter(([k]) => !this.spec.hideTags?.includes(k))
+      .map(([k, v]) => `${k} <b>${v}</b>`).join('');
+
+    this.root.querySelector('[data-act="prev"]').disabled = this.i === 0;
+    this.root.querySelector('[data-act="next"]').disabled = this.atEnd || this.gated;
+    this.root.querySelector('[data-act="play"]').textContent = this.timer ? 'Pause' : 'Play';
+    this.root.querySelector('[data-act="play"]').disabled = this.atEnd || this.gated;
+
+    this._renderPredict(step);
+  }
+
+  _renderPredict(step) {
+    if (step.type !== 'predict') { this.predictEl.hidden = true; return; }
+    this.predictEl.hidden = false;
+
+    const answered = this.predictAnswered.has(this.i);
+    this.predictEl.innerHTML = `
+      <p class="pac-predict-q">${step.question}</p>
+      <div class="pac-predict-opts">${step.options.map((o, k) =>
+        `<button class="pac-btn pac-predict-opt" data-k="${k}" ${answered ? 'disabled' : ''}>${o.label}</button>`
+      ).join('')}</div>
+      <div class="pac-predict-verdict" hidden></div>`;
+
+    if (answered) return;
+
+    this.predictEl.querySelectorAll('.pac-predict-opt').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const opt = step.options[+btn.dataset.k];
+        this.predictAnswered.add(this.i);
+        const v = this.predictEl.querySelector('.pac-predict-verdict');
+        v.hidden = false;
+        v.dataset.ok = String(!!opt.correct);
+        v.textContent = opt.feedback;
+        this.predictEl.querySelectorAll('.pac-predict-opt').forEach(b => b.disabled = true);
+
+        // A wrong answer may branch into a different trace: the engine
+        // runs the buggy version so the student watches it fail.
+        if (opt.branch) {
+          setTimeout(() => this.loadTrace(opt.branch, { banner: opt.banner }), 1400);
+        } else {
+          this.render();
+        }
+      });
+    });
+  }
+}
+
+function take(gen, max) {
+  const out = [];
+  for (const v of gen) { out.push(v); if (out.length >= max) break; }
+  return out;
+}
+
+/** Mount an animation from its content module. */
+function mountAnimation(spec, el = document.getElementById('pac')) {
+  return new Engine(el, spec);
+}
+
+/* ds — A5 "Fibonacci trace"
+ *
+ * The lesson is NOT exponential recomputation. It is the invariant
+ *
+ *     n + level = N          (constant at every node)
+ *
+ * from which the calls follow:
+ *     fib(n-1, level+1)   ->  (n-1)+(level+1) = n+level   ok
+ *     fib(n-2, level+2)   ->  (n-2)+(level+2) = n+level   ok
+ *     fib(n-2, level+1)   ->  n+level-1                   the common bug
+ *
+ * Root cause: level is NOT recursion depth. fib(2) and fib(3) both sit at
+ * depth 1, but at levels 2 and 1. Students assume level == depth, so they
+ * write level+1 on both calls. The animation puts level and depth side by
+ * side on every node so they visibly diverge.
+ *
+ * Verified against the expected output in ds5.html: the level sequence is
+ * 0, 2, 4, 3, 1, 3, 2, 4, 3 -- i.e. the n-2 branch is evaluated first. */
+
+const N = 4;
+
+const LISTINGS = {
+  pseudo: [
+    'function fib(n, level)',
+    '    print indent(level), "Entering level", level',
+    '    if n <= 1 then',
+    '        result = n',
+    '    else',
+    '        result = fib(n - 2, level + 2)',
+    '               + fib(n - 1, level + 1)',
+    '    print indent(level), "Exiting level", level',
+    '    return result',
+  ],
+  java: [
+    'static int fib(int n, int level) {',
+    '    print(level, "Entering level " + level);',
+    '    int result;',
+    '    if (n <= 1) {',
+    '        result = n;',
+    '    } else {',
+    '        result = fib(n - 2, level + 2)',
+    '               + fib(n - 1, level + 1);',
+    '    }',
+    '    print(level, "Exiting level " + level);',
+    '    return result;',
+    '}',
+  ],
+  cpp: [
+    'int fib(int n, int level) {',
+    '    print(level, "Entering level " + to_string(level));',
+    '    int result;',
+    '    if (n <= 1) {',
+    '        result = n;',
+    '    } else {',
+    '        result = fib(n - 2, level + 2)',
+    '               + fib(n - 1, level + 1);',
+    '    }',
+    '    print(level, "Exiting level " + to_string(level));',
+    '    return result;',
+    '}',
+  ],
+};
+
+const L = {
+  enter:  { pseudo: 2, java: 2,  cpp: 2  },
+  base:   { pseudo: 4, java: 5,  cpp: 5  },
+  callA:  { pseudo: 6, java: 7,  cpp: 7  },
+  callB:  { pseudo: 7, java: 8,  cpp: 8  },
+  exit:   { pseudo: 8, java: 10, cpp: 10 },
+};
+
+/* ---- build the whole call tree first, so layout never moves ---- */
+
+function buildTree(N, dl2) {
+  const nodes = [];
+  const rec = (n, level, parent, depth) => {
+    const id = 'c' + nodes.length;
+    const node = { id, parent, n, level, depth, kids: [] };
+    nodes.push(node);
+    if (n > 1) {
+      const left  = rec(n - 1, level + 1,   id, depth + 1); // drawn left
+      const right = rec(n - 2, level + dl2, id, depth + 1); // drawn right
+      node.kids = [left, right];
+    }
+    return id;
+  };
+  rec(N, 0, null, 0);
+  return nodes;
+}
+
+/* ---- the trace ---- */
+
+function makeTrace({ dl2 = 2, gateAt = null } = {}) {
+  return function* () {
+    const nodes = buildTree(N, dl2);
+    const byId = new Map(nodes.map(n => [n.id, n]));
+    const state = new Map(nodes.map(n => [n.id, 'pending']));
+    const out = [];
+    let gated = false;
+
+    const snap = (activeId, line, tag, narrate, extra = {}) => {
+      const node = byId.get(activeId);
+      const sum = node.n + node.level;
+      return {
+        tag, narrate, line,
+        panels: {
+          tree: {
+            layout: 'tree',
+            nodes: nodes.map(nd => ({
+              id: nd.id, parent: nd.parent,
+              label: `fib(${nd.n})`,
+              meta: [`level ${nd.level}`, `depth ${nd.depth}`],
+              state: state.get(nd.id),
+            })),
+          },
+          out: { lines: out.map((l, k) => ({ ...l, isNew: k === out.length - 1 })) },
+          inv: {
+            render: 'row',
+            cells: [
+              { label: 'n',         value: node.n },
+              { label: 'level',     value: node.level },
+              { label: 'depth',     value: node.depth },
+              { label: 'n + level', value: sum, role: sum === N ? 'ok' : 'error' },
+              { label: 'N',         value: N },
+            ],
+          },
+        },
+        ...extra,
+      };
+    };
+
+    function* visit(id) {
+      const node = byId.get(id);
+
+      state.set(id, 'entering');
+      out.push({ text: `Entering level ${node.level}`, indent: node.level, dir: 'out' });
+      yield snap(id, L.enter, 'enter',
+        `fib(${node.n}) begins. It prints "Entering level ${node.level}" indented ${node.level} step${node.level === 1 ? '' : 's'}.`);
+      state.set(id, 'active');
+
+      if (node.n <= 1) {
+        yield snap(id, L.base, 'base', `Base case: fib(${node.n}) = ${node.n}. No further calls.`);
+      } else {
+        if (gateAt === id && !gated) {
+          gated = true;
+          yield {
+            ...snap(id, L.callA, null,
+              'Before the first recursive call: the level argument must be chosen.'),
+            type: 'predict',
+            question: `fib is about to call itself with n - 2. What level should it pass?`,
+            options: [
+              { label: 'level + 1',
+                feedback: 'This is the most common submission, and it is wrong. Watch what it does.',
+                branch: 'buggy',
+                banner: 'Running the buggy version: fib(n - 2, level + 1). Watch n + level.' },
+              { label: 'level + 2', correct: true,
+                feedback: 'Correct. n drops by 2, so level must rise by 2. n + level stays 4.' },
+              { label: 'depth + 1',
+                feedback: 'level is not depth. fib(2) and fib(3) are both at depth 1, but at different levels.' },
+            ],
+          };
+        }
+
+        yield snap(id, L.callA, 'call',
+          `The n - 2 branch is evaluated first: fib(${node.n - 2}, ${node.level + dl2}).`);
+        yield* visit(node.kids[1]);   // n-2, drawn right, evaluated first
+
+        yield snap(id, L.callB, 'call',
+          `Now the n - 1 branch: fib(${node.n - 1}, ${node.level + 1}).`);
+        yield* visit(node.kids[0]);   // n-1, drawn left
+      }
+
+      out.push({ text: `Exiting level ${node.level}`, indent: node.level, dir: 'out' });
+      state.set(id, 'exited');
+      yield snap(id, L.exit, 'exit',
+        `fib(${node.n}) returns. Its "Exiting" line sits at the same indent as its "Entering" line.`);
+    }
+
+    yield* visit('c0');
+  };
+}
+
+const SPEC = {
+  title: 'Recursion: what "level" really counts',
+  subtitle: 'ds A5 — Fibonacci trace. The invariant is n + level = N.',
+  profile: 'standard',
+  columns: 2,
+  languages: ['pseudo', 'java', 'cpp'],
+  hideTags: ['call'],
+
+  panels: [
+    { type: 'code',   id: 'code', title: 'fib(n, level)',
+      listings: LISTINGS, labels: { pseudo: 'pseudocode', java: 'Java', cpp: 'C++' } },
+    { type: 'nodes',  id: 'tree', title: 'Call tree' },
+    { type: 'stream', id: 'out',  title: 'Program output (the graded artifact)' },
+    { type: 'cells',  id: 'inv',  title: 'Invariant' },
+  ],
+
+  initialTrace: 'correct',
+  traces: {
+    correct: makeTrace({ dl2: 2, gateAt: 'c0' }),
+    buggy:   makeTrace({ dl2: 1 }),
+  },
+};
+
+mountAnimation(SPEC);
+</script></body></html>

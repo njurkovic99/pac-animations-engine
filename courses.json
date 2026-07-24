@@ -1,0 +1,28 @@
+{
+  "_comment": "Ordering, module placement and assignment linkage live here. Renaming a module never moves a URL.",
+  "ds": {
+    "title": "Data Structures",
+    "languages": ["pseudo", "java", "cpp"],
+    "modules": [
+      { "topic": "2.5 Recursion; 4.2.3 Implementing Recursion",
+        "animations": [
+          { "file": "recursion-factorial-stack",  "backs": null },
+          { "file": "recursion-fib-levels",       "backs": "A5", "built": true },
+          { "file": "recursion-hanoi",            "backs": null }
+        ] },
+      { "topic": "4.1.5 Doubly Linked Lists",
+        "animations": [
+          { "file": "lists-doubly-insert-order",  "backs": "A10", "built": true }
+        ] }
+    ]
+  },
+  "redirects": {
+    "_comment": "Old filename -> new. Emitted as meta-refresh stubs so existing Canvas iframes keep working.",
+    "file1.html": "files-basic-operations.html",
+    "file3.html": "files-random-access-seek.html",
+    "struct-ptr.html": "structs-and-pointers.html",
+    "oop5.html": "dispatch-vtable.html",
+    "animation1.html": "objects-constructor-init.html",
+    "gaddis.html": "types-variable-boxes.html"
+  }
+}
