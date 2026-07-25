@@ -482,6 +482,10 @@ const { Overlay } = (() => { /* Arrow overlay — the piece cpoint1.html faked w
 
 const NS = 'http://www.w3.org/2000/svg';
 
+// Length of the straight run into a target edge, so the arrowhead lands square
+// on the middle of the box edge instead of on a corner (see the band/port paths).
+const STUB = 8;
+
 class Overlay {
   constructor(stage) {
     this.stage = stage;
@@ -545,7 +549,13 @@ class Overlay {
         const y1 = down ? f.b : f.t, y2 = down ? t.b : t.t;
         const arc = Math.min(24, Math.max(14, Math.abs(t.cx - f.cx) * 0.32));
         const yc = (down ? Math.max(y1, y2) + arc : Math.min(y1, y2) - arc);
-        return path(`M ${f.cx} ${y1} C ${f.cx} ${yc}, ${t.cx} ${yc}, ${t.cx} ${y2}`, style);
+        // Finish with a short straight vertical stub into the target edge. The
+        // curve's endpoint tangent is already vertical, but over the arrowhead's
+        // length the arc still leans sideways -- enough to land the head on a
+        // corner rather than the middle of its base. The stub makes the final
+        // few px exactly vertical so the arrowhead sits square on the edge.
+        const yStub = down ? y2 + STUB : y2 - STUB;
+        return path(`M ${f.cx} ${y1} C ${f.cx} ${yc}, ${t.cx} ${yc}, ${t.cx} ${yStub} L ${t.cx} ${y2}`, style);
       }
 
       // Everything else (pointer variables, cross-row links): leave and enter
@@ -553,8 +563,10 @@ class Overlay {
       // that edge. Short, monotonic curves that don't cut across the list.
       const s = port(f, t.cx, t.cy), e = port(t, f.cx, f.cy);
       const h = clamp(Math.hypot(e.x - s.x, e.y - s.y) * 0.4, 16, 66);
+      // Same square-landing trick: a short straight run along the entry normal.
+      const ex = e.x + e.nx * STUB, ey = e.y + e.ny * STUB;
       return path(`M ${s.x} ${s.y} C ${s.x + s.nx * h} ${s.y + s.ny * h},
-                     ${e.x + e.nx * h} ${e.y + e.ny * h}, ${e.x} ${e.y}`, style);
+                     ${ex + e.nx * h} ${ey + e.ny * h}, ${ex} ${ey} L ${e.x} ${e.y}`, style);
     }).join('');
 
     this.svg.insertAdjacentHTML('beforeend', html);
