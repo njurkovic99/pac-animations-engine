@@ -1,0 +1,7 @@
+# Local preview tooling — not part of the engine
+node_modules/
+package.json
+package-lock.json
+
+# Scratch space for local render/screenshot scripts
+scratchpad/
