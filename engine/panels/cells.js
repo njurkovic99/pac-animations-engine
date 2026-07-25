@@ -19,7 +19,7 @@ export function render(body, data, ctx) {
     el.innerHTML = (c.label ? `<span class="pac-cell-label">${esc(c.label)}</span>` : '') +
                    `<span>${esc(c.value)}</span>`;
     wrap.appendChild(el);
-    if (c.anchor) ctx.anchor(c.anchor, el);
+    if (c.anchor) ctx.anchor(`${ctx.spec.id}.${c.anchor}`, el);
   }
 }
 

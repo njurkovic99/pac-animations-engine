@@ -60,27 +60,34 @@ export class Overlay {
       if (!f || !t) return '';
       const style = a.style ?? 'pointer';
 
-      // Self-loop: a node whose pointer has been made to reference itself.
-      if (Math.abs(f.cx - t.cx) < 3 && Math.abs(f.cy - t.cy) < 3 ||
-          (a.from.split('.')[1] === a.to.split('.')[1] && a.from !== a.to && t.l <= f.cx && f.cx <= t.r)) {
-        const x = f.cx, y = f.t;
-        return path(`M ${x} ${y} C ${x + 26} ${y - 30}, ${x - 26} ${y - 30}, ${x - 1} ${y - 1}`, style);
+      // Self-loop: a node whose next/prev has been made to reference its own
+      // node -- the failure mode of a doubly-linked insert in the wrong order.
+      // Route next above and prev below so the two loops never overlap.
+      if (nodeId(a.from) === nodeId(a.to)) {
+        const down = a.bend === 'down';
+        const y = down ? f.b : f.t, d = down ? 30 : -30, tip = down ? 1 : -1;
+        return path(`M ${f.cx} ${y} C ${f.cx + 26} ${y + d}, ${f.cx - 26} ${y + d}, ${f.cx - 1} ${y + tip}`, style);
       }
 
-      // Leave from the side that faces the target; enter on the facing side.
-      const goingRight = t.cx > f.cx;
-      const x1 = goingRight ? f.r : f.l;
-      const x2 = goingRight ? t.l : t.r;
-      const y1 = f.cy, y2 = t.cy;
+      // Same-row list pointers: next above the row, prev below it, each
+      // anchored at the box top/bottom. They no longer share the mid-row
+      // endpoints that turned next-over-prev into a diamond between nodes.
+      const sameRow = Math.abs(f.cy - t.cy) < 26;
+      if (sameRow && (a.bend === 'up' || a.bend === 'down')) {
+        const down = a.bend === 'down';
+        const y1 = down ? f.b : f.t, y2 = down ? t.b : t.t;
+        const arc = Math.min(24, Math.max(14, Math.abs(t.cx - f.cx) * 0.32));
+        const yc = (down ? Math.max(y1, y2) + arc : Math.min(y1, y2) - arc);
+        return path(`M ${f.cx} ${y1} C ${f.cx} ${yc}, ${t.cx} ${yc}, ${t.cx} ${y2}`, style);
+      }
 
-      // prev-pointers travel leftwards: bow them below, so they never overlap
-      // the next-pointers travelling rightwards above.
-      const bend = a.bend ?? (goingRight ? 'up' : 'down');
-      const dx = Math.max(22, Math.abs(x2 - x1) * 0.35);
-      const lift = Math.abs(y2 - y1) < 6 ? (bend === 'down' ? 26 : -26) : 0;
-
-      return path(`M ${x1} ${y1} C ${x1 + (goingRight ? dx : -dx)} ${y1 + lift},
-                     ${x2 - (goingRight ? dx : -dx)} ${y2 + lift}, ${x2} ${y2}`, style);
+      // Everything else (pointer variables, cross-row links): leave and enter
+      // through the box edge that faces the other box, with handles normal to
+      // that edge. Short, monotonic curves that don't cut across the list.
+      const s = port(f, t.cx, t.cy), e = port(t, f.cx, f.cy);
+      const h = clamp(Math.hypot(e.x - s.x, e.y - s.y) * 0.4, 16, 66);
+      return path(`M ${s.x} ${s.y} C ${s.x + s.nx * h} ${s.y + s.ny * h},
+                     ${e.x + e.nx * h} ${e.y + e.ny * h}, ${e.x} ${e.y}`, style);
     }).join('');
 
     this.svg.insertAdjacentHTML('beforeend', html);
@@ -91,3 +98,19 @@ export class Overlay {
 
 const path = (d, style) =>
   `<path class="pac-arrow" data-style="${style}" marker-end="url(#pac-arrowhead)" d="${d}"/>`;
+
+/** The node an anchor belongs to: 'list.n25.next' -> 'list.n25', 'vars.head' -> 'vars.head'. */
+const nodeId = anchor => anchor.split('.').slice(0, 2).join('.');
+
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+/** The point on `box`'s perimeter facing (tx, ty), with the outward normal
+ *  of that edge, so a curve can leave/arrive perpendicular to it. */
+function port(box, tx, ty) {
+  const dx = tx - box.cx, dy = ty - box.cy;
+  if (Math.abs(dx) >= Math.abs(dy))
+    return dx >= 0 ? { x: box.r, y: box.cy, nx: 1, ny: 0 }
+                   : { x: box.l, y: box.cy, nx: -1, ny: 0 };
+  return dy >= 0 ? { x: box.cx, y: box.b, nx: 0, ny: 1 }
+                 : { x: box.cx, y: box.t, nx: 0, ny: -1 };
+}
