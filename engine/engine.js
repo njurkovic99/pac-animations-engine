@@ -213,7 +213,13 @@ export class Engine {
     const step = this.step;
 
     for (const [id, p] of this.panels) {
-      const data = step.panels?.[id];
+      let data = step.panels?.[id];
+      // A step carries its active source line at the TOP level (`step.line`),
+      // not inside `panels.<codeId>` -- one line drives every code panel and
+      // every language variant. Thread it in so the highlight actually moves.
+      // Supports a plain number or a per-language {pseudo, java, cpp} object;
+      // a null/absent line means "highlight nothing" (intro, predict, final).
+      if (p.spec.type === 'code') data = { ...data, line: step.line };
       p.ctx.anchors.clear();
       p.renderer.render(p.el.querySelector('.pac-panel-body'),
                         data, p.ctx, { lang: this.lang, step });
