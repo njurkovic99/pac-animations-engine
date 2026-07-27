@@ -64,12 +64,6 @@ export class Overlay {
       if (!f || !t) return '';
       const style = a.style ?? 'pointer';
 
-      // A pointer originates at the dot in the middle of its record field
-      // (`list.n25.next`), so start the line from the box centre rather than an
-      // edge. Pointer-variable cells (`vars.head`) draw their dot at the right
-      // edge, so those keep leaving from the facing edge below.
-      const fromField = a.from.split('.').length >= 3;
-
       // Self-loop: a node whose next/prev has been made to reference its own
       // node -- the failure mode of a doubly-linked insert in the wrong order.
       // Route next above and prev below so the two loops never overlap.
@@ -97,16 +91,17 @@ export class Overlay {
         return path(`M ${f.cx} ${f.cy} C ${f.cx} ${yc}, ${t.cx} ${yc}, ${t.cx} ${yStub} L ${t.cx} ${y2}`, style);
       }
 
-      // Everything else (pointer variables, cross-row links): leave through the
-      // box edge that faces the other box (or the dot centre, for a record
-      // field), enter through the target's facing edge with handles normal to
-      // it. Short, monotonic curves that don't cut across the list.
+      // Everything else (pointer variables, cross-row links): start at the
+      // source's centre -- which is the dot, since both record fields and
+      // pointer-variable cells now anchor their dot glyph -- and enter through
+      // the target's facing edge with handles normal to it. The source handle
+      // still leaves along the edge that faces the target, so the curve exits
+      // cleanly. Short, monotonic curves that don't cut across the list.
       const s = port(f, t.cx, t.cy), e = port(t, f.cx, f.cy);
-      const sx = fromField ? f.cx : s.x, sy = fromField ? f.cy : s.y;
-      const h = clamp(Math.hypot(e.x - sx, e.y - sy) * 0.4, 16, 66);
+      const h = clamp(Math.hypot(e.x - f.cx, e.y - f.cy) * 0.4, 16, 66);
       // Same square-landing trick: a short straight run along the entry normal.
       const ex = e.x + e.nx * STUB, ey = e.y + e.ny * STUB;
-      return path(`M ${sx} ${sy} C ${s.x + s.nx * h} ${s.y + s.ny * h},
+      return path(`M ${f.cx} ${f.cy} C ${s.x + s.nx * h} ${s.y + s.ny * h},
                      ${ex + e.nx * h} ${ey + e.ny * h}, ${ex} ${ey} L ${e.x} ${e.y}`, style);
     }).join('');
 

@@ -17,9 +17,12 @@ export function render(body, data, ctx) {
     if (c.role) el.dataset.role = c.role;
     if (mode === 'bar') el.style.height = `${20 + 70 * (+c.value / max)}px`;
     el.innerHTML = (c.label ? `<span class="pac-cell-label">${esc(c.label)}</span>` : '') +
-                   `<span>${esc(c.value)}</span>`;
+                   `<span class="pac-cell-value">${esc(c.value)}</span>`;
     wrap.appendChild(el);
-    if (c.anchor) ctx.anchor(`${ctx.spec.id}.${c.anchor}`, el);
+    // Anchor the value glyph, not the whole cell: for a pointer variable that
+    // value is the dot, so a cross-panel arrow starts from the dot itself --
+    // matching the record-field pointers in the NODES panel.
+    if (c.anchor) ctx.anchor(`${ctx.spec.id}.${c.anchor}`, el.querySelector('.pac-cell-value'));
   }
 }
 
