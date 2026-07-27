@@ -175,27 +175,9 @@ body {
 .pac-arrow { stroke: var(--accent); stroke-width: 1.6; fill: none; }
 .pac-arrow[data-style="stale"] { stroke: var(--error); stroke-dasharray: 4 3; }
 
-/* ---- predict gate ---- */
-.pac-predict {
-  background: var(--panel); border: 1px solid var(--highlight);
-  border-radius: var(--radius); padding: 14px; margin-top: var(--gap);
-}
-.pac-predict-q { margin: 0 0 10px; font-weight: 600; }
-.pac-predict-opts { display: flex; gap: 8px; flex-wrap: wrap; }
-.pac-predict-opt { font-family: var(--mono); }
-.pac-predict-verdict { margin-top: 10px; font-size: 13px; }
-.pac-predict-verdict[data-ok="true"]  { color: var(--ok); }
-.pac-predict-verdict[data-ok="false"] { color: var(--warn); }
-
 /* ---- metrics ---- */
 .pac-metrics { display: flex; gap: 16px; font-size: 12px; color: var(--text-dim); }
 .pac-metrics b { color: var(--text); font-weight: 600; font-family: var(--mono); }
 
 /* ---- beginner profile: enforced, not advisory ---- */
 .pac-root[data-profile="beginner"] .pac-addresses { display: none; }
-
-.pac-banner {
-  border-radius: var(--radius); padding: 9px 12px; margin-bottom: var(--gap);
-  font-size: 13px; border: 1px solid var(--warn); color: var(--warn);
-  background: rgba(224, 163, 58, .08);
-}

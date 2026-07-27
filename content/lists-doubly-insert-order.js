@@ -58,7 +58,7 @@ const OPS = {
        say:   () => `temp.prev turns around to face ins. The list is now stitched on both sides.` },
 };
 
-const ORDERS = { correct: ['A', 'B', 'C', 'D'], buggy: ['D', 'A', 'B', 'C'] };
+const ORDER = ['A', 'B', 'C', 'D'];
 
 const label = (m, id) => (id == null ? 'null' : m[id].value);
 
@@ -138,7 +138,7 @@ function snap(m, { line, tag, narrate, touched, extra = {} }) {
   };
 }
 
-function makeTrace(orderName, gate) {
+function makeTrace() {
   return function* () {
     const m = fresh();
 
@@ -147,25 +147,12 @@ function makeTrace(orderName, gate) {
       narrate: 'A doubly linked list: 12 \u2194 37 \u2194 99. A new node holding 25 has been allocated but is not yet part of the list. We want it before 37.',
     });
 
-    if (gate) {
-      yield {
-        ...snap(m, { line: 1, narrate: 'The four assignments must run in some order. Not every order works.' }),
-        type: 'predict',
-        question: 'Which of these four assignments must happen first?',
-        options: [
-          { label: 'temp.prev = ins',
-            feedback: 'This is the tempting one, and it destroys the list. Watch.',
-            branch: 'buggy',
-            banner: 'Running the wrong order: temp.prev = ins goes first. Watch node 25.' },
-          { label: 'ins.prev = temp.prev', correct: true,
-            feedback: 'Correct. Nothing else can run first: line 4 reads ins.prev, and line 5 overwrites temp.prev.' },
-          { label: 'ins.prev.next = ins',
-            feedback: 'This dereferences ins.prev before anything has set it. In C++ that is a null dereference; in Java, a NullPointerException.' },
-        ],
-      };
-    }
+    yield snap(m, {
+      line: null,
+      narrate: 'A common error is running temp.prev = ins first. Then ins.prev = temp.prev copies a pointer that already points back at ins, so ins.prev becomes ins itself \u2014 and line 4, ins.prev.next = ins, dereferences a pointer that was never set to anything useful. The order below sets ins.prev and ins.next before any line reads them.',
+    });
 
-    for (const key of ORDERS[orderName]) {
+    for (const key of ORDER) {
       const op = OPS[key];
       const say = op.say(m);
       const touched = op.apply(m);
@@ -201,7 +188,6 @@ export default {
 
   initialTrace: 'correct',
   traces: {
-    correct: makeTrace('correct', true),
-    buggy:   makeTrace('buggy', false),
+    correct: makeTrace(),
   },
 };
