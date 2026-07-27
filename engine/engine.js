@@ -38,6 +38,7 @@ export class Engine {
     this.trace = spec.initialTrace ?? 'correct';
     this.i = 0;
     this.steps = [];
+    this._flashedAt = -1;              // last step index the narration pulsed on
     this._build();
     this.loadTrace(this.trace);
   }
@@ -218,6 +219,14 @@ export class Engine {
     this.overlay.draw(step.arrows ?? [], this.panels);
 
     this.narrate.textContent = step.narrate ?? '';
+    // Pulse the narration only when the step index actually changes, so a new
+    // explanation catches the eye but pausing/stopping in place does not reflash.
+    if (this.i !== this._flashedAt) {
+      this._flashedAt = this.i;
+      this.narrate.classList.remove('pac-narrate-flash');
+      void this.narrate.offsetWidth;   // force reflow so the animation restarts
+      this.narrate.classList.add('pac-narrate-flash');
+    }
     this.progress.textContent = `${Math.min(this.i + 1, this.steps.length)} / ${this.steps.length}`;
 
     const m = this.metrics();
