@@ -209,32 +209,28 @@ node build-preview.mjs <name> # or bundle to a single double-clickable file
 
 ---
 
-## WATCH / THINK mode (read this before authoring gates)
+## WATCH only — no gates, no questions
 
-Every animation is authored once and serves two modes, chosen at view time by a
-`?mode=` URL parameter (default WATCH). The engine reads it at load.
+Every animation is a passive step-through. The student clicks Next/Back; the line
+highlights, state updates, narration explains. **Do not author predict gates,
+questions, options, `branch` traces, or any interactive stopping point.** There
+is no `?mode=` parameter. Interactive "THINK" mode is deferred in full and will
+be added later, per-animation, as a separate pass (see HANDOFF.md).
 
-- **WATCH** — passive. Any `type:'predict'` step renders as an ordinary step:
-  no gate UI, no stop, no branch. The student just clicks Next and watches the
-  line highlight move, state update, narration explain. This is the debugger
-  experience.
-- **THINK** — active. `predict` steps become gates (question, options, and a
-  wrong-answer `branch` that runs the buggy trace).
+Every step is a plain step. A content file therefore has one trace (the correct
+one); there are no `buggy`/alternate traces and no `type:'predict'` steps.
 
-**Author the gate NOW, during the initial build**, wherever the animation has a
-genuine predict moment — the pointer-order trap, the integer-division surprise,
-the invariant that breaks. Put the question, options, and buggy branch in the
-content file exactly as `lists-doubly-insert-order.js` does. They lie dormant in
-WATCH and activate in THINK. Do not defer gates to a later pass: a THINK link on
-the Canvas page must work the day it is added, with no rebuild.
+**Teaching a common mistake, WATCH-style.** When an animation should warn about a
+frequent error, do it with **narration on a normal step**, not a question. State
+the mistake, then let the correct execution proceed so the student sees the right
+behavior. Example (fib levels): a step whose narration reads "A common error is
+`fib(n-2, level+1)` — but n + level must stay constant, so it must be `level+2`,"
+after which the animation continues correctly. The insight is delivered; nothing
+stops or branches.
 
-If an animation has no natural predict moment (a plain compile-and-run walk-
-through, say), it is WATCH-only. Just omit the `predict` step; no THINK link will
-be offered for it. Do not invent a forced question to manufacture a THINK mode.
-
-The `?mode=` param composes with the hidden assignment marker `?a=`:
-`objects-constructor-init.html?a=bcpp-a7&mode=watch`. The animation ignores `?a=`
-entirely (it is a marker for the instructor); it acts only on `?mode=`.
+The hidden assignment marker `?a=` (e.g. `...html?a=bcpp-a7`) is ignored by the
+animation entirely — it exists only for the instructor. Animations read no URL
+parameters at all in this build.
 
 ---
 

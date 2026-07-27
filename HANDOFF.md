@@ -6,12 +6,15 @@ animations exist. Read `panel-inventory.md` (why the engine is shaped this way),
 first. This document is the delta on top of them and the source of truth for
 build order and project-wide conventions.
 
-**This revision supersedes the earlier temporal-ordering plan:**
+**This revision supersedes earlier plans:**
 - Build in **efficiency order** (below), not by teaching week.
-- Every animation is authored **WATCH/THINK-capable**; mode is chosen at view
-  time by a `?mode=` URL parameter, default WATCH.
+- **WATCH only.** Every animation is a passive step-through the student clicks
+  through. There are NO predict gates, no `?mode=` parameter, no interactive
+  question logic in this build. Interactive ("THINK") mode is deferred in full —
+  see "Deferred — THINK mode" at the end. Do not add gate/branch/predict logic to
+  any animation.
 - Line highlighting follows the line **about to execute**, driven by a top-level
-  `step.line`. There is a known bug here to fix first (see below).
+  `step.line`.
 
 ---
 
@@ -34,60 +37,56 @@ Two reversible engine decisions:
 
 ---
 
-## FIRST TASK — fix the line-highlight bug
+## FIRST TASK — strip THINK out; make the repo uniformly WATCH-only
 
-The code panel's highlight never moves; it shows the same line regardless of
-step. Cause: content files set `line` at the **top level** of each step object,
-but the code renderer reads the line from `step.panels.<codePanelId>`, so it
-always receives `undefined` and never advances.
+An earlier revision added interactive "THINK" gates and a `?mode=watch|think`
+parameter. That is being **fully deferred**. This build is WATCH-only. Remove it
+so nothing is half-implemented and no future session re-introduces it.
 
-Fix the **engine** (not the content) so a **top-level `step.line`** is passed to
-the code panel automatically and drives the active-line highlight. Support both a
-plain number and a per-language object `{pseudo, java, cpp}`. Content files then
-write the natural `line: 4` at the top of a step and highlighting always works —
-no per-file nesting to forget, and no re-editing the two existing content files.
+Do all of the following, then render, screenshot, confirm, commit:
 
-Verify against `lists-doubly-insert-order`: the highlight must move to line 2, 3,
-4, 5 as each assignment executes, and highlight no line on the intro / predict /
-final steps where `line` is null. Render, screenshot, confirm, commit.
+1. **Engine:** remove the `?mode=` URL-parameter handling and the predict-gate
+   behavior (the gate UI, the stop-on-gate, and the wrong-answer `branch`
+   mechanism). A step of `type:'predict'`, if any remain, should render as an
+   ordinary step. Keep everything else (snapshots, Back, line highlight, panels,
+   arrows).
+2. **Content — the two existing animations** (`recursion-fib-levels`,
+   `lists-doubly-insert-order`): convert their predict gates into **plain
+   narrated WATCH steps**. Do NOT delete the teaching insight — turn it into
+   narration. Where a gate asked the student to predict, the WATCH step instead
+   *states* the common mistake and then shows why it is wrong:
+   - fib: a step narrating "a common error is `fib(n-2, level+1)`; note that
+     n + level must stay constant, so it must be `level+2`," then the animation
+     proceeds correctly. (Do not execute the buggy branch.)
+   - list insertion: a step narrating "a common error is doing `temp.prev = ins`
+     first; then line 4 dereferences a pointer that isn't set yet," shown as
+     explanation, then the correct order proceeds.
+   Remove the `buggy` traces and the `branch`/`options`/`question` fields from
+   both content files.
+3. Confirm both animations play start-to-finish as pure click-through, with the
+   line highlight advancing and no gate ever stopping the student.
+
+Known issue that motivated this (for the deferred THINK work later): in the old
+THINK mode, choosing a wrong answer caused the highlight/execution to jump to the
+wrong line — i.e. the animation followed the bad advice, which is pedagogically
+backwards. That is one of the THINK-behavior problems to solve when THINK is
+eventually built.
 
 ---
 
-## WATCH / THINK mode (project-wide)
+## WATCH only (how every animation behaves)
 
-Two educational modes from **one** content file, selected at view time.
+Every animation is a **passive step-through**: the student clicks Next (or Back),
+the current line highlights like a debugger, panel state updates, and narration
+explains. Nothing stops to ask the student anything. No questions, no gates, no
+branches, no `?mode=`.
 
-- **WATCH** — passive step-through. `predict` steps render as ordinary steps; the
-  student just clicks Next. Debugger-style: current line highlighted, state
-  updates, narration explains.
-- **THINK** — `predict` steps render as gates: a question, options, and (where
-  authored) a wrong-answer branch that runs the buggy version.
+Where an animation has a common-mistake insight worth teaching, deliver it as
+**narration on a normal step** — state the mistake, show why it's wrong by
+letting the correct execution proceed. The teaching value lives in what the
+student watches and reads, not in an interactive prompt.
 
-**Mechanism: a `?mode=` URL parameter, default WATCH.**
-
-```
-lists-doubly-insert-order.html?mode=watch   (or no param — WATCH is default)
-lists-doubly-insert-order.html?mode=think
-```
-
-The engine reads `?mode=` at load. In WATCH, any `type:'predict'` step renders as
-a normal step: skip the gate UI, do not stop, do not branch — show the snapshot
-and let Next proceed. In THINK, gates behave as they do today.
-
-This lets a Canvas page start with one default (WATCH) link and later add a
-second `?mode=think` link — no rebuild, no second file:
-
-```
-List insertion animation                     -> ...insert-order.html
-List insertion animation (Watch | Think)     -> two links: ?mode=watch  /  ?mode=think
-```
-
-**Authoring rule:** author the gate **now**, during the initial build, wherever
-an animation has a meaningful predict moment — question, options, and buggy
-branch all in the content file. They lie dormant under WATCH and activate under
-THINK. Do NOT defer gates to a later pass: the THINK link must work the day it is
-added, with no rebuild. Animations with no natural predict moment are WATCH-only
-and never get a THINK link.
+Interactive gates ("THINK") are deferred in full; see the end of this document.
 
 ---
 
@@ -191,7 +190,7 @@ structs-and-pointers         port struct-ptr inheritance-base-derived    port oo
 
 **Total: 91** (two built). Phase 1 is the priority batch. Batch instruction to
 Claude Code, e.g.: *"Build the next five Phase-1 animations from HANDOFF.md,
-following AUTHORING.md. WATCH/THINK-capable, author gates where meaningful.
+following AUTHORING.md. WATCH-only — passive click-through, no gates or questions.
 Render and screenshot each before committing."*
 
 ---
@@ -200,20 +199,20 @@ Render and screenshot each before committing."*
 
 Every assignment has at least one backing animation. NOT advertised. Identified
 by a `?a=` param on the Canvas iframe, ignored by the animation — an inert marker
-for Neven, invisible to students who don't read URLs. Composes with `?mode=`:
+for Neven, invisible to students who don't read URLs:
 
 ```
-objects-constructor-init.html?a=bcpp-a7&mode=watch
-objects-constructor-init.html?a=ajava-a1&mode=watch
+objects-constructor-init.html?a=bcpp-a7
+objects-constructor-init.html?a=ajava-a1
 ```
 
 A shared animation backs different assignments in different courses, which is why
 the marker is per-iframe, not in the filename. Multiple backers of one assignment
 number as `a2-1`, `a2-2`.
 
-Later deliverables (not blocking): emit `?a=`/`?mode=` when generating per-course
-iframe URLs from `courses.json`; and a private per-course **instructor index**
-listing "A3 -> animation -> link" for instant answers to "anything for A3?".
+Later deliverables (not blocking): emit `?a=` when generating per-course iframe
+URLs from `courses.json`; and a private per-course **instructor index** listing
+"A3 -> animation -> link" for instant answers to "anything for A3?".
 
 ### Backer map (source of truth for courses.json)
 ```
@@ -249,12 +248,32 @@ KEY backers are deliberately adjacent, never the graded solution.
 
 ---
 
+## Deferred — THINK mode (do NOT build now)
+
+Interactive gates are postponed in full, on purpose. Rationale: the WATCH build
+already carries a lot of per-animation visual design work (arrow anchoring,
+multiple arrows into one box, spacing, highlight timing) across ~90 animations,
+and layering interactive-question design on top of that at the same time is too
+much at once. THINK will be added later, animation by animation, as a separate
+pass — accepted as more expensive than doing it up front, in exchange for a
+single clear design axis now.
+
+When THINK is eventually built, known problems to solve:
+- A wrong answer must NOT make the animation execute the wrong line / follow the
+  bad advice (the old behavior did this — pedagogically backwards). A wrong
+  answer should explain and let the student retry or reveal, without corrupting
+  the traced state.
+- Question phrasing, option design, and per-animation logic all need review.
+- Likely re-introduce a per-page mechanism (a URL param or a separate link) so a
+  Canvas page can offer "Watch" and an interactive variant side by side.
+
+None of this is in scope for the current build. Every animation ships WATCH-only.
+
 ## Still open for Neven (cheap, not blocking)
 
 - Are the 20 aCpp animation pages actually unpublished in Canvas? (2 min.)
 - Fix the aJava schedule's malformed span (polymorphism/KEY module cell is blank).
 - `recurs2.gif` vs ds5.html evaluation-order conflict.
-- THINK-mode link labels (a Canvas-side choice; never touches the repo).
 
 ## What stays a chat decision, not a Claude Code one
 
