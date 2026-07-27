@@ -206,3 +206,54 @@ node build-preview.mjs <name> # or bundle to a single double-clickable file
 - **188 distinct colors.** Now 15 custom properties.
 - **HTML in step data.** Structurally impossible now.
 - **Duplicate SVG marker ids.** One marker, in the overlay.
+
+---
+
+## WATCH / THINK mode (read this before authoring gates)
+
+Every animation is authored once and serves two modes, chosen at view time by a
+`?mode=` URL parameter (default WATCH). The engine reads it at load.
+
+- **WATCH** — passive. Any `type:'predict'` step renders as an ordinary step:
+  no gate UI, no stop, no branch. The student just clicks Next and watches the
+  line highlight move, state update, narration explain. This is the debugger
+  experience.
+- **THINK** — active. `predict` steps become gates (question, options, and a
+  wrong-answer `branch` that runs the buggy trace).
+
+**Author the gate NOW, during the initial build**, wherever the animation has a
+genuine predict moment — the pointer-order trap, the integer-division surprise,
+the invariant that breaks. Put the question, options, and buggy branch in the
+content file exactly as `lists-doubly-insert-order.js` does. They lie dormant in
+WATCH and activate in THINK. Do not defer gates to a later pass: a THINK link on
+the Canvas page must work the day it is added, with no rebuild.
+
+If an animation has no natural predict moment (a plain compile-and-run walk-
+through, say), it is WATCH-only. Just omit the `predict` step; no THINK link will
+be offered for it. Do not invent a forced question to manufacture a THINK mode.
+
+The `?mode=` param composes with the hidden assignment marker `?a=`:
+`objects-constructor-init.html?a=bcpp-a7&mode=watch`. The animation ignores `?a=`
+entirely (it is a marker for the instructor); it acts only on `?mode=`.
+
+---
+
+## Line highlighting = the line about to execute
+
+The code panel highlights the current line like a debugger's instruction
+pointer: **the line about to execute**, not the one just executed. For a step
+that describes running `ins.prev = temp.prev`, `line` is that assignment's line;
+the highlight sits on it while the narration explains what it will do, then the
+next step advances both the line and the state.
+
+Put `line` at the **top level of the step object**, never inside `panels`:
+
+```js
+yield { line: 4, tag: 'assign', narrate: '...', panels: { list: {...} } };
+```
+
+`line` may be a plain number, or a per-language object `{pseudo, java, cpp}` when
+the listings differ in length. Steps with no executing line — an intro, a
+`predict` gate, a final summary — set `line: null` (or omit it), and no line is
+highlighted. The engine passes top-level `step.line` to the code panel
+automatically; authors never nest it under a panel id.

@@ -1,230 +1,264 @@
 # HANDOFF — pac-animations
 
-Written at the end of the design phase, for the first Claude Code session working
-in the real repo. The engine and two animations exist in the tarball
-`pac-animations-engine.tar.gz`. Unpack that as the baseline, commit it, then work
-from here.
+Brief for Claude Code sessions working in this repo. The engine and two
+animations exist. Read `panel-inventory.md` (why the engine is shaped this way),
+`slates.md` (what to build), and `AUTHORING.md` (how to author one content file)
+first. This document is the delta on top of them and the source of truth for
+build order and project-wide conventions.
 
-Read `PANEL-INVENTORY.md` (why the engine is shaped this way), `SLATES.md` (what
-to build), and `AUTHORING.md` (how to author one content file) first. This
-document is the delta on top of them: decisions taken after the engine was built,
-and the order to build in.
+**This revision supersedes the earlier temporal-ordering plan:**
+- Build in **efficiency order** (below), not by teaching week.
+- Every animation is authored **WATCH/THINK-capable**; mode is chosen at view
+  time by a `?mode=` URL parameter, default WATCH.
+- Line highlighting follows the line **about to execute**, driven by a top-level
+  `step.line`. There is a known bug here to fix first (see below).
 
 ---
 
 ## State of the code
 
-Built and trace-verified in Node, **never rendered in a browser**:
+Built, rendered, merged to main:
 
 - `engine/` — driver, five panel renderers, arrow overlay, styles (15 tokens).
 - `content/recursion-fib-levels.js` — ds A5. Reproduces the ds5.html expected
-  trace exactly (level sequence 0,2,4,3,1,3,2,4,3). Has a predict gate that
-  branches into the students' real bug (`level+1` instead of `level+2`).
+  trace (level sequence 0,2,4,3,1,3,2,4,3). Predict gate branches into the
+  students' real bug (`level+1` instead of `level+2`).
 - `content/lists-doubly-insert-order.js` — ds A10. Four-line doubly-linked
-  insertion; buggy order makes node 25 self-reference and go unreachable.
-- `build-preview.mjs` — bundles one animation to a single double-clickable HTML
-  (browsers block ES modules over file://). Deployed pages use the real modules.
+  insertion; arrows fixed and merged.
 
-**First task is visual and already specified:** the arrows in
-`lists-doubly-insert-order` overlap badly (prev/next collide into diamond shapes
-between nodes; the head→25 arrow crosses under the list). See the screenshot in
-the chat. Fix `engine/overlay/arrows.js`: route next-pointers above the row and
-prev-pointers below without shared midpoints, flatten the bows, keep self-loops
-compact. This is the task that proves the screenshot→inspect→fix loop.
-
-Two decisions baked into the engine, both reversible, both worth a look when
-rendered:
-
+Two reversible engine decisions:
 - **Steps are snapshots, not deltas** — this is what makes Back free.
 - **The n-2 branch is evaluated first** in `recursion-fib-levels`, matching
-  ds5.html. Note this *conflicts* with `recurs2.gif`, which numbers a
-  left-to-right walk. The hints page's own second exercise ("redo right-to-left")
-  suggests both orders are wanted; the animation can toggle. Flagged for Neven.
+  ds5.html. Conflicts with `recurs2.gif` (left-to-right). Both orders may be
+  wanted; flagged for Neven, unresolved.
 
 ---
 
-## Decision 1 — temporal build order (build by teaching week, not by course)
+## FIRST TASK — fix the line-highlight bug
 
-One schedule row = one teaching week, and rows align across all five courses. So
-build **week 1 of every course, then week 2**, etc. This buys every class a few
-weeks of runway simultaneously instead of finishing one course while four are
-empty. The first ~24 animations (about a third) cover week 1–4 of all five.
+The code panel's highlight never moves; it shows the same line regardless of
+step. Cause: content files set `line` at the **top level** of each step object,
+but the code renderer reads the line from `step.panels.<codePanelId>`, so it
+always receives `undefined` and never advances.
 
-Shared animations are built the first week ANY course needs them, then reused —
-and they naturally fall early, so reuse mostly takes care of itself.
+Fix the **engine** (not the content) so a **top-level `step.line`** is passed to
+the code panel automatically and drives the active-line highlight. Support both a
+plain number and a per-language object `{pseudo, java, cpp}`. Content files then
+write the natural `line: 4` at the top of a step and highlighting always works —
+no per-file nesting to forget, and no re-editing the two existing content files.
 
-Build order (● = shared across courses; build once, at first need):
-
-```
-WEEK 1   intro-compile-run ●            objects-constructor-init ●
-         lists-array-insert-delete
-WEEK 2   functions-overload-resolution ●  sorting-race-statements ●
-         io-single-println-escapes   queues-count-vs-rear
-         searching-linear-vs-binary  sorting-bubble-selection
-         types-variable-boxes
-WEEK 3   random-pseudorandom-seed ●   types-integer-division ●
-         pointers-arithmetic  pointers-intro  stacks-paren-scanner
-         stacks-postfix-eval  types-uninitialized-garbage
-WEEK 4   arrays-dont-copy ●
-         io-single-cout-escapes  pointers-new-delete-dangling
-         recursion-factorial-stack  recursion-fib-levels  recursion-hanoi
-         types-string-concat-plus
-WEEK 5   complexity-growth-curves ●   control-flowchart-sync ●
-         arrays-of-nulls-until-new  io-cin-prompt-pause
-         strings-cstring-compare  strings-shared-memory
-WEEK 6   control-short-circuit ●
-         io-fixed-setprecision  sorting-quicksort-partition
-         structs-array-of-records
-WEEK 7   scope-shadowing ●
-         arraylist-amortized-doubling  heap-is-this-valid
-         sorting-heapsort-dual  sorting-timing-chart
-         structs-and-pointers  structs-as-arguments  structs-union-overlay
-WEEK 8   control-case-coverage ●
-         functions-varargs  hashing-collision-strategies
-WEEK 9   objects-static-members ●
-         control-bool-flag  files-basic-operations  files-stream-fail-state
-         io-printf-format  pointers-address-model
-WEEK 10  loops-while-vs-dowhile ●   memory-reachability ●
-         files-random-access-seek  lists-insert-alpha  objects-equals-vs-identity
-WEEK 11  loops-nested-odometer ●   objects-shallow-vs-deep-copy ●
-         lists-doubly-insert-order  objects-intro-classes
-WEEK 12  files-read-until-eof ●   objects-aggregation ●
-         objects-ctor-dtor-lifetime  strings-relational-compare
-         trees-bst-operations  trees-recursive-height
-WEEK 13  graphs-bfs-dfs  graphs-representations
-         objects-operator-overload  types-enum
-WEEK 14  functions-call-return ●
-WEEK 15  dispatch-vtable  functions-menu-dispatch  inheritance-base-derived
-         loops-sentinel-vs-counter  strings-immutability  types-boxing-wrappers
-WEEK 16  objects-reference-vs-value  strings-tokenize-transform
-WEEK 18  functions-value-vs-reference  inheritance-super-chain
-WEEK 19  arrays-accumulate-max-min  inheritance-what-object-gives
-WEEK 20  arrays-of-references  dispatch-which-method-runs
-WEEK 21  gui-event-dispatch  objects-three-from-one-class
-WEEK 22  gui-panel-composition
-WEEK 23  arrays-index-vs-value
-WEEK 24  arrays-parallel-lockstep     arrays-2d-row-col   (see Decision 3)
-```
-
-Weeks are mechanical row indices; a given film may be off by a week, and where a
-row held several subtopics they were split across adjacent weeks. The ORDER is
-sound; confirm specific placements against the schedules when convenient. Within
-a week, build the shared (●) ones first, then the assignment-backers (below),
-then the rest.
-
-Total: **91 animations** (90 + the one added in Decision 3).
+Verify against `lists-doubly-insert-order`: the highlight must move to line 2, 3,
+4, 5 as each assignment executes, and highlight no line on the intro / predict /
+final steps where `line` is null. Render, screenshot, confirm, commit.
 
 ---
 
-## Decision 2 — assignment markers (hidden, in the iframe query string)
+## WATCH / THINK mode (project-wide)
 
-Every assignment has **at least one** backing animation (the one that, if a
-student works through it, makes the assignment materially easier). This is NOT
-advertised — advertising it makes some students do only the backers. But it must
-be identifiable, for two reasons: Neven answers "is there anything for A3?"
-constantly, and wants an instant answer.
+Two educational modes from **one** content file, selected at view time.
 
-**Marker lives in the Canvas iframe query string, not the filename.** Reason: a
-shared animation backs *different* assignments in different courses
-(`objects-constructor-init` is bCpp A7, bJava A7, aJava A1). A filename can't
-express that; a per-course iframe URL can. The animation ignores the param — it
-is inert, a marker for Neven only. Students don't read URLs.
+- **WATCH** — passive step-through. `predict` steps render as ordinary steps; the
+  student just clicks Next. Debugger-style: current line highlighted, state
+  updates, narration explains.
+- **THINK** — `predict` steps render as gates: a question, options, and (where
+  authored) a wrong-answer branch that runs the buggy version.
+
+**Mechanism: a `?mode=` URL parameter, default WATCH.**
 
 ```
-<iframe src="objects-constructor-init.html?a=bcpp-a7">   in the bCpp Canvas page
-<iframe src="objects-constructor-init.html?a=ajava-a1">  in the aJava Canvas page
+lists-doubly-insert-order.html?mode=watch   (or no param — WATCH is default)
+lists-doubly-insert-order.html?mode=think
 ```
 
-When an assignment has **more than one** backer, number them:
+The engine reads `?mode=` at load. In WATCH, any `type:'predict'` step renders as
+a normal step: skip the gate UI, do not stop, do not branch — show the snapshot
+and let Next proceed. In THINK, gates behave as they do today.
+
+This lets a Canvas page start with one default (WATCH) link and later add a
+second `?mode=think` link — no rebuild, no second file:
 
 ```
-?a=bcpp-a2-1     types-integer-division
-?a=bcpp-a2-2     io-fixed-setprecision
+List insertion animation                     -> ...insert-order.html
+List insertion animation (Watch | Think)     -> two links: ?mode=watch  /  ?mode=think
 ```
 
-Two deliverables for Claude Code:
+**Authoring rule:** author the gate **now**, during the initial build, wherever
+an animation has a meaningful predict moment — question, options, and buggy
+branch all in the content file. They lie dormant under WATCH and activate under
+THINK. Do NOT defer gates to a later pass: the THINK link must work the day it is
+added, with no rebuild. Animations with no natural predict moment are WATCH-only
+and never get a THINK link.
 
-1. Emit these `?a=` params when generating the per-course iframe URLs, driven by
-   `courses.json` (`{file, course, backs}`).
-2. Generate a **private instructor index** — one page per course, unlisted or
-   local, that reads `courses.json` and prints "A3 → <animation> → link." This is
-   what Neven actually opens when a student asks. The URL marker is the backup;
-   the index is the tool.
+---
 
-### Backer map (source of truth for `courses.json`)
+## Build order — EFFICIENCY (not temporal)
+
+Mature the engine against the best-specified course (ds), then build shared
+animations once, then finish single-course animations, and do aCpp last because
+it already has live Canvas material and is a port-and-improve job. Within a
+phase, order is flexible; across phases, go in order.
+
+`●` = shared across courses (build once, reuse via the `courses.json` mapping).
+
+### Phase 1 — ds core (20) · proves every renderer
+```
+lists-array-insert-delete       ds A1
+queues-count-vs-rear            ds A2   (race driver used for a non-race compare)
+stacks-paren-scanner            ds A3   predict/trap
+stacks-postfix-eval             ds A4
+recursion-factorial-stack       ds
+recursion-fib-levels            ds A5   BUILT
+recursion-hanoi                 ds
+sorting-quicksort-partition     ds A6 KEY
+heap-is-this-valid              ds      predict
+sorting-heapsort-dual           ds A7   array<->tree dual view
+sorting-timing-chart            ds A7   CHART renderer
+hashing-collision-strategies    ds A8
+pointers-address-model          ds
+lists-insert-alpha              ds A9   arrows
+lists-doubly-insert-order       ds A10  BUILT
+trees-bst-operations            ds A11
+trees-recursive-height          ds A12
+graphs-representations          ds A13
+graphs-bfs-dfs                  ds
+complexity-growth-curves        ● ds analysis (also aJava)
+```
+
+### Phase 2 — high-share animations (20) · each serves 2–3 courses
+```
+objects-constructor-init        ● bCpp A7 · bJava A7 · aJava A1
+arrays-dont-copy                ● bCpp · bJava · aJava
+functions-overload-resolution   ● bCpp A6 · aJava A1
+random-pseudorandom-seed        ● bJava · aJava A1
+types-integer-division          ● bCpp A2 · bJava A2
+control-flowchart-sync          ● bCpp · bJava A2
+control-case-coverage           ● bCpp A3 KEY · bJava A3 KEY (parallel problem)
+control-short-circuit           ● bCpp · bJava
+loops-while-vs-dowhile          ● bCpp · bJava
+loops-nested-odometer           ● bCpp A4 · bJava A4
+files-read-until-eof            ● bCpp A5 · bJava A5
+functions-call-return           ● bCpp · bJava A5
+scope-shadowing                 ● bCpp · bJava
+objects-static-members          ● aCpp · aJava
+objects-shallow-vs-deep-copy    ● aCpp · aJava
+objects-aggregation             ● aCpp A7 · aJava A4
+memory-reachability             ● aJava A4 · ds
+sorting-race-statements         ● aCpp A1 · ds
+intro-compile-run               ● bCpp · bJava   (WATCH-only; may not warrant building)
+arrays-2d-row-col               ● aJava A3 · aCpp · bCpp   (closes aJava A3 gap)
+```
+
+### Phase 3 — bCpp / bJava singles (19)
+```
+types-variable-boxes         bCpp        io-single-println-escapes   bJava A1
+io-single-cout-escapes       bCpp A1     types-string-concat-plus    bJava
+types-uninitialized-garbage  bCpp        io-printf-format            bJava
+io-cin-prompt-pause          bCpp        functions-menu-dispatch     bJava A6
+io-fixed-setprecision        bCpp A2     objects-reference-vs-value  bJava
+control-bool-flag            bCpp        arrays-accumulate-max-min   bJava A8
+strings-relational-compare   bCpp        arrays-of-references        bJava
+loops-sentinel-vs-counter    bCpp
+functions-value-vs-reference bCpp
+objects-three-from-one-class bCpp
+arrays-index-vs-value        bCpp
+arrays-parallel-lockstep     bCpp A8
+```
+
+### Phase 4 — aJava singles (13)
+```
+arrays-of-nulls-until-new     aJava A2      strings-immutability          aJava A5
+arraylist-amortized-doubling  aJava         types-boxing-wrappers         aJava
+functions-varargs             aJava         strings-tokenize-transform    aJava A5
+objects-equals-vs-identity    aJava A2      inheritance-super-chain       aJava A6
+types-enum                    aJava         inheritance-what-object-gives aJava
+dispatch-which-method-runs    aJava A7 KEY  gui-event-dispatch            aJava A8
+gui-panel-composition         aJava
+```
+
+### Phase 5 — aCpp (19) · port + improve; course already live
+```
+sorting-bubble-selection     port          structs-as-arguments        port struct2
+searching-linear-vs-binary   port          structs-union-overlay       port enumuni
+pointers-intro               port cpoint1   files-basic-operations      A4 · port file1/2
+pointers-arithmetic          port cpoint2   files-stream-fail-state     error testing
+pointers-new-delete-dangling A2 · cpoint3   files-random-access-seek    A5 KEY · port file3
+strings-cstring-compare      port strcompare objects-intro-classes      port oop1
+strings-shared-memory        port strshare   objects-ctor-dtor-lifetime A6 · port oop2
+structs-array-of-records     A3              objects-operator-overload   port oop4
+structs-and-pointers         port struct-ptr inheritance-base-derived    port oop3
+                                             dispatch-vtable             A8 · port oop5
+```
+
+**Total: 91** (two built). Phase 1 is the priority batch. Batch instruction to
+Claude Code, e.g.: *"Build the next five Phase-1 animations from HANDOFF.md,
+following AUTHORING.md. WATCH/THINK-capable, author gates where meaningful.
+Render and screenshot each before committing."*
+
+---
+
+## Assignment markers (hidden, in the iframe query string)
+
+Every assignment has at least one backing animation. NOT advertised. Identified
+by a `?a=` param on the Canvas iframe, ignored by the animation — an inert marker
+for Neven, invisible to students who don't read URLs. Composes with `?mode=`:
 
 ```
-bCpp   A1 io-single-cout-escapes
-       A2 types-integer-division ; io-fixed-setprecision          (a2-1, a2-2)
-       A3 control-case-coverage            (KEY — parallel problem, not quadratic)
-       A4 loops-nested-odometer
-       A5 files-read-until-eof
-       A6 functions-overload-resolution
-       A7 objects-constructor-init
-       A8 arrays-parallel-lockstep
-bJava  A1 io-single-println-escapes
-       A2 types-integer-division ; control-flowchart-sync         (a2-1, a2-2)
-       A3 control-case-coverage            (KEY — parallel problem)
-       A4 loops-nested-odometer
-       A5 files-read-until-eof ; functions-call-return            (a5-1, a5-2)
-       A6 functions-menu-dispatch
-       A7 objects-constructor-init
-       A8 arrays-accumulate-max-min
-aCpp   A1 sorting-race-statements
-       A2 pointers-new-delete-dangling
-       A3 structs-array-of-records
-       A4 files-basic-operations
-       A5 files-random-access-seek         (KEY — direct, machinery not assessed)
-       A6 objects-ctor-dtor-lifetime
-       A7 objects-aggregation
-       A8 dispatch-vtable
-aJava  A1 objects-constructor-init ; random-pseudorandom-seed     (a1-1, a1-2)
-       A2 arrays-of-nulls-until-new ; objects-equals-vs-identity  (a2-1, a2-2)
-       A3 arrays-2d-row-col                (NEW — see Decision 3)
-       A4 objects-aggregation ; memory-reachability              (a4-1, a4-2)
-       A5 strings-tokenize-transform
-       A6 inheritance-super-chain
-       A7 dispatch-which-method-runs       (KEY — direct; UML is what's graded)
+objects-constructor-init.html?a=bcpp-a7&mode=watch
+objects-constructor-init.html?a=ajava-a1&mode=watch
+```
+
+A shared animation backs different assignments in different courses, which is why
+the marker is per-iframe, not in the filename. Multiple backers of one assignment
+number as `a2-1`, `a2-2`.
+
+Later deliverables (not blocking): emit `?a=`/`?mode=` when generating per-course
+iframe URLs from `courses.json`; and a private per-course **instructor index**
+listing "A3 -> animation -> link" for instant answers to "anything for A3?".
+
+### Backer map (source of truth for courses.json)
+```
+bCpp   A1 io-single-cout-escapes            A5 files-read-until-eof
+       A2 types-integer-division;io-fixed-setprecision (a2-1,a2-2)
+       A3 control-case-coverage (KEY,parallel)  A6 functions-overload-resolution
+       A4 loops-nested-odometer              A7 objects-constructor-init
+                                             A8 arrays-parallel-lockstep
+bJava  A1 io-single-println-escapes          A5 files-read-until-eof;functions-call-return (a5-1,a5-2)
+       A2 types-integer-division;control-flowchart-sync (a2-1,a2-2)
+       A3 control-case-coverage (KEY,parallel)  A6 functions-menu-dispatch
+       A4 loops-nested-odometer              A7 objects-constructor-init
+                                             A8 arrays-accumulate-max-min
+aCpp   A1 sorting-race-statements            A5 files-random-access-seek (KEY,direct)
+       A2 pointers-new-delete-dangling       A6 objects-ctor-dtor-lifetime
+       A3 structs-array-of-records           A7 objects-aggregation
+       A4 files-basic-operations             A8 dispatch-vtable
+aJava  A1 objects-constructor-init;random-pseudorandom-seed (a1-1,a1-2)
+       A2 arrays-of-nulls-until-new;objects-equals-vs-identity (a2-1,a2-2)
+       A3 arrays-2d-row-col                  A5 strings-tokenize-transform
+       A4 objects-aggregation;memory-reachability (a4-1,a4-2)
+       A6 inheritance-super-chain            A7 dispatch-which-method-runs (KEY,direct)
        A8 gui-event-dispatch
-ds     A1 lists-array-insert-delete        A8  hashing-collision-strategies
-       A2 queues-count-vs-rear             A9  lists-insert-alpha
-       A3 stacks-paren-scanner             A10 lists-doubly-insert-order
-       A4 stacks-postfix-eval              A11 trees-bst-operations
-       A5 recursion-fib-levels             A12 trees-recursive-height
-       A6 sorting-quicksort-partition (KEY) A13 graphs-representations
-       A7 sorting-heapsort-dual ; sorting-timing-chart            (a7-1, a7-2)
+ds     A1 lists-array-insert-delete   A8  hashing-collision-strategies
+       A2 queues-count-vs-rear        A9  lists-insert-alpha
+       A3 stacks-paren-scanner        A10 lists-doubly-insert-order
+       A4 stacks-postfix-eval         A11 trees-bst-operations
+       A5 recursion-fib-levels        A12 trees-recursive-height
+       A6 sorting-quicksort-partition (KEY)  A13 graphs-representations
+       A7 sorting-heapsort-dual;sorting-timing-chart (a7-1,a7-2)
 ```
-
-KEY assignments: the backer is deliberately adjacent, never the graded solution.
-bCpp/bJava A3 point at leap-year case-coverage, not a quadratic walkthrough.
-
----
-
-## Decision 3 — one animation added to close the last gap
-
-`aJava` A3 (2D Array Operations: getRowTotal, getColumnTotal, getHighestInRow)
-had no backer — the module bracket names static members and equals, but the
-assignment is 2D indexing. There was NO 2D-array animation anywhere in the set.
-
-**Add `arrays-2d-row-col`**: a CELLS grid where "row total" highlights a row,
-"column total" a column, showing a[r][c] indexing. Backs aJava A3, and also
-serves aCpp 7.6–7.10 (multi-dim arrays) and bCpp's 2D-array module. Shared across
-three courses; placed at its earliest need. Takes the total to 91.
+KEY backers are deliberately adjacent, never the graded solution.
 
 ---
 
 ## Still open for Neven (cheap, not blocking)
 
-- Are the 20 aCpp animation pages actually unpublished? (2 min in Canvas.)
-- Send one Canvas wiki page's HTML — turns the filename↔page mapping from
-  inference into fact.
-- Fix the aJava schedule's malformed span (the polymorphism module's chapter
-  cell renders blank — it's the KEY module).
-- `recurs2.gif` vs ds5.html evaluation-order conflict (Decision 1 note).
+- Are the 20 aCpp animation pages actually unpublished in Canvas? (2 min.)
+- Fix the aJava schedule's malformed span (polymorphism/KEY module cell is blank).
+- `recurs2.gif` vs ds5.html evaluation-order conflict.
+- THINK-mode link labels (a Canvas-side choice; never touches the repo).
 
 ## What stays a chat decision, not a Claude Code one
 
-Anything that changes what an animation *teaches*, or edits a design `.md`:
-the predict-vs-passive toggle question, new animations, pedagogical framing.
-Design lands in the `.md` files (chat); implementation lands in code (Claude
-Code); git keeps them coherent.
+Anything that changes what an animation teaches, or edits a design `.md`: new
+animations, pedagogical framing, mode design, build order. Design lands in the
+`.md` files (chat); implementation lands in code (Claude Code); git keeps them
+coherent.
