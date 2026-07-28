@@ -115,14 +115,16 @@ function snap(m, { line, tag, narrate, note, touched }) {
           id, label: String(m[id].value),
           prev: m[id].prev, next: m[id].next,
           slot: m[id].slot, row: m[id].row,
-          // The node just written is 'entering'; a node already reachable from
-          // head is 'exited' (settled in the list); a freshly allocated node
-          // not yet linked in -- node 25 before insertion -- is 'pending'. It
-          // is HEALTHY, merely waiting; it is never marked as danger. (See
-          // AUTHORING.md "Memory-danger marker": the correct order has no
-          // danger moment.)
-          state: id === touched ? 'entering'
-                 : (reach.includes(m[id].value) ? 'exited' : 'pending'),
+          // State is driven by list MEMBERSHIP (reachability from head), not by
+          // dimming. A node not yet reachable -- node 25 while it is allocated
+          // and held by ins_pt but not linked in -- is 'allocated' (a visible
+          // yellow, not a faded ghost). It is HEALTHY, merely waiting, and is
+          // never marked as danger (AUTHORING.md "Memory-danger marker"). Once
+          // it becomes part of the list it turns 'exited' (settled/green), or
+          // 'entering' (blue) on the step a node in the list is rewired.
+          state: reach.includes(m[id].value)
+                 ? (id === touched ? 'entering' : 'exited')
+                 : 'allocated',
         })),
         edges: [],
       },

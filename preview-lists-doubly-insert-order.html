@@ -217,6 +217,10 @@ body {
 .pac-node[data-state="entering"] .pac-node-box { stroke: var(--accent); fill: var(--accent-soft); }
 .pac-node[data-state="active"]   .pac-node-box { stroke: var(--accent); fill: var(--accent-soft); }
 .pac-node[data-state="exited"]   .pac-node-box { stroke: var(--ok); }
+/* Allocated but not yet linked into the structure (e.g. a freshly malloc'd node
+ * held by a pointer). Fully visible and warn-yellow -- not a faded ghost -- so
+ * the student sees it is real; it turns green once it becomes part of the list. */
+.pac-node[data-state="allocated"] .pac-node-box { stroke: var(--warn); fill: rgba(224, 163, 58, 0.16); }
 .pac-node-label { fill: var(--text); font-family: var(--mono); font-size: 12px; text-anchor: middle; }
 .pac-node-meta  { fill: var(--text-dim); font-family: var(--mono); font-size: 9.5px; text-anchor: middle; }
 .pac-node[data-state="pending"] .pac-node-label { fill: var(--text-dim); }
@@ -1114,14 +1118,16 @@ function snap(m, { line, tag, narrate, note, touched }) {
           id, label: String(m[id].value),
           prev: m[id].prev, next: m[id].next,
           slot: m[id].slot, row: m[id].row,
-          // The node just written is 'entering'; a node already reachable from
-          // head is 'exited' (settled in the list); a freshly allocated node
-          // not yet linked in -- node 25 before insertion -- is 'pending'. It
-          // is HEALTHY, merely waiting; it is never marked as danger. (See
-          // AUTHORING.md "Memory-danger marker": the correct order has no
-          // danger moment.)
-          state: id === touched ? 'entering'
-                 : (reach.includes(m[id].value) ? 'exited' : 'pending'),
+          // State is driven by list MEMBERSHIP (reachability from head), not by
+          // dimming. A node not yet reachable -- node 25 while it is allocated
+          // and held by ins_pt but not linked in -- is 'allocated' (a visible
+          // yellow, not a faded ghost). It is HEALTHY, merely waiting, and is
+          // never marked as danger (AUTHORING.md "Memory-danger marker"). Once
+          // it becomes part of the list it turns 'exited' (settled/green), or
+          // 'entering' (blue) on the step a node in the list is rewired.
+          state: reach.includes(m[id].value)
+                 ? (id === touched ? 'entering' : 'exited')
+                 : 'allocated',
         })),
         edges: [],
       },
