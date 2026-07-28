@@ -194,11 +194,10 @@ function makeTrace() {
 
 export default {
   title: 'Recursion: what "level" really counts',
-  subtitle: 'ds A5 — Fibonacci trace. The invariant is n + level = N.',
+  subtitle: 'Tracing a recursive Fibonacci function.',
   profile: 'standard',
   columns: 2,
   languages: ['pseudo', 'java', 'cpp'],
-  hideTags: ['call', 'init'],
 
   panels: [
     { type: 'code',   id: 'code', title: 'fib(n, level)',

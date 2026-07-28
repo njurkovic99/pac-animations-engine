@@ -224,6 +224,19 @@ body {
  * traversal state. It takes the normal outline once the insertion is complete.
  * See AUTHORING.md "Node membership state". */
 .pac-node[data-state="unlinked"] .pac-node-box { stroke: var(--warn); fill: none; stroke-width: 1.5; }
+/* Settled member of a structure: green OUTLINE, no fill -- leaving the fill
+ * channel free for the activity signal below. Distinct from the tree's
+ * `exited`, which shares the green but means "traversal done". */
+.pac-node[data-state="member"]   .pac-node-box { stroke: var(--ok); }
+
+/* Activity channel (FILL) -- the second, INDEPENDENT node color channel (see
+ * AUTHORING.md "Node color channels"). A truthy `active` on a node means "this
+ * node is being modified on THIS step": paint a blue interior, orthogonal to
+ * the membership/traversal OUTLINE above. Declared last so it wins the `fill`
+ * property on equal specificity -- an amber `unlinked` node (fill:none) or a
+ * green `member` therefore also shows a blue activity fill in the same step
+ * (amber-outline + blue-fill, or green-outline + blue-fill). */
+.pac-node[data-active="true"]    .pac-node-box { fill: var(--accent-soft); }
 .pac-node-label { fill: var(--text); font-family: var(--mono); font-size: 12px; text-anchor: middle; }
 .pac-node-meta  { fill: var(--text-dim); font-family: var(--mono); font-size: 9.5px; text-anchor: middle; }
 .pac-node[data-state="pending"] .pac-node-label { fill: var(--text-dim); }
@@ -335,8 +348,17 @@ const nodesPanel = (() => { /* NODES panel — nodes with typed edges.
  * Step data:
  *   { layout:   'tree' | 'linear' | 'graph',
  *     template: 'plain' | 'record',
- *     nodes: [{id, parent, label, meta[], state, fields[], slot, row}],
+ *     nodes: [{id, parent, label, meta[], state, active, fields[], slot, row}],
  *     edges: [{from, to, state}] }       // implied by `parent` for trees
+ *
+ * Two INDEPENDENT color channels (AUTHORING.md "Node color channels"):
+ *   - `state`  -> the OUTLINE (membership/traversal): green member, amber
+ *                 `unlinked`, dim `pending`, blue traversal frontier.
+ *   - `active` -> the FILL (activity): a truthy `active` flags "this node is
+ *                 being modified on THIS step" and paints a blue interior,
+ *                 orthogonal to `state`. An unlinked node can be amber-outline
+ *                 + blue-fill at once; a settled member, green-outline +
+ *                 blue-fill. Fill never changes the outline, and vice versa.
  *
  * Snapshots include not-yet-visited nodes as state 'pending', so layout is
  * computed over the whole structure and nodes never jump between steps.
@@ -383,7 +405,7 @@ function render(body, data, ctx) {
 function plainNode(n, p) {
   const meta = (n.meta ?? []).map((m, k) =>
     `<text class="pac-node-meta" x="${p.x}" y="${p.y + 31 + k * 11}">${esc(m)}</text>`).join('');
-  return `<g class="pac-node" data-state="${n.state ?? 'pending'}" data-anchor="${n.id}">
+  return `<g class="pac-node" data-state="${n.state ?? 'pending'}" data-active="${!!n.active}" data-anchor="${n.id}">
     <rect class="pac-node-box" x="${p.x - NW / 2}" y="${p.y}" width="${NW}" height="${NH}" rx="4"/>
     <text class="pac-node-label" x="${p.x}" y="${p.y + 17}">${esc(n.label)}</text>
     ${meta}</g>`;
@@ -405,7 +427,7 @@ function recordNode(n, p) {
   }).join('');
   const meta = (n.meta ?? []).map((m, k) =>
     `<text class="pac-node-meta" x="${p.x}" y="${p.y + RH + 13 + k * 11}">${esc(m)}</text>`).join('');
-  return `<g class="pac-node" data-state="${n.state ?? 'exited'}" data-anchor="${n.id}">${cells}${meta}</g>`;
+  return `<g class="pac-node" data-state="${n.state ?? 'exited'}" data-active="${!!n.active}" data-anchor="${n.id}">${cells}${meta}</g>`;
 }
 
 /* ---- layout ---- */
@@ -937,10 +959,17 @@ class Engine {
     }
     this.progress.textContent = `${Math.min(this.i + 1, this.steps.length)} / ${this.steps.length}`;
 
-    const m = this.metrics();
-    this.metricsEl.innerHTML = Object.entries(m)
-      .filter(([k]) => !this.spec.hideTags?.includes(k))
-      .map(([k, v]) => `${k} <b>${v}</b>`).join('');
+    // Metrics are HIDDEN BY DEFAULT (see AUTHORING.md "Metrics readout").
+    // The tag-derived counter is an internal mechanism; the raw tag name
+    // (`assign`) is engine jargon, not student-facing. An animation opts in
+    // via `spec.metrics`, a map from tag -> plain student-facing label. Only
+    // listed tags render, and always with the label, never the raw tag. No
+    // opt-in -> no readout (an insertion or single walk-through shows none).
+    const labels = this.spec.metrics ?? {};
+    const counts = this.metrics();
+    this.metricsEl.innerHTML = Object.entries(labels)
+      .filter(([tag]) => counts[tag] != null)
+      .map(([tag, label]) => `${label} <b>${counts[tag]}</b>`).join('');
 
     this.root.querySelector('[data-act="prev"]').disabled = this.i === 0;
     this.root.querySelector('[data-act="next"]').disabled = this.atEnd;
@@ -1200,11 +1229,10 @@ function makeTrace() {
 
 const SPEC = {
   title: 'Recursion: what "level" really counts',
-  subtitle: 'ds A5 — Fibonacci trace. The invariant is n + level = N.',
+  subtitle: 'Tracing a recursive Fibonacci function.',
   profile: 'standard',
   columns: 2,
   languages: ['pseudo', 'java', 'cpp'],
-  hideTags: ['call', 'init'],
 
   panels: [
     { type: 'code',   id: 'code', title: 'fib(n, level)',

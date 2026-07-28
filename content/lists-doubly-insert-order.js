@@ -127,25 +127,32 @@ function snap(m, { line, tag, narrate, note, touched }) {
           id, label: String(m[id].value),
           prev: m[id].prev, next: m[id].next,
           slot: m[id].slot, row: m[id].row,
-          // State is driven by list MEMBERSHIP, not by dimming. The node being
-          // inserted (m.ins) is 'unlinked' -- an amber OUTLINE, not a faded
-          // ghost -- until the insertion is COMPLETE: all four links set and
-          // both neighbours pointing back (see linkedIn). It is HEALTHY, merely
-          // not yet stitched in, and is never marked as danger (AUTHORING.md
-          // "Node membership state" / "Memory-danger marker"). On the final
-          // assignment it takes the normal outline: 'exited' (settled), or
-          // 'entering' (blue) on the step a settled node is rewired.
-          state: (id === m.ins && !linkedIn(m, id)) ? 'unlinked'
-                 : (id === touched ? 'entering' : 'exited'),
+          // Two INDEPENDENT color channels (AUTHORING.md "Node color channels").
+          //
+          // OUTLINE = membership. The node being inserted (m.ins) is 'unlinked'
+          // (amber) until the insertion is COMPLETE -- all four links set AND
+          // both neighbours pointing back (see linkedIn) -- at which point, on
+          // the final step, it becomes a 'member' (green). Every already-settled
+          // list node is a 'member' throughout. Partial linking and activity
+          // never flip the outline green early; node 25 is HEALTHY the whole
+          // time, never danger (AUTHORING.md "Memory-danger marker").
+          //
+          // FILL = activity. `active` flags the node modified on THIS step (the
+          // one op.apply touched), painting a blue interior orthogonal to the
+          // outline. So node 25 is amber-outline + blue-fill while its own links
+          // are being set, and a settled green member shows a blue fill on the
+          // step it is rewired.
+          state:  (id === m.ins && !linkedIn(m, id)) ? 'unlinked' : 'member',
+          active: id === touched,
         })),
         edges: [],
       },
       vars: {
         render: 'row',
         cells: [
-          { label: 'head_pt', value: '\u25cf', anchor: 'head' },
-          { label: 'ins_pt',  value: '\u25cf', anchor: 'ins', role: 'active' },
-          { label: 'temp_pt', value: '\u25cf', anchor: 'temp' },
+          { label: 'head', value: '\u25cf', anchor: 'head' },
+          { label: 'ins',  value: '\u25cf', anchor: 'ins', role: 'active' },
+          { label: 'temp', value: '\u25cf', anchor: 'temp' },
         ],
       },
       walk: {
@@ -161,8 +168,8 @@ function snap(m, { line, tag, narrate, note, touched }) {
  * on the assignment it concerns, and the post-watch challenge on the last step. */
 const SETUP =
   'A doubly linked list, 12 \u2194 37 \u2194 99, fully linked. A new node holding 25 has been ' +
-  'allocated and is held by ins_pt \u2014 but its own prev and next are still null, so it is ' +
-  'not yet part of the list. We want it before 37 (temp_pt); the four assignments below ' +
+  'allocated and ins points to it \u2014 and its own prev and next are still null, so it is ' +
+  'not yet part of the list. We want it before 37 (temp); the four assignments below ' +
   'link it in.';
 
 const PITFALL =
@@ -183,12 +190,12 @@ function makeTrace() {
 
     // Step 0 (required): the initial state, before anything executes -- no line
     // highlighted. The list is already linked 12 <-> 37 <-> 99; node 25 is
-    // allocated and held by ins_pt (one arrow, ins_pt -> 25) with its own prev
+    // allocated and pointed to by ins (one arrow, ins -> 25) with its own prev
     // and next still null, so NO linking arrows join it to the list yet -- those
     // are exactly what the four assignments draw. The setup note lives here.
     yield snap(m, {
       line: null, tag: 'init', touched: null,
-      narrate: 'The list before insertion. Node 25 is allocated and held by ins_pt, and not yet linked in.',
+      narrate: 'The list before insertion. Node 25 is allocated and ins points to it, with its own prev and next still null.',
       note: SETUP,
     });
 
@@ -210,18 +217,17 @@ function makeTrace() {
 
 export default {
   title: 'Doubly linked insertion: why the order of four lines matters',
-  subtitle: 'ds A10 \u2014 line 4 dereferences the pointer line 2 set.',
+  subtitle: 'Inserting a node into a doubly linked list.',
   profile: 'standard',
   columns: 2,
   languages: ['pseudo', 'java', 'cpp'],
-  hideTags: ['init'],
 
   panels: [
     { type: 'code',   id: 'code', title: 'insert ins before temp',
       listings: LISTINGS, labels: { pseudo: 'pseudocode', java: 'Java', cpp: 'C++' } },
     { type: 'nodes',  id: 'list', title: 'The list' },
     { type: 'cells',  id: 'vars', title: 'Pointer variables' },
-    { type: 'cells',  id: 'walk', title: 'Walk forward from head_pt' },
+    { type: 'cells',  id: 'walk', title: 'Walk forward from head' },
   ],
 
   initialTrace: 'correct',

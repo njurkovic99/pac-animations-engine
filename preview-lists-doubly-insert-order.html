@@ -224,6 +224,19 @@ body {
  * traversal state. It takes the normal outline once the insertion is complete.
  * See AUTHORING.md "Node membership state". */
 .pac-node[data-state="unlinked"] .pac-node-box { stroke: var(--warn); fill: none; stroke-width: 1.5; }
+/* Settled member of a structure: green OUTLINE, no fill -- leaving the fill
+ * channel free for the activity signal below. Distinct from the tree's
+ * `exited`, which shares the green but means "traversal done". */
+.pac-node[data-state="member"]   .pac-node-box { stroke: var(--ok); }
+
+/* Activity channel (FILL) -- the second, INDEPENDENT node color channel (see
+ * AUTHORING.md "Node color channels"). A truthy `active` on a node means "this
+ * node is being modified on THIS step": paint a blue interior, orthogonal to
+ * the membership/traversal OUTLINE above. Declared last so it wins the `fill`
+ * property on equal specificity -- an amber `unlinked` node (fill:none) or a
+ * green `member` therefore also shows a blue activity fill in the same step
+ * (amber-outline + blue-fill, or green-outline + blue-fill). */
+.pac-node[data-active="true"]    .pac-node-box { fill: var(--accent-soft); }
 .pac-node-label { fill: var(--text); font-family: var(--mono); font-size: 12px; text-anchor: middle; }
 .pac-node-meta  { fill: var(--text-dim); font-family: var(--mono); font-size: 9.5px; text-anchor: middle; }
 .pac-node[data-state="pending"] .pac-node-label { fill: var(--text-dim); }
@@ -335,8 +348,17 @@ const nodesPanel = (() => { /* NODES panel — nodes with typed edges.
  * Step data:
  *   { layout:   'tree' | 'linear' | 'graph',
  *     template: 'plain' | 'record',
- *     nodes: [{id, parent, label, meta[], state, fields[], slot, row}],
+ *     nodes: [{id, parent, label, meta[], state, active, fields[], slot, row}],
  *     edges: [{from, to, state}] }       // implied by `parent` for trees
+ *
+ * Two INDEPENDENT color channels (AUTHORING.md "Node color channels"):
+ *   - `state`  -> the OUTLINE (membership/traversal): green member, amber
+ *                 `unlinked`, dim `pending`, blue traversal frontier.
+ *   - `active` -> the FILL (activity): a truthy `active` flags "this node is
+ *                 being modified on THIS step" and paints a blue interior,
+ *                 orthogonal to `state`. An unlinked node can be amber-outline
+ *                 + blue-fill at once; a settled member, green-outline +
+ *                 blue-fill. Fill never changes the outline, and vice versa.
  *
  * Snapshots include not-yet-visited nodes as state 'pending', so layout is
  * computed over the whole structure and nodes never jump between steps.
@@ -383,7 +405,7 @@ function render(body, data, ctx) {
 function plainNode(n, p) {
   const meta = (n.meta ?? []).map((m, k) =>
     `<text class="pac-node-meta" x="${p.x}" y="${p.y + 31 + k * 11}">${esc(m)}</text>`).join('');
-  return `<g class="pac-node" data-state="${n.state ?? 'pending'}" data-anchor="${n.id}">
+  return `<g class="pac-node" data-state="${n.state ?? 'pending'}" data-active="${!!n.active}" data-anchor="${n.id}">
     <rect class="pac-node-box" x="${p.x - NW / 2}" y="${p.y}" width="${NW}" height="${NH}" rx="4"/>
     <text class="pac-node-label" x="${p.x}" y="${p.y + 17}">${esc(n.label)}</text>
     ${meta}</g>`;
@@ -405,7 +427,7 @@ function recordNode(n, p) {
   }).join('');
   const meta = (n.meta ?? []).map((m, k) =>
     `<text class="pac-node-meta" x="${p.x}" y="${p.y + RH + 13 + k * 11}">${esc(m)}</text>`).join('');
-  return `<g class="pac-node" data-state="${n.state ?? 'exited'}" data-anchor="${n.id}">${cells}${meta}</g>`;
+  return `<g class="pac-node" data-state="${n.state ?? 'exited'}" data-active="${!!n.active}" data-anchor="${n.id}">${cells}${meta}</g>`;
 }
 
 /* ---- layout ---- */
@@ -937,10 +959,17 @@ class Engine {
     }
     this.progress.textContent = `${Math.min(this.i + 1, this.steps.length)} / ${this.steps.length}`;
 
-    const m = this.metrics();
-    this.metricsEl.innerHTML = Object.entries(m)
-      .filter(([k]) => !this.spec.hideTags?.includes(k))
-      .map(([k, v]) => `${k} <b>${v}</b>`).join('');
+    // Metrics are HIDDEN BY DEFAULT (see AUTHORING.md "Metrics readout").
+    // The tag-derived counter is an internal mechanism; the raw tag name
+    // (`assign`) is engine jargon, not student-facing. An animation opts in
+    // via `spec.metrics`, a map from tag -> plain student-facing label. Only
+    // listed tags render, and always with the label, never the raw tag. No
+    // opt-in -> no readout (an insertion or single walk-through shows none).
+    const labels = this.spec.metrics ?? {};
+    const counts = this.metrics();
+    this.metricsEl.innerHTML = Object.entries(labels)
+      .filter(([tag]) => counts[tag] != null)
+      .map(([tag, label]) => `${label} <b>${counts[tag]}</b>`).join('');
 
     this.root.querySelector('[data-act="prev"]').disabled = this.i === 0;
     this.root.querySelector('[data-act="next"]').disabled = this.atEnd;
@@ -1133,25 +1162,32 @@ function snap(m, { line, tag, narrate, note, touched }) {
           id, label: String(m[id].value),
           prev: m[id].prev, next: m[id].next,
           slot: m[id].slot, row: m[id].row,
-          // State is driven by list MEMBERSHIP, not by dimming. The node being
-          // inserted (m.ins) is 'unlinked' -- an amber OUTLINE, not a faded
-          // ghost -- until the insertion is COMPLETE: all four links set and
-          // both neighbours pointing back (see linkedIn). It is HEALTHY, merely
-          // not yet stitched in, and is never marked as danger (AUTHORING.md
-          // "Node membership state" / "Memory-danger marker"). On the final
-          // assignment it takes the normal outline: 'exited' (settled), or
-          // 'entering' (blue) on the step a settled node is rewired.
-          state: (id === m.ins && !linkedIn(m, id)) ? 'unlinked'
-                 : (id === touched ? 'entering' : 'exited'),
+          // Two INDEPENDENT color channels (AUTHORING.md "Node color channels").
+          //
+          // OUTLINE = membership. The node being inserted (m.ins) is 'unlinked'
+          // (amber) until the insertion is COMPLETE -- all four links set AND
+          // both neighbours pointing back (see linkedIn) -- at which point, on
+          // the final step, it becomes a 'member' (green). Every already-settled
+          // list node is a 'member' throughout. Partial linking and activity
+          // never flip the outline green early; node 25 is HEALTHY the whole
+          // time, never danger (AUTHORING.md "Memory-danger marker").
+          //
+          // FILL = activity. `active` flags the node modified on THIS step (the
+          // one op.apply touched), painting a blue interior orthogonal to the
+          // outline. So node 25 is amber-outline + blue-fill while its own links
+          // are being set, and a settled green member shows a blue fill on the
+          // step it is rewired.
+          state:  (id === m.ins && !linkedIn(m, id)) ? 'unlinked' : 'member',
+          active: id === touched,
         })),
         edges: [],
       },
       vars: {
         render: 'row',
         cells: [
-          { label: 'head_pt', value: '\u25cf', anchor: 'head' },
-          { label: 'ins_pt',  value: '\u25cf', anchor: 'ins', role: 'active' },
-          { label: 'temp_pt', value: '\u25cf', anchor: 'temp' },
+          { label: 'head', value: '\u25cf', anchor: 'head' },
+          { label: 'ins',  value: '\u25cf', anchor: 'ins', role: 'active' },
+          { label: 'temp', value: '\u25cf', anchor: 'temp' },
         ],
       },
       walk: {
@@ -1167,8 +1203,8 @@ function snap(m, { line, tag, narrate, note, touched }) {
  * on the assignment it concerns, and the post-watch challenge on the last step. */
 const SETUP =
   'A doubly linked list, 12 \u2194 37 \u2194 99, fully linked. A new node holding 25 has been ' +
-  'allocated and is held by ins_pt \u2014 but its own prev and next are still null, so it is ' +
-  'not yet part of the list. We want it before 37 (temp_pt); the four assignments below ' +
+  'allocated and ins points to it \u2014 and its own prev and next are still null, so it is ' +
+  'not yet part of the list. We want it before 37 (temp); the four assignments below ' +
   'link it in.';
 
 const PITFALL =
@@ -1189,12 +1225,12 @@ function makeTrace() {
 
     // Step 0 (required): the initial state, before anything executes -- no line
     // highlighted. The list is already linked 12 <-> 37 <-> 99; node 25 is
-    // allocated and held by ins_pt (one arrow, ins_pt -> 25) with its own prev
+    // allocated and pointed to by ins (one arrow, ins -> 25) with its own prev
     // and next still null, so NO linking arrows join it to the list yet -- those
     // are exactly what the four assignments draw. The setup note lives here.
     yield snap(m, {
       line: null, tag: 'init', touched: null,
-      narrate: 'The list before insertion. Node 25 is allocated and held by ins_pt, and not yet linked in.',
+      narrate: 'The list before insertion. Node 25 is allocated and ins points to it, with its own prev and next still null.',
       note: SETUP,
     });
 
@@ -1216,18 +1252,17 @@ function makeTrace() {
 
 const SPEC = {
   title: 'Doubly linked insertion: why the order of four lines matters',
-  subtitle: 'ds A10 \u2014 line 4 dereferences the pointer line 2 set.',
+  subtitle: 'Inserting a node into a doubly linked list.',
   profile: 'standard',
   columns: 2,
   languages: ['pseudo', 'java', 'cpp'],
-  hideTags: ['init'],
 
   panels: [
     { type: 'code',   id: 'code', title: 'insert ins before temp',
       listings: LISTINGS, labels: { pseudo: 'pseudocode', java: 'Java', cpp: 'C++' } },
     { type: 'nodes',  id: 'list', title: 'The list' },
     { type: 'cells',  id: 'vars', title: 'Pointer variables' },
-    { type: 'cells',  id: 'walk', title: 'Walk forward from head_pt' },
+    { type: 'cells',  id: 'walk', title: 'Walk forward from head' },
   ],
 
   initialTrace: 'correct',

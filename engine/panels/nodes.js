@@ -8,8 +8,17 @@
  * Step data:
  *   { layout:   'tree' | 'linear' | 'graph',
  *     template: 'plain' | 'record',
- *     nodes: [{id, parent, label, meta[], state, fields[], slot, row}],
+ *     nodes: [{id, parent, label, meta[], state, active, fields[], slot, row}],
  *     edges: [{from, to, state}] }       // implied by `parent` for trees
+ *
+ * Two INDEPENDENT color channels (AUTHORING.md "Node color channels"):
+ *   - `state`  -> the OUTLINE (membership/traversal): green member, amber
+ *                 `unlinked`, dim `pending`, blue traversal frontier.
+ *   - `active` -> the FILL (activity): a truthy `active` flags "this node is
+ *                 being modified on THIS step" and paints a blue interior,
+ *                 orthogonal to `state`. An unlinked node can be amber-outline
+ *                 + blue-fill at once; a settled member, green-outline +
+ *                 blue-fill. Fill never changes the outline, and vice versa.
  *
  * Snapshots include not-yet-visited nodes as state 'pending', so layout is
  * computed over the whole structure and nodes never jump between steps.
@@ -56,7 +65,7 @@ export function render(body, data, ctx) {
 function plainNode(n, p) {
   const meta = (n.meta ?? []).map((m, k) =>
     `<text class="pac-node-meta" x="${p.x}" y="${p.y + 31 + k * 11}">${esc(m)}</text>`).join('');
-  return `<g class="pac-node" data-state="${n.state ?? 'pending'}" data-anchor="${n.id}">
+  return `<g class="pac-node" data-state="${n.state ?? 'pending'}" data-active="${!!n.active}" data-anchor="${n.id}">
     <rect class="pac-node-box" x="${p.x - NW / 2}" y="${p.y}" width="${NW}" height="${NH}" rx="4"/>
     <text class="pac-node-label" x="${p.x}" y="${p.y + 17}">${esc(n.label)}</text>
     ${meta}</g>`;
@@ -78,7 +87,7 @@ function recordNode(n, p) {
   }).join('');
   const meta = (n.meta ?? []).map((m, k) =>
     `<text class="pac-node-meta" x="${p.x}" y="${p.y + RH + 13 + k * 11}">${esc(m)}</text>`).join('');
-  return `<g class="pac-node" data-state="${n.state ?? 'exited'}" data-anchor="${n.id}">${cells}${meta}</g>`;
+  return `<g class="pac-node" data-state="${n.state ?? 'exited'}" data-active="${!!n.active}" data-anchor="${n.id}">${cells}${meta}</g>`;
 }
 
 /* ---- layout ---- */

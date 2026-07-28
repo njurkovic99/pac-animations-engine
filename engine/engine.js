@@ -247,10 +247,17 @@ export class Engine {
     }
     this.progress.textContent = `${Math.min(this.i + 1, this.steps.length)} / ${this.steps.length}`;
 
-    const m = this.metrics();
-    this.metricsEl.innerHTML = Object.entries(m)
-      .filter(([k]) => !this.spec.hideTags?.includes(k))
-      .map(([k, v]) => `${k} <b>${v}</b>`).join('');
+    // Metrics are HIDDEN BY DEFAULT (see AUTHORING.md "Metrics readout").
+    // The tag-derived counter is an internal mechanism; the raw tag name
+    // (`assign`) is engine jargon, not student-facing. An animation opts in
+    // via `spec.metrics`, a map from tag -> plain student-facing label. Only
+    // listed tags render, and always with the label, never the raw tag. No
+    // opt-in -> no readout (an insertion or single walk-through shows none).
+    const labels = this.spec.metrics ?? {};
+    const counts = this.metrics();
+    this.metricsEl.innerHTML = Object.entries(labels)
+      .filter(([tag]) => counts[tag] != null)
+      .map(([tag, label]) => `${label} <b>${counts[tag]}</b>`).join('');
 
     this.root.querySelector('[data-act="prev"]').disabled = this.i === 0;
     this.root.querySelector('[data-act="next"]').disabled = this.atEnd;
