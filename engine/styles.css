@@ -213,10 +213,13 @@ body {
 .pac-node[data-state="entering"] .pac-node-box { stroke: var(--accent); fill: var(--accent-soft); }
 .pac-node[data-state="active"]   .pac-node-box { stroke: var(--accent); fill: var(--accent-soft); }
 .pac-node[data-state="exited"]   .pac-node-box { stroke: var(--ok); }
-/* Allocated but not yet linked into the structure (e.g. a freshly malloc'd node
- * held by a pointer). Fully visible and warn-yellow -- not a faded ghost -- so
- * the student sees it is real; it turns green once it becomes part of the list. */
-.pac-node[data-state="allocated"] .pac-node-box { stroke: var(--warn); fill: rgba(224, 163, 58, 0.16); }
+/* Unlinked: allocated and held by a pointer but not yet a member of the
+ * structure (a doubly linked node whose neighbours don't yet point back). An
+ * amber OUTLINE only -- border, no background fill -- so it reads as clearly
+ * present yet visibly not settled, and distinct from the dimmed `pending`
+ * traversal state. It takes the normal outline once the insertion is complete.
+ * See AUTHORING.md "Node membership state". */
+.pac-node[data-state="unlinked"] .pac-node-box { stroke: var(--warn); fill: none; stroke-width: 1.5; }
 .pac-node-label { fill: var(--text); font-family: var(--mono); font-size: 12px; text-anchor: middle; }
 .pac-node-meta  { fill: var(--text-dim); font-family: var(--mono); font-size: 9.5px; text-anchor: middle; }
 .pac-node[data-state="pending"] .pac-node-label { fill: var(--text-dim); }

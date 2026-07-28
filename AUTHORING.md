@@ -103,9 +103,10 @@ hash buckets, matrices, memory blocks, variable tables, stack frames, vtables.
 
 **NODES** — `{layout: 'tree'|'linear'|'graph', template: 'plain'|'record',
 nodes: [{id, parent, label, meta[], state, slot, row}], edges?}`.
-States: `pending`, `entering`, `active`, `exited`. Snapshots include
+States: `pending`, `entering`, `active`, `exited`, `unlinked`. Snapshots include
 not-yet-visited nodes as `pending`, so layout is computed over the whole
-structure and nodes never jump.
+structure and nodes never jump. `unlinked` marks an allocated-but-not-yet-a-member
+node (see "Node membership state").
 
 `template: 'record'` draws `[ prev | value | next ]` — the shape of
 `lists.9.gif` — and **publishes an anchor per field** (`list.n25.prev`,
@@ -295,6 +296,36 @@ version would later attach.
 Use a challenge wherever the animation has an obvious "what if you did it wrong /
 differently" — which is most of the misconception-targeted ones. Skip it where
 nothing interesting branches.
+
+---
+
+## Node membership state
+
+A NODES `state` is not only about traversal progress. Two "not settled yet"
+states look different and mean different things — do not conflate them:
+
+- **`pending`** — a node that is *part of the structure* but has not been
+  **visited yet** by the current walk: a not-yet-recursed call in a tree, an
+  unreached node in a list traversal. Rendered **dimmed** (low opacity). The
+  structure owns it; the walk simply hasn't reached it.
+- **`unlinked`** — a node that is *allocated and held by a pointer* but is **not
+  yet a member** of the structure: a freshly created list node whose neighbours
+  do not yet point back at it. Rendered as an **amber outline — border only, no
+  background fill** — so it reads as clearly present yet visibly not settled. It
+  is HEALTHY (never a danger triangle); it just hasn't been stitched in.
+
+An `unlinked` node takes the **normal outline** the moment it becomes a full
+member. For a doubly linked insertion that is when the insertion is **complete** —
+all four links set and *both* neighbours pointing back — not merely when the node
+first becomes reachable. (After `ins.prev.next = ins` the node is reachable going
+forward, but `temp.prev` still points past it, so it is not yet a member.)
+
+Concretely, in `lists-doubly-insert-order` node 25 is `unlinked` (amber) on the
+initial state and through the first three assignments, and takes the normal
+outline on the fourth and final assignment, `temp.prev = ins`, which sets the
+last link. Do **not** use `unlinked` for a not-yet-visited traversal node (that
+is `pending`), and do not use `pending`'s dimming for an allocated-but-unlinked
+node — it is not faded; it is real and held.
 
 ---
 
