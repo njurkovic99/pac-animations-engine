@@ -142,16 +142,21 @@ function makeTrace() {
       if (node.n <= 1) {
         yield snap(id, L.base, 'base', `Base case: fib(${node.n}) = ${node.n}. No further calls.`);
       } else {
+        // The common-mistake warning is a NOTE on the real n-2 call step, not a
+        // phantom step of its own (AUTHORING.md "Steps vs. notes"). It appears
+        // once, on the first branching call, then collapses. This is a logic
+        // error, not a memory-integrity violation, so it carries no red ⚠.
+        let note;
         if (!trapShown) {
           trapShown = true;
-          yield snap(id, L.callA, null,
-            `A common error here is fib(n - 2, level + 1). But n + level must stay constant at ${N}: `
-            + `if n drops by 2, level must rise by 2 — so it has to be level + 2. `
-            + `Watch the "n + level" readout stay ${N} as the correct calls proceed.`);
+          note = `A common error here is fib(n - 2, level + 1). But n + level must stay constant at ${N}: `
+               + `if n drops by 2, level must rise by 2 — so it has to be level + 2. `
+               + `Watch the "n + level" readout stay ${N} as the correct calls proceed.`;
         }
 
         yield snap(id, L.callA, 'call',
-          `The n - 2 branch is evaluated first: fib(${node.n - 2}, ${node.level + dl2}).`);
+          `The n - 2 branch is evaluated first: fib(${node.n - 2}, ${node.level + dl2}).`,
+          { note });
         yield* visit(node.kids[1]);   // n-2, drawn right, evaluated first
 
         yield snap(id, L.callB, 'call',
@@ -161,9 +166,27 @@ function makeTrace() {
 
       out.push({ text: `Exiting level ${node.level}`, indent: node.level, dir: 'out' });
       state.set(id, 'exited');
+      // The post-watch challenge is a note on the final step -- the root's exit.
+      const exitNote = id === 'c0'
+        ? 'What if "level" were the recursion depth instead? fib(2) and fib(3) both sit at '
+          + 'depth 1 here — check the tree: are they at the same level? Following depth in place '
+          + 'of level is exactly the bug the n + level invariant guards against.'
+        : undefined;
       yield snap(id, L.exit, 'exit',
-        `fib(${node.n}) returns. Its "Exiting" line sits at the same indent as its "Entering" line.`);
+        `fib(${node.n}) returns. Its "Exiting" line sits at the same indent as its "Entering" line.`,
+        { note: exitNote });
     }
+
+    // Step 0 (required): the initial state, before anything executes -- no line
+    // highlighted. The whole call tree is laid out (every node pending), the
+    // program output is empty, and the invariant panel shows the starting call
+    // fib(4, 0). The setup note lives here.
+    yield snap('c0', null, 'init',
+      'Before the first call. The call tree is laid out but nothing has run yet; we are about to evaluate fib(4, 0).',
+      { note:
+        'We trace fib(4, 0). The invariant is n + level = N = 4, holding at every node — watch the ' +
+        '"n + level" readout stay 4. Crucially, level is NOT the recursion depth; both are shown on ' +
+        'every node so you can see them diverge.' });
 
     yield* visit('c0');
   };
@@ -175,7 +198,7 @@ export default {
   profile: 'standard',
   columns: 2,
   languages: ['pseudo', 'java', 'cpp'],
-  hideTags: ['call'],
+  hideTags: ['call', 'init'],
 
   panels: [
     { type: 'code',   id: 'code', title: 'fib(n, level)',

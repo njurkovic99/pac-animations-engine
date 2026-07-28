@@ -103,9 +103,10 @@ hash buckets, matrices, memory blocks, variable tables, stack frames, vtables.
 
 **NODES** — `{layout: 'tree'|'linear'|'graph', template: 'plain'|'record',
 nodes: [{id, parent, label, meta[], state, slot, row}], edges?}`.
-States: `pending`, `entering`, `active`, `exited`. Snapshots include
+States: `pending`, `entering`, `active`, `exited`, `unlinked`. Snapshots include
 not-yet-visited nodes as `pending`, so layout is computed over the whole
-structure and nodes never jump.
+structure and nodes never jump. `unlinked` marks an allocated-but-not-yet-a-member
+node (see "Node membership state").
 
 `template: 'record'` draws `[ prev | value | next ]` — the shape of
 `lists.9.gif` — and **publishes an anchor per field** (`list.n25.prev`,
@@ -298,6 +299,36 @@ nothing interesting branches.
 
 ---
 
+## Node membership state
+
+A NODES `state` is not only about traversal progress. Two "not settled yet"
+states look different and mean different things — do not conflate them:
+
+- **`pending`** — a node that is *part of the structure* but has not been
+  **visited yet** by the current walk: a not-yet-recursed call in a tree, an
+  unreached node in a list traversal. Rendered **dimmed** (low opacity). The
+  structure owns it; the walk simply hasn't reached it.
+- **`unlinked`** — a node that is *allocated and held by a pointer* but is **not
+  yet a member** of the structure: a freshly created list node whose neighbours
+  do not yet point back at it. Rendered as an **amber outline — border only, no
+  background fill** — so it reads as clearly present yet visibly not settled. It
+  is HEALTHY (never a danger triangle); it just hasn't been stitched in.
+
+An `unlinked` node takes the **normal outline** the moment it becomes a full
+member. For a doubly linked insertion that is when the insertion is **complete** —
+all four links set and *both* neighbours pointing back — not merely when the node
+first becomes reachable. (After `ins.prev.next = ins` the node is reachable going
+forward, but `temp.prev` still points past it, so it is not yet a member.)
+
+Concretely, in `lists-doubly-insert-order` node 25 is `unlinked` (amber) on the
+initial state and through the first three assignments, and takes the normal
+outline on the fourth and final assignment, `temp.prev = ins`, which sets the
+last link. Do **not** use `unlinked` for a not-yet-visited traversal node (that
+is `pending`), and do not use `pending`'s dimming for an allocated-but-unlinked
+node — it is not faded; it is real and held.
+
+---
+
 ## Memory-danger marker (red warning triangle)
 
 A **red warning triangle (⚠)** marks any narration describing a **memory-integrity
@@ -368,20 +399,36 @@ just that "something is red."
 
 ## Steps vs. notes — the core authoring separation
 
-Two different things, kept strictly apart:
+Two different things, kept strictly apart — plus one required exception (step 0):
 
-- **A step is an execution.** Every Next-click advances one real executing line,
-  with that line highlighted. Steps are the algorithm running. There are NO
-  phantom steps whose only purpose is to display commentary — if a "step" has no
-  executing line, it should not be a step.
+- **Step 0 is the initial state, and it is REQUIRED.** Every animation opens on a
+  step where **nothing has executed yet**: the starting configuration, before line
+  1 runs. No code line is highlighted (nothing has run). Show the true starting
+  state, which includes pointers that *already* hold things — e.g. a node about to
+  be inserted is allocated and **held by its owning pointer** (`ins_pt` → the new
+  node), with the node's OWN links still null and no linking arrows into the list
+  yet. The owning pointer is part of the initial state (the node is allocated, not
+  floating in the void); the links the algorithm will create are NOT yet drawn.
+  This is the "before" picture the student needs in order to see what later steps
+  change. It is NOT a phantom step; it is the debugger's "stopped before the first
+  line" state. Do not fold it into the first executing step — an animation must
+  never open mid-execution.
+- **A step is an execution.** After step 0, every Next-click advances one real
+  executing line, with that line highlighted. Steps are the algorithm running.
+- **No mid-sequence phantom steps.** The banned thing is a step *between*
+  executions whose only job is to show commentary (e.g. a "here's a common
+  mistake" screen sitting between line 2 and line 3, executing neither). A step
+  with no highlighted line is legitimate ONLY as step 0 (nothing has run yet);
+  anywhere in the middle, a no-execution step is wrong — that content is a note.
 - **A note is commentary.** Setup framing, a common-mistake warning, the
   post-watch challenge, a memory-danger observation — none of these are execution,
   so none of them are steps. They live in the **teaching-note box**, a region near
-  the narration bar, separate from the step flow.
+  the narration bar, separate from the step flow. (The setup note belongs on
+  step 0.)
 
-This separation is what makes "Next Step" mean an actual next step. It also gives
-all non-execution commentary one consistent home instead of being crammed into
-fake steps.
+This separation is what makes "Next Step" mean an actual next step, while still
+giving the student the initial "before" state and one consistent home for all
+non-execution commentary.
 
 ### How notes behave
 
@@ -425,6 +472,54 @@ The note box shows that text only while this step is current, then collapses.
 
 If commentary is about the *statement executing*, it's narration. If it's about
 the *algorithm, a pitfall, or a what-if*, it's a note.
+
+### Narration style — precise CS language, not casual paraphrase
+
+**General rule: prefer the precise technical formulation over the comfortable
+informal one, whenever a precise one exists.** These animations teach mechanism;
+a casual verb that reads smoothly but blurs *what actually happens* teaches the
+wrong mental model. When choosing a verb, ask "does this name the exact operation,
+or just gesture at it?" — and pick the one that names it.
+
+- "points to" / "is the same as" / "is assigned" / "→", not "faces", "grabs",
+  "hooks up", "takes", "stitched"
+- "is copied" / "references the same object", not "becomes", "turns into", where a
+  copy or alias is what actually occurs
+- "is unreachable" / "no pointer refers to it", not "is lost" (which wrongly
+  implies an error)
+- name concrete on-screen values ("which is 12") rather than abstractions
+- present tense, one idea per line
+
+Informal phrasing is acceptable ONLY when no precise formulation is being
+sacrificed — e.g. "the loop runs three times" is fine; it is not blurring a
+mechanism. The rule is not "sound formal"; it is "never trade precision for
+readability." When both are available, precise wins; when a precise term would be
+needlessly obscure and a plain one is exact, plain wins.
+
+#### Applied to pointers
+
+Narrate pointer assignment as **aiming / following**, not with vague transfer
+verbs. `p = q` is "p now points where q points," not "p takes q" — "takes" is
+ambiguous (copies? moves? removes?) and hides the mechanism the animation exists
+to teach. Keep one consistent physical model across every animation: pointers
+*point*, *aim at*, and are *followed*.
+
+- Assignment: "ins.prev now points where temp.prev points — to 12."
+  (NOT "ins.prev takes temp.prev.")
+- Dereference: "Follow ins.prev to 12, then set its next to ins."
+  (Read `a.b.c` as a motion: follow a to its target, then act on that target.)
+- Retargeting: "temp.prev now points to ins" — and, on a closing step, name the
+  completed invariant tightly: "temp.prev now points to ins. 25 ↔ 37 is now linked
+  in both directions." Prefer precise pointer state ("points to", "is the same as",
+  "→", "↔") over metaphor ("faces", "stitched", "hooks up").
+
+Where pointer aliasing matters pedagogically (two names for one object), say so:
+"now both ins.prev and temp.prev point to 12." Consistency of metaphor lets the
+student build one mental model instead of switching between "assignment" and
+"aiming."
+
+Otherwise: present tense, one idea per line, name concrete values ("which is 12")
+rather than abstractions where a real value is on screen.
 
 ---
 

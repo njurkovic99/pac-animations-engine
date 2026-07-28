@@ -142,12 +142,14 @@ export class Engine {
         <span class="pac-metrics"></span>
         <span class="pac-progress"></span>
       </div>
-      <div class="pac-narrate"></div>`;
+      <div class="pac-narrate"></div>
+      <div class="pac-note pac-note-empty" role="note"></div>`;
 
     this.root.querySelector('.pac-title').textContent = s.title ?? '';
     this.root.querySelector('.pac-sub').textContent = s.subtitle ?? '';
     this.stage    = this.root.querySelector('.pac-stage');
     this.narrate  = this.root.querySelector('.pac-narrate');
+    this.noteBox  = this.root.querySelector('.pac-note');
     this.metricsEl= this.root.querySelector('.pac-metrics');
     this.progress = this.root.querySelector('.pac-progress');
 
@@ -210,7 +212,9 @@ export class Engine {
       // every language variant. Thread it in so the highlight actually moves.
       // Supports a plain number or a per-language {pseudo, java, cpp} object;
       // a null/absent line means "highlight nothing" (intro, note, final).
-      if (p.spec.type === 'code') data = { ...data, line: step.line };
+      // `dangerLine` rides alongside: when set, the highlighted line is tinted
+      // red instead of blue -- the code itself is the memory-integrity culprit.
+      if (p.spec.type === 'code') data = { ...data, line: step.line, dangerLine: step.dangerLine };
       p.ctx.anchors.clear();
       p.renderer.render(p.el.querySelector('.pac-panel-body'),
                         data, p.ctx, { lang: this.lang, step });
@@ -218,14 +222,28 @@ export class Engine {
 
     this.overlay.draw(step.arrows ?? [], this.panels);
 
-    this.narrate.textContent = step.narrate ?? '';
-    // Pulse the narration only when the step index actually changes, so a new
-    // explanation catches the eye but pausing/stopping in place does not reflash.
+    // Narration and notes are both SEGMENTED content: a plain string, or an
+    // array of segments where {danger:true, text} renders a leading red warning
+    // triangle in --error. renderSegments handles both and returns whether any
+    // content was written.
+    renderSegments(this.narrate, step.narrate);
+
+    // The teaching-note box holds non-execution commentary (setup, a common-
+    // mistake aside, a post-watch challenge). A note attaches to a step and
+    // shows only while that step is current; on steps without one the box
+    // collapses to zero height (pac-note-empty -> display:none) and the layout
+    // reflows. See AUTHORING.md "Steps vs. notes".
+    const hasNote = renderSegments(this.noteBox, step.note);
+    this.noteBox.classList.toggle('pac-note-empty', !hasNote);
+
+    // Pulse narration (and a present note) only when the step index actually
+    // changes, so a new explanation catches the eye but pausing/stopping in
+    // place does not reflash. A note appearing should feel like the animation
+    // saying "pay attention to this."
     if (this.i !== this._flashedAt) {
       this._flashedAt = this.i;
-      this.narrate.classList.remove('pac-narrate-flash');
-      void this.narrate.offsetWidth;   // force reflow so the animation restarts
-      this.narrate.classList.add('pac-narrate-flash');
+      flash(this.narrate, 'pac-narrate-flash');
+      if (hasNote) flash(this.noteBox, 'pac-note-flash');
     }
     this.progress.textContent = `${Math.min(this.i + 1, this.steps.length)} / ${this.steps.length}`;
 
@@ -245,6 +263,50 @@ function take(gen, max) {
   const out = [];
   for (const v of gen) { out.push(v); if (out.length >= max) break; }
   return out;
+}
+
+/** Restart a one-shot CSS pulse: drop the class, force reflow, re-add. */
+function flash(el, cls) {
+  el.classList.remove(cls);
+  void el.offsetWidth;               // force reflow so the animation restarts
+  el.classList.add(cls);
+}
+
+/* The red warning triangle for a memory-integrity violation. Project-wide,
+ * cross-course convention -- red ⚠ always means "memory just went wrong". */
+const DANGER_MARK = '⚠';
+
+/**
+ * Render segmented content (narration or a note) into `el`.
+ *
+ * `content` is either a plain string (the common case -- nearly every step),
+ * or an array of segments. A segment is a string, or an object; an object with
+ * `danger: true` renders a leading red ⚠ and the danger-red colour (--error),
+ * naming a memory-integrity violation. Returns true iff anything was written,
+ * so the caller can collapse an empty note box.
+ */
+function renderSegments(el, content) {
+  el.textContent = '';
+  if (content == null || content === '') return false;
+  const segs = Array.isArray(content) ? content : [content];
+  let wrote = false;
+  for (const seg of segs) {
+    if (seg == null || seg === '') continue;
+    if (typeof seg === 'string') {
+      el.appendChild(document.createTextNode(seg));
+      wrote = true;
+    } else if (seg.danger) {
+      const span = document.createElement('span');
+      span.className = 'pac-danger';
+      span.textContent = `${DANGER_MARK} ${seg.text ?? ''}`;
+      el.appendChild(span);
+      wrote = true;
+    } else if (typeof seg.text === 'string') {
+      el.appendChild(document.createTextNode(seg.text));
+      wrote = true;
+    }
+  }
+  return wrote;
 }
 
 /** Mount an animation from its content module. */

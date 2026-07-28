@@ -62,6 +62,18 @@ const ORDER = ['A', 'B', 'C', 'D'];
 
 const label = (m, id) => (id == null ? 'null' : m[id].value);
 
+/** A node is fully linked into the list only when the insertion is COMPLETE:
+ *  it has both a prev and a next, AND both neighbours point back at it. Until
+ *  then the inserted node is 'unlinked' (see AUTHORING.md "Node membership
+ *  state"). This is stricter than mere forward reachability -- after
+ *  ins.prev.next = ins the node is reachable, but temp.prev still points past
+ *  it, so it is not yet a full member. */
+function linkedIn(m, id) {
+  const n = m[id];
+  return n.prev != null && n.next != null &&
+         m[n.prev].next === id && m[n.next].prev === id;
+}
+
 function fresh() {
   return {
     ins: 'n25', temp: 'n37', head: HEAD,
@@ -103,11 +115,10 @@ function arrows(m) {
   return out;
 }
 
-function snap(m, { line, tag, narrate, touched, extra = {} }) {
+function snap(m, { line, tag, narrate, note, touched }) {
   const reach = walk(m);
-  const orphan = !reach.includes(25);
   return {
-    tag, narrate, line,
+    tag, narrate, line, note,
     arrows: arrows(m),
     panels: {
       list: {
@@ -116,7 +127,16 @@ function snap(m, { line, tag, narrate, touched, extra = {} }) {
           id, label: String(m[id].value),
           prev: m[id].prev, next: m[id].next,
           slot: m[id].slot, row: m[id].row,
-          state: id === touched ? 'entering' : (m[id].prev === id || m[id].next === id ? 'pending' : 'exited'),
+          // State is driven by list MEMBERSHIP, not by dimming. The node being
+          // inserted (m.ins) is 'unlinked' -- an amber OUTLINE, not a faded
+          // ghost -- until the insertion is COMPLETE: all four links set and
+          // both neighbours pointing back (see linkedIn). It is HEALTHY, merely
+          // not yet stitched in, and is never marked as danger (AUTHORING.md
+          // "Node membership state" / "Memory-danger marker"). On the final
+          // assignment it takes the normal outline: 'exited' (settled), or
+          // 'entering' (blue) on the step a settled node is rewired.
+          state: (id === m.ins && !linkedIn(m, id)) ? 'unlinked'
+                 : (id === touched ? 'entering' : 'exited'),
         })),
         edges: [],
       },
@@ -130,43 +150,63 @@ function snap(m, { line, tag, narrate, touched, extra = {} }) {
       },
       walk: {
         render: 'box',
-        cells: reach.map(v => ({ value: v, role: v === 25 ? 'ok' : undefined }))
-          .concat(orphan ? [{ value: '25 lost', role: 'error' }] : []),
+        cells: reach.map(v => ({ value: v, role: v === 25 ? 'ok' : undefined })),
       },
     },
-    ...extra,
   };
 }
+
+/* Three teaching notes, kept out of the step flow (AUTHORING.md "Steps vs.
+ * notes"): a setup note on the initial-state step, the ordering-pitfall warning
+ * on the assignment it concerns, and the post-watch challenge on the last step. */
+const SETUP =
+  'A doubly linked list, 12 \u2194 37 \u2194 99, fully linked. A new node holding 25 has been ' +
+  'allocated and is held by ins_pt \u2014 but its own prev and next are still null, so it is ' +
+  'not yet part of the list. We want it before 37 (temp_pt); the four assignments below ' +
+  'link it in.';
+
+const PITFALL =
+  'A common mistake is to run temp.prev = ins first: then ins.prev = temp.prev copies a ' +
+  'pointer that already points back at ins, so ins.prev becomes ins itself, and line 4 ' +
+  '(ins.prev.next = ins) dereferences a pointer that was never set. Setting ins.prev and ' +
+  'ins.next first, as here, avoids that.';
+
+const CHALLENGE =
+  'What if line 4 (ins.prev.next = ins) had run before line 2 (ins.prev = temp.prev)? Trace it ' +
+  'yourself: which node would ins.prev still point at, and what would line 4 then write through?';
+
+/* A note per assignment, keyed by op letter. Only the ordering-critical first
+ * assignment and the final one carry commentary. */
+const NOTES = { A: PITFALL, D: CHALLENGE };
 
 function makeTrace() {
   return function* () {
     const m = fresh();
 
+    // Step 0 (required): the initial state, before anything executes -- no line
+    // highlighted. The list is already linked 12 <-> 37 <-> 99; node 25 is
+    // allocated and held by ins_pt (one arrow, ins_pt -> 25) with its own prev
+    // and next still null, so NO linking arrows join it to the list yet -- those
+    // are exactly what the four assignments draw. The setup note lives here.
     yield snap(m, {
-      tag: 'setup', line: 1,
-      narrate: 'A doubly linked list: 12 \u2194 37 \u2194 99. A new node holding 25 has been allocated but is not yet part of the list. We want it before 37.',
+      line: null, tag: 'init', touched: null,
+      narrate: 'The list before insertion. Node 25 is allocated and held by ins_pt, but not yet linked in.',
+      note: SETUP,
     });
 
-    yield snap(m, {
-      line: null,
-      narrate: 'A common error is running temp.prev = ins first. Then ins.prev = temp.prev copies a pointer that already points back at ins, so ins.prev becomes ins itself \u2014 and line 4, ins.prev.next = ins, dereferences a pointer that was never set to anything useful. The order below sets ins.prev and ins.next before any line reads them.',
-    });
-
+    // Every remaining step is a real execution: the four assignment lines, each
+    // highlighted. The pitfall warning and the post-watch challenge are notes.
     for (const key of ORDER) {
       const op = OPS[key];
       const say = op.say(m);
       const touched = op.apply(m);
-      yield snap(m, { line: op.line, tag: 'assign', narrate: `${op.name} \u2014 ${say}`, touched });
+      yield snap(m, {
+        line: op.line, tag: 'assign',
+        narrate: `${op.name} \u2014 ${say}`,
+        note: NOTES[key],
+        touched,
+      });
     }
-
-    const reach = walk(m);
-    const ok = reach.includes(25) && !reach.includes('\u21bb');
-    yield snap(m, {
-      tag: ok ? 'done' : 'corrupt', line: null, touched: null,
-      narrate: ok
-        ? 'Walking forward from head_pt: 12, 25, 37, 99. Every prev and next agree. The insertion is sound.'
-        : 'Walking forward from head_pt never reaches 25. Node 25 points at itself in both directions, and nothing points at it. It is unreachable and unfreeable \u2014 simply "losing it" is not an option.',
-    });
   };
 }
 
@@ -176,7 +216,7 @@ export default {
   profile: 'standard',
   columns: 2,
   languages: ['pseudo', 'java', 'cpp'],
-  hideTags: ['setup'],
+  hideTags: ['init'],
 
   panels: [
     { type: 'code',   id: 'code', title: 'insert ins before temp',
