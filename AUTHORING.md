@@ -253,3 +253,216 @@ the listings differ in length. Steps with no executing line — an intro, a
 `predict` gate, a final summary — set `line: null` (or omit it), and no line is
 highlighted. The engine passes top-level `step.line` to the code panel
 automatically; authors never nest it under a panel id.
+
+---
+
+## Step granularity — one meaningful change per step
+
+Do not bundle several state changes into one step. The student clicks Next to see
+*one* thing happen. In particular:
+
+- **One pointer rewire per step.** When an arrow moves — a `next`/`prev`
+  reassignment, a `head` update, a link being broken — that is its own step, and
+  the narration dwells on it. Pointer changes are the pedagogically dense moments
+  (this is exactly where the doubly-linked insertion trap lives), so they get
+  room to breathe. The four-line insertion in `lists-doubly-insert-order` is the
+  model: one assignment, one step, one arrow moving.
+- Grouping is fine only for genuinely simultaneous, uninteresting updates (e.g.
+  initializing several counters to 0 at once). Anything a student could get wrong
+  gets its own step.
+- Prefer more small steps over fewer dense ones. A WATCH animation that takes 20
+  gentle clicks beats one that takes 8 crowded ones.
+
+## The post-watch challenge (a note on the final step)
+
+An animation may end with a **challenge**: a "what if" question posed to the
+student who wants to go deeper, with no answer and no interaction. It is a
+**teaching note** (see below) attached to the final step — NOT a step of its own,
+and NOT a `predict` gate. The student who ignores it has still watched the whole
+animation; the student who engages gets a reward.
+
+Phrase it as a "what if" tied to what they just watched:
+- (doubly-linked insertion) "What would have happened if line 4 ran before
+  line 2?"
+- (queue) "What if we tracked `rear` instead of `count` — how would you detect a
+  full queue then?"
+- (linked list) "What breaks if we don't keep a `tail` pointer?"
+
+It never waits for or checks an answer. It is the WATCH-safe way to capture some
+of the value interactive questions would give, and it is where the eventual THINK
+version would later attach.
+
+Use a challenge wherever the animation has an obvious "what if you did it wrong /
+differently" — which is most of the misconception-targeted ones. Skip it where
+nothing interesting branches.
+
+---
+
+## Memory-danger marker (red warning triangle)
+
+A **red warning triangle (⚠)** marks any narration describing a **memory-integrity
+violation**. This is a project-wide, cross-course convention — it appears in `ds`,
+in both C++ courses, and anywhere memory is modeled. Its purpose is that students
+learn to recognize a *category* of failure on sight: red ⚠ always means "memory
+just went wrong," whether it is a dangling pointer in aCpp or a corrupted list in
+ds.
+
+### What qualifies (and what does NOT)
+
+The triangle means specifically: **the program's memory is now in an invalid or
+unrecoverable state.** Three distinct diagnoses, all red, but do not conflate them
+— naming the right one is part of the lesson:
+
+- **Leak / unreachable** — a node or object that NO pointer reaches anymore (e.g.
+  an insertion that overwrites `head` before saving the old first node). The
+  object still occupies memory but can never be used or freed.
+- **Structural corruption** — links are internally inconsistent: a node points to
+  itself, or one direction of a bidirectional link was updated and its partner
+  was not. The object is still reachable, but the structure is broken.
+- **Bad access** — dangling pointer (points at freed / out-of-scope memory), write
+  through an uninitialized or null pointer, use-after-free, double-free,
+  out-of-bounds write.
+
+Do NOT mark (these are bugs, but not memory corruption — marking them dilutes the
+signal): logic errors, off-by-one that reads the wrong value, integer-division
+truncation, wrong output, a healthy pending node held by a pointer.
+
+**Important false-alarm to avoid:** a freshly allocated node held by a pointer and
+waiting to be linked in is NOT in danger — it is healthy. In
+`lists-doubly-insert-order` (correct order), node 25 is held by `ins_pt`
+throughout and is inserted safely; it is never "lost." That animation's correct
+WATCH trace has **no** danger moment and gets **no** triangle. (The corruption
+only arises in the wrong insertion order — self-referential pointers, un-updated
+neighbor — which belongs to the deferred THINK/buggy material, not the WATCH
+build.)
+
+### How to author it
+
+Narration is normally a plain string. To mark danger, write narration as an array
+of segments; any segment can carry `danger: true`:
+
+```js
+narrate: [
+  "curr advances past the target node.",
+  { danger: true, text: "Nothing points to that node now — it is leaked." }
+]
+```
+
+The engine renders a danger segment with a leading red ⚠ and the danger-red
+color (`--error`). Plain-string narration is unchanged and is what nearly every
+step uses; reach for the segmented form only when a line describes a memory
+violation.
+
+Optionally, when the **code line itself** is the culprit (rare — usually the code
+is valid C++ and only the runtime consequence is fatal), set `dangerLine: true`
+on the step to tint the highlighted code line red instead of the normal blue.
+
+### Diagnosis, not just alarm
+
+Where practical, the danger narration should name *which* violation it is —
+"leaked and unreachable", "the list now points to itself", "dangling: p refers to
+freed memory" — so students learn to distinguish the three diagnoses above, not
+just that "something is red."
+
+---
+
+## Steps vs. notes — the core authoring separation
+
+Two different things, kept strictly apart:
+
+- **A step is an execution.** Every Next-click advances one real executing line,
+  with that line highlighted. Steps are the algorithm running. There are NO
+  phantom steps whose only purpose is to display commentary — if a "step" has no
+  executing line, it should not be a step.
+- **A note is commentary.** Setup framing, a common-mistake warning, the
+  post-watch challenge, a memory-danger observation — none of these are execution,
+  so none of them are steps. They live in the **teaching-note box**, a region near
+  the narration bar, separate from the step flow.
+
+This separation is what makes "Next Step" mean an actual next step. It also gives
+all non-execution commentary one consistent home instead of being crammed into
+fake steps.
+
+### How notes behave
+
+- A note **attaches to a specific step**. When the student reaches that step, the
+  note appears; when they leave it, the note disappears. Notes are **transient,
+  not persistent** — synchronized to the moment they're relevant, then gone.
+- On steps with no note, the note box is **empty and collapses** (takes no space;
+  the layout reflows). A note *appearing* is meant to feel like the animation
+  saying "pay attention to this."
+- An animation may have **several** notes across its run — e.g. a setup note on
+  step 1, a warning note on the tricky line, a challenge note on the final step.
+  Each shows only on its own step.
+
+### Authoring a note
+
+Attach a note to a step via a `note` field on that step. Like narration, a note
+may be a plain string or an array of segments so it can carry a memory-danger
+segment (`{danger:true, text}` → red ⚠; see "Memory-danger marker"):
+
+```js
+// step where ins.prev = temp.prev executes; carries the ordering warning
+yield {
+  line: 2, tag: 'assign',
+  narrate: "ins.prev = temp.prev — ins.prev takes temp.prev, which is 12.",
+  note: "A common mistake is running temp.prev = ins first. Then ins.prev = " +
+        "temp.prev copies a pointer that already points back at ins, so ins.prev " +
+        "becomes ins itself, and line 4 dereferences a pointer that was never set. " +
+        "Setting ins.prev and ins.next first (as here) avoids this.",
+  panels: { ... }
+};
+```
+
+The note box shows that text only while this step is current, then collapses.
+
+### What goes in a note vs. narration
+
+- **Narration** (the bar): describes what THIS line does, right now. One or two
+  sentences, present tense, about the executing statement.
+- **Note** (the box): framing or meta-commentary that isn't the line itself —
+  the setup, a "common mistake" aside, a "what if" challenge, a danger diagnosis.
+
+If commentary is about the *statement executing*, it's narration. If it's about
+the *algorithm, a pitfall, or a what-if*, it's a note.
+
+---
+
+## Loop controls — "step out" and "run to end" (deferred until first loop)
+
+Some animations have loops, and stepping through all iterations one click at a
+time is tedious. Two debugger-style jump controls help, and both reuse the
+existing snapshot mechanism (every step is already a stored snapshot, so a "jump"
+is just moving the step index to a marked target — the same primitive that makes
+Back free).
+
+- **Step out** — jump forward to the step where the current loop exits. A step
+  inside a loop carries `exitTarget: <step index or label>`; when present, the
+  engine shows a **"Step out ⤴"** button that advances the index straight to that
+  step. The intervening iterations are skipped (the student can Back into them if
+  curious).
+- **Run to end** — jump to the final step. Trivial variant of the same primitive;
+  offer it for students who have grasped the idea and don't want to keep clicking.
+
+Both are optional per animation and only appear when applicable (Step out only on
+steps that declare an `exitTarget`).
+
+### Explicitly NOT built: "go to clicked line"
+
+Do not implement click-a-line-to-jump-there. These animations are pre-computed
+traces, not a live program with an execution engine: a source line may be visited
+zero times, once, or many times (a loop body), so "go to line 14" has no
+well-defined target — which of the visits? Defining it as "the next time this line
+is reached" is buildable but adds real complexity and a clickable-code UI to
+support a gesture that is ambiguous exactly inside loops, where beginners most
+need clarity. It also works against the purpose: these are guided, can't-get-lost
+walkthroughs for students who don't yet understand, not power-tools for students
+who already do. Back/Next already let a student re-reach any line with full
+context. Skip it.
+
+### Timing
+
+This is **deferred** — build the engine support when the first loop-containing
+animation is authored (e.g. the bCpp/bJava loop modules, or stacks-postfix-eval),
+not before. None of the early Phase-1 animations (list ops, recursion traces) need
+it. The convention is recorded here so it is consistent when it does get built.

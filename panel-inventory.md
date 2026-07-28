@@ -69,6 +69,16 @@ mistake the current 25 files make.
   from A2 on is prompt-driven, and no existing file models input at all.
 - A `fail` state for `cin`, which silently poisons every later read.
 - **Serves:** console, file contents, event dispatch log.
+- **Narration** (the prose bar under the stage, not STREAM itself) supports inline
+  **danger segments**: a red ⚠ + `--error` color on any narration line describing a
+  memory-integrity violation (leak, structural corruption, dangling/uninit/UAF/OOB
+  write). Project-wide, cross-course. See AUTHORING.md "Memory-danger marker".
+- **Teaching-note box** — a region near the narration, separate from the step
+  flow, holding non-execution commentary (setup, common-mistake warnings,
+  post-watch challenge, danger notes). A note attaches to a step, appears when
+  that step is reached, and collapses when it isn't the current step. Steps stay
+  purely executional; notes never advance the step counter. See AUTHORING.md
+  "Steps vs. notes".
 
 ### CHART
 - Series over n. Points, curves, a marker for current n.
