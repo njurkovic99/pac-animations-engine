@@ -105,8 +105,8 @@ hash buckets, matrices, memory blocks, variable tables, stack frames, vtables.
 nodes: [{id, parent, label, meta[], state, slot, row}], edges?}`.
 States: `pending`, `entering`, `active`, `exited`, `unlinked`. Snapshots include
 not-yet-visited nodes as `pending`, so layout is computed over the whole
-structure and nodes never jump. `unlinked` marks an allocated-but-not-yet-a-member
-node (see "Node membership state").
+structure and nodes never jump. `unlinked` is a **membership** state (see
+"Node membership state" below), orthogonal to the traversal states.
 
 `template: 'record'` draws `[ prev | value | next ]` — the shape of
 `lists.9.gif` — and **publishes an anchor per field** (`list.n25.prev`,
@@ -299,36 +299,6 @@ nothing interesting branches.
 
 ---
 
-## Node membership state
-
-A NODES `state` is not only about traversal progress. Two "not settled yet"
-states look different and mean different things — do not conflate them:
-
-- **`pending`** — a node that is *part of the structure* but has not been
-  **visited yet** by the current walk: a not-yet-recursed call in a tree, an
-  unreached node in a list traversal. Rendered **dimmed** (low opacity). The
-  structure owns it; the walk simply hasn't reached it.
-- **`unlinked`** — a node that is *allocated and held by a pointer* but is **not
-  yet a member** of the structure: a freshly created list node whose neighbours
-  do not yet point back at it. Rendered as an **amber outline — border only, no
-  background fill** — so it reads as clearly present yet visibly not settled. It
-  is HEALTHY (never a danger triangle); it just hasn't been stitched in.
-
-An `unlinked` node takes the **normal outline** the moment it becomes a full
-member. For a doubly linked insertion that is when the insertion is **complete** —
-all four links set and *both* neighbours pointing back — not merely when the node
-first becomes reachable. (After `ins.prev.next = ins` the node is reachable going
-forward, but `temp.prev` still points past it, so it is not yet a member.)
-
-Concretely, in `lists-doubly-insert-order` node 25 is `unlinked` (amber) on the
-initial state and through the first three assignments, and takes the normal
-outline on the fourth and final assignment, `temp.prev = ins`, which sets the
-last link. Do **not** use `unlinked` for a not-yet-visited traversal node (that
-is `pending`), and do not use `pending`'s dimming for an allocated-but-unlinked
-node — it is not faded; it is real and held.
-
----
-
 ## Memory-danger marker (red warning triangle)
 
 A **red warning triangle (⚠)** marks any narration describing a **memory-integrity
@@ -518,6 +488,37 @@ Where pointer aliasing matters pedagogically (two names for one object), say so:
 student build one mental model instead of switching between "assignment" and
 "aiming."
 
+#### Pointer vs. reference — language-aware vocabulary
+
+C++ and Java have **different underlying models**, and the narration must respect
+that rather than importing pointer vocabulary into Java:
+
+- **pseudocode / C++**: a *pointer* **points to** an object. (`ins->prev`, `*p`.)
+- **Java**: a *reference* **refers to** an object. Java has no pointers; saying a
+  Java reference "points to" something is the exact kind of imprecision this
+  course avoids.
+
+So a few narration terms are **language-dependent**, swapped by the engine to
+match the currently-selected listing. The author writes the canonical term; the
+engine renders the language-appropriate word:
+
+| meaning              | pseudocode / C++ | Java        |
+|----------------------|------------------|-------------|
+| the var→object bond  | points to        | refers to   |
+| the variable         | pointer          | reference   |
+
+Keep this map **minimal** — it is these one or two terms, not a translation
+layer. Everything else in the narration is identical across languages. Mechanism:
+a small marker in the note/narration text (e.g. a `⟨points-to⟩` / `⟨pointer⟩`
+token) that the engine substitutes per selected language; if only pseudocode/C++
+are shown, the C++ column is used. When neither term appears in a note, no
+substitution happens and the note is language-neutral as usual.
+
+This is the ONLY thing that varies in narration by language. Node names,
+concepts, values, and structure are the same; only "points to / pointer" ↔
+"refers to / reference" swaps. (Syntax like `->` vs `.` lives in the code panel,
+never in prose.)
+
 Otherwise: present tense, one idea per line, name concrete values ("which is 12")
 rather than abstractions where a real value is on screen.
 
@@ -561,3 +562,38 @@ This is **deferred** — build the engine support when the first loop-containing
 animation is authored (e.g. the bCpp/bJava loop modules, or stacks-postfix-eval),
 not before. None of the early Phase-1 animations (list ops, recursion traces) need
 it. The convention is recorded here so it is consistent when it does get built.
+
+---
+
+## Node membership state — "unlinked" (amber outline)
+
+A node that is **not yet, or no longer, a stable member of its structure** renders
+with an **amber outline** (rectangle border only — NOT a background fill). This is
+the `unlinked` state. When the node becomes a full member — all of its own links
+AND the structure's links back to it are set — it transitions to the normal
+outline in a single change.
+
+The amber signals membership status, and it teaches: the student sees at a glance
+which nodes are "real members" versus "in transit."
+
+Applies across the whole project, wherever nodes join or leave a structure:
+- **Insertion** — the new node is `unlinked` (amber) from the initial state
+  through every wiring step, resolving to normal only when the insertion is
+  complete (all links in both directions set). In `lists-doubly-insert-order`,
+  node 25 is `unlinked` on steps 0–4 and turns normal on the final step.
+- **Deletion** — a node about to be removed becomes `unlinked` (amber) once the
+  structure's links to it are being torn down.
+- **Fresh allocation (C++ `new`)** — a just-allocated node held by a pointer but
+  not yet wired into anything is `unlinked` until connected.
+
+Colour: amber, **outline only**. Distinct from the `--error` red (memory
+corruption) and from the amber *note box* — here the amber is a node border, a
+different visual channel, so the two ambers do not compete. (If in practice they
+read as competing, the node-membership amber gets its own token; keep it a border,
+never a fill, to stay clearly separate from the note box.)
+
+Note the difference from the `pending` traversal state: `pending` means "not yet
+reached by the current walk" (dimmed, used in tree/graph traversal); `unlinked`
+means "not a structural member yet/anymore" (amber outline). A node can't be both
+in a way that matters — use `unlinked` for membership, `pending` for traversal
+frontier.
