@@ -142,16 +142,21 @@ function makeTrace() {
       if (node.n <= 1) {
         yield snap(id, L.base, 'base', `Base case: fib(${node.n}) = ${node.n}. No further calls.`);
       } else {
+        // The common-mistake warning is a NOTE on the real n-2 call step, not a
+        // phantom step of its own (AUTHORING.md "Steps vs. notes"). It appears
+        // once, on the first branching call, then collapses. This is a logic
+        // error, not a memory-integrity violation, so it carries no red ⚠.
+        let note;
         if (!trapShown) {
           trapShown = true;
-          yield snap(id, L.callA, null,
-            `A common error here is fib(n - 2, level + 1). But n + level must stay constant at ${N}: `
-            + `if n drops by 2, level must rise by 2 — so it has to be level + 2. `
-            + `Watch the "n + level" readout stay ${N} as the correct calls proceed.`);
+          note = `A common error here is fib(n - 2, level + 1). But n + level must stay constant at ${N}: `
+               + `if n drops by 2, level must rise by 2 — so it has to be level + 2. `
+               + `Watch the "n + level" readout stay ${N} as the correct calls proceed.`;
         }
 
         yield snap(id, L.callA, 'call',
-          `The n - 2 branch is evaluated first: fib(${node.n - 2}, ${node.level + dl2}).`);
+          `The n - 2 branch is evaluated first: fib(${node.n - 2}, ${node.level + dl2}).`,
+          { note });
         yield* visit(node.kids[1]);   // n-2, drawn right, evaluated first
 
         yield snap(id, L.callB, 'call',
@@ -161,8 +166,15 @@ function makeTrace() {
 
       out.push({ text: `Exiting level ${node.level}`, indent: node.level, dir: 'out' });
       state.set(id, 'exited');
+      // The post-watch challenge is a note on the final step -- the root's exit.
+      const exitNote = id === 'c0'
+        ? 'What if "level" were the recursion depth instead? fib(2) and fib(3) both sit at '
+          + 'depth 1 here — check the tree: are they at the same level? Following depth in place '
+          + 'of level is exactly the bug the n + level invariant guards against.'
+        : undefined;
       yield snap(id, L.exit, 'exit',
-        `fib(${node.n}) returns. Its "Exiting" line sits at the same indent as its "Entering" line.`);
+        `fib(${node.n}) returns. Its "Exiting" line sits at the same indent as its "Entering" line.`,
+        { note: exitNote });
     }
 
     yield* visit('c0');

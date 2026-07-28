@@ -118,6 +118,47 @@ body {
 }
 .pac-narrate-flash { animation: pac-narrate-flash 0.55s ease-out; }
 
+/* ---- teaching-note box ----
+ * Non-execution commentary (setup, common-mistake asides, post-watch
+ * challenge). A note attaches to a step and shows only while that step is
+ * current; on steps without one the box collapses to nothing (below) so the
+ * layout reflows. Amber-keyed so it reads as an aside, distinct from the blue
+ * narration bar. See AUTHORING.md "Steps vs. notes". */
+.pac-note {
+  background: rgba(212, 161, 60, 0.10);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--highlight);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  margin-top: 8px;
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.pac-note::before {
+  content: "note";
+  display: block;
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--highlight);
+  margin-bottom: 3px;
+}
+/* Collapsed: takes no space at all on steps that carry no note. */
+.pac-note-empty { display: none; }
+@keyframes pac-note-flash {
+  0%   { background: rgba(212, 161, 60, 0.10); box-shadow: 0 0 0 0 rgba(212, 161, 60, 0); }
+  18%  { background: rgba(212, 161, 60, 0.26); box-shadow: 0 0 0 3px rgba(212, 161, 60, 0.16); }
+  100% { background: rgba(212, 161, 60, 0.10); box-shadow: 0 0 0 0 rgba(212, 161, 60, 0); }
+}
+.pac-note-flash { animation: pac-note-flash 0.55s ease-out; }
+
+/* ---- memory-danger marker ----
+ * A red warning triangle (⚠) + --error on any narration or note segment that
+ * names a memory-integrity violation. Project-wide, cross-course convention.
+ * See AUTHORING.md "Memory-danger marker". */
+.pac-danger { color: var(--error); font-weight: 600; }
+
 /* ---- CODE panel ---- */
 .pac-lang-tabs { display: flex; gap: 4px; }
 .pac-lang-tab {
@@ -130,6 +171,7 @@ body {
 .pac-code { font-family: var(--mono); font-size: 12.5px; line-height: 1.65; }
 .pac-code-line { display: flex; padding: 0 4px; border-radius: 3px; white-space: pre; }
 .pac-code-line.is-active { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+.pac-code-line.is-active.is-danger { background: rgba(226, 86, 74, 0.16); box-shadow: inset 2px 0 0 var(--error); color: var(--error); }
 .pac-code-num { color: var(--text-dim); width: 2.2em; text-align: right; margin-right: 12px; user-select: none; }
 
 /* ---- STREAM panel ---- */

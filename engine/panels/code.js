@@ -28,10 +28,14 @@ export function render(body, data, ctx, { lang }) {
     t.setAttribute('aria-selected', String(t.dataset.lang === use)));
 
   const active = (data?.line && typeof data.line === 'object') ? data.line[use] : data?.line;
+  // When the code line itself is the memory-integrity culprit, the step sets
+  // `dangerLine: true` and the active line is tinted red instead of blue.
+  const danger = !!data?.dangerLine;
 
   body.querySelector('.pac-code').innerHTML = spec.listings[use].map((src, k) => {
     const n = k + 1;
-    return `<div class="pac-code-line${n === active ? ' is-active' : ''}">` +
+    const cls = n === active ? (danger ? ' is-active is-danger' : ' is-active') : '';
+    return `<div class="pac-code-line${cls}">` +
            `<span class="pac-code-num">${n}</span><span>${esc(src)}</span></div>`;
   }).join('');
 }

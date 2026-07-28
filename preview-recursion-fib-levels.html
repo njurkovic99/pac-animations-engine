@@ -122,6 +122,47 @@ body {
 }
 .pac-narrate-flash { animation: pac-narrate-flash 0.55s ease-out; }
 
+/* ---- teaching-note box ----
+ * Non-execution commentary (setup, common-mistake asides, post-watch
+ * challenge). A note attaches to a step and shows only while that step is
+ * current; on steps without one the box collapses to nothing (below) so the
+ * layout reflows. Amber-keyed so it reads as an aside, distinct from the blue
+ * narration bar. See AUTHORING.md "Steps vs. notes". */
+.pac-note {
+  background: rgba(212, 161, 60, 0.10);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--highlight);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  margin-top: 8px;
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.pac-note::before {
+  content: "note";
+  display: block;
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--highlight);
+  margin-bottom: 3px;
+}
+/* Collapsed: takes no space at all on steps that carry no note. */
+.pac-note-empty { display: none; }
+@keyframes pac-note-flash {
+  0%   { background: rgba(212, 161, 60, 0.10); box-shadow: 0 0 0 0 rgba(212, 161, 60, 0); }
+  18%  { background: rgba(212, 161, 60, 0.26); box-shadow: 0 0 0 3px rgba(212, 161, 60, 0.16); }
+  100% { background: rgba(212, 161, 60, 0.10); box-shadow: 0 0 0 0 rgba(212, 161, 60, 0); }
+}
+.pac-note-flash { animation: pac-note-flash 0.55s ease-out; }
+
+/* ---- memory-danger marker ----
+ * A red warning triangle (⚠) + --error on any narration or note segment that
+ * names a memory-integrity violation. Project-wide, cross-course convention.
+ * See AUTHORING.md "Memory-danger marker". */
+.pac-danger { color: var(--error); font-weight: 600; }
+
 /* ---- CODE panel ---- */
 .pac-lang-tabs { display: flex; gap: 4px; }
 .pac-lang-tab {
@@ -134,6 +175,7 @@ body {
 .pac-code { font-family: var(--mono); font-size: 12.5px; line-height: 1.65; }
 .pac-code-line { display: flex; padding: 0 4px; border-radius: 3px; white-space: pre; }
 .pac-code-line.is-active { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+.pac-code-line.is-active.is-danger { background: rgba(226, 86, 74, 0.16); box-shadow: inset 2px 0 0 var(--error); color: var(--error); }
 .pac-code-num { color: var(--text-dim); width: 2.2em; text-align: right; margin-right: 12px; user-select: none; }
 
 /* ---- STREAM panel ---- */
@@ -230,10 +272,14 @@ function render(body, data, ctx, { lang }) {
     t.setAttribute('aria-selected', String(t.dataset.lang === use)));
 
   const active = (data?.line && typeof data.line === 'object') ? data.line[use] : data?.line;
+  // When the code line itself is the memory-integrity culprit, the step sets
+  // `dangerLine: true` and the active line is tinted red instead of blue.
+  const danger = !!data?.dangerLine;
 
   body.querySelector('.pac-code').innerHTML = spec.listings[use].map((src, k) => {
     const n = k + 1;
-    return `<div class="pac-code-line${n === active ? ' is-active' : ''}">` +
+    const cls = n === active ? (danger ? ' is-active is-danger' : ' is-active') : '';
+    return `<div class="pac-code-line${cls}">` +
            `<span class="pac-code-num">${n}</span><span>${esc(src)}</span></div>`;
   }).join('');
 }
@@ -779,12 +825,14 @@ class Engine {
         <span class="pac-metrics"></span>
         <span class="pac-progress"></span>
       </div>
-      <div class="pac-narrate"></div>`;
+      <div class="pac-narrate"></div>
+      <div class="pac-note pac-note-empty" role="note"></div>`;
 
     this.root.querySelector('.pac-title').textContent = s.title ?? '';
     this.root.querySelector('.pac-sub').textContent = s.subtitle ?? '';
     this.stage    = this.root.querySelector('.pac-stage');
     this.narrate  = this.root.querySelector('.pac-narrate');
+    this.noteBox  = this.root.querySelector('.pac-note');
     this.metricsEl= this.root.querySelector('.pac-metrics');
     this.progress = this.root.querySelector('.pac-progress');
 
@@ -847,7 +895,9 @@ class Engine {
       // every language variant. Thread it in so the highlight actually moves.
       // Supports a plain number or a per-language {pseudo, java, cpp} object;
       // a null/absent line means "highlight nothing" (intro, note, final).
-      if (p.spec.type === 'code') data = { ...data, line: step.line };
+      // `dangerLine` rides alongside: when set, the highlighted line is tinted
+      // red instead of blue -- the code itself is the memory-integrity culprit.
+      if (p.spec.type === 'code') data = { ...data, line: step.line, dangerLine: step.dangerLine };
       p.ctx.anchors.clear();
       p.renderer.render(p.el.querySelector('.pac-panel-body'),
                         data, p.ctx, { lang: this.lang, step });
@@ -855,14 +905,28 @@ class Engine {
 
     this.overlay.draw(step.arrows ?? [], this.panels);
 
-    this.narrate.textContent = step.narrate ?? '';
-    // Pulse the narration only when the step index actually changes, so a new
-    // explanation catches the eye but pausing/stopping in place does not reflash.
+    // Narration and notes are both SEGMENTED content: a plain string, or an
+    // array of segments where {danger:true, text} renders a leading red warning
+    // triangle in --error. renderSegments handles both and returns whether any
+    // content was written.
+    renderSegments(this.narrate, step.narrate);
+
+    // The teaching-note box holds non-execution commentary (setup, a common-
+    // mistake aside, a post-watch challenge). A note attaches to a step and
+    // shows only while that step is current; on steps without one the box
+    // collapses to zero height (pac-note-empty -> display:none) and the layout
+    // reflows. See AUTHORING.md "Steps vs. notes".
+    const hasNote = renderSegments(this.noteBox, step.note);
+    this.noteBox.classList.toggle('pac-note-empty', !hasNote);
+
+    // Pulse narration (and a present note) only when the step index actually
+    // changes, so a new explanation catches the eye but pausing/stopping in
+    // place does not reflash. A note appearing should feel like the animation
+    // saying "pay attention to this."
     if (this.i !== this._flashedAt) {
       this._flashedAt = this.i;
-      this.narrate.classList.remove('pac-narrate-flash');
-      void this.narrate.offsetWidth;   // force reflow so the animation restarts
-      this.narrate.classList.add('pac-narrate-flash');
+      flash(this.narrate, 'pac-narrate-flash');
+      if (hasNote) flash(this.noteBox, 'pac-note-flash');
     }
     this.progress.textContent = `${Math.min(this.i + 1, this.steps.length)} / ${this.steps.length}`;
 
@@ -882,6 +946,50 @@ function take(gen, max) {
   const out = [];
   for (const v of gen) { out.push(v); if (out.length >= max) break; }
   return out;
+}
+
+/** Restart a one-shot CSS pulse: drop the class, force reflow, re-add. */
+function flash(el, cls) {
+  el.classList.remove(cls);
+  void el.offsetWidth;               // force reflow so the animation restarts
+  el.classList.add(cls);
+}
+
+/* The red warning triangle for a memory-integrity violation. Project-wide,
+ * cross-course convention -- red ⚠ always means "memory just went wrong". */
+const DANGER_MARK = '⚠';
+
+/**
+ * Render segmented content (narration or a note) into `el`.
+ *
+ * `content` is either a plain string (the common case -- nearly every step),
+ * or an array of segments. A segment is a string, or an object; an object with
+ * `danger: true` renders a leading red ⚠ and the danger-red colour (--error),
+ * naming a memory-integrity violation. Returns true iff anything was written,
+ * so the caller can collapse an empty note box.
+ */
+function renderSegments(el, content) {
+  el.textContent = '';
+  if (content == null || content === '') return false;
+  const segs = Array.isArray(content) ? content : [content];
+  let wrote = false;
+  for (const seg of segs) {
+    if (seg == null || seg === '') continue;
+    if (typeof seg === 'string') {
+      el.appendChild(document.createTextNode(seg));
+      wrote = true;
+    } else if (seg.danger) {
+      const span = document.createElement('span');
+      span.className = 'pac-danger';
+      span.textContent = `${DANGER_MARK} ${seg.text ?? ''}`;
+      el.appendChild(span);
+      wrote = true;
+    } else if (typeof seg.text === 'string') {
+      el.appendChild(document.createTextNode(seg.text));
+      wrote = true;
+    }
+  }
+  return wrote;
 }
 
 /** Mount an animation from its content module. */
@@ -1033,16 +1141,21 @@ function makeTrace() {
       if (node.n <= 1) {
         yield snap(id, L.base, 'base', `Base case: fib(${node.n}) = ${node.n}. No further calls.`);
       } else {
+        // The common-mistake warning is a NOTE on the real n-2 call step, not a
+        // phantom step of its own (AUTHORING.md "Steps vs. notes"). It appears
+        // once, on the first branching call, then collapses. This is a logic
+        // error, not a memory-integrity violation, so it carries no red ⚠.
+        let note;
         if (!trapShown) {
           trapShown = true;
-          yield snap(id, L.callA, null,
-            `A common error here is fib(n - 2, level + 1). But n + level must stay constant at ${N}: `
-            + `if n drops by 2, level must rise by 2 — so it has to be level + 2. `
-            + `Watch the "n + level" readout stay ${N} as the correct calls proceed.`);
+          note = `A common error here is fib(n - 2, level + 1). But n + level must stay constant at ${N}: `
+               + `if n drops by 2, level must rise by 2 — so it has to be level + 2. `
+               + `Watch the "n + level" readout stay ${N} as the correct calls proceed.`;
         }
 
         yield snap(id, L.callA, 'call',
-          `The n - 2 branch is evaluated first: fib(${node.n - 2}, ${node.level + dl2}).`);
+          `The n - 2 branch is evaluated first: fib(${node.n - 2}, ${node.level + dl2}).`,
+          { note });
         yield* visit(node.kids[1]);   // n-2, drawn right, evaluated first
 
         yield snap(id, L.callB, 'call',
@@ -1052,8 +1165,15 @@ function makeTrace() {
 
       out.push({ text: `Exiting level ${node.level}`, indent: node.level, dir: 'out' });
       state.set(id, 'exited');
+      // The post-watch challenge is a note on the final step -- the root's exit.
+      const exitNote = id === 'c0'
+        ? 'What if "level" were the recursion depth instead? fib(2) and fib(3) both sit at '
+          + 'depth 1 here — check the tree: are they at the same level? Following depth in place '
+          + 'of level is exactly the bug the n + level invariant guards against.'
+        : undefined;
       yield snap(id, L.exit, 'exit',
-        `fib(${node.n}) returns. Its "Exiting" line sits at the same indent as its "Entering" line.`);
+        `fib(${node.n}) returns. Its "Exiting" line sits at the same indent as its "Entering" line.`,
+        { note: exitNote });
     }
 
     yield* visit('c0');

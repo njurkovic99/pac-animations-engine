@@ -103,11 +103,10 @@ function arrows(m) {
   return out;
 }
 
-function snap(m, { line, tag, narrate, touched, extra = {} }) {
+function snap(m, { line, tag, narrate, note, touched }) {
   const reach = walk(m);
-  const orphan = !reach.includes(25);
   return {
-    tag, narrate, line,
+    tag, narrate, line, note,
     arrows: arrows(m),
     panels: {
       list: {
@@ -116,7 +115,14 @@ function snap(m, { line, tag, narrate, touched, extra = {} }) {
           id, label: String(m[id].value),
           prev: m[id].prev, next: m[id].next,
           slot: m[id].slot, row: m[id].row,
-          state: id === touched ? 'entering' : (m[id].prev === id || m[id].next === id ? 'pending' : 'exited'),
+          // The node just written is 'entering'; a node already reachable from
+          // head is 'exited' (settled in the list); a freshly allocated node
+          // not yet linked in -- node 25 before insertion -- is 'pending'. It
+          // is HEALTHY, merely waiting; it is never marked as danger. (See
+          // AUTHORING.md "Memory-danger marker": the correct order has no
+          // danger moment.)
+          state: id === touched ? 'entering'
+                 : (reach.includes(m[id].value) ? 'exited' : 'pending'),
         })),
         edges: [],
       },
@@ -130,43 +136,49 @@ function snap(m, { line, tag, narrate, touched, extra = {} }) {
       },
       walk: {
         render: 'box',
-        cells: reach.map(v => ({ value: v, role: v === 25 ? 'ok' : undefined }))
-          .concat(orphan ? [{ value: '25 lost', role: 'error' }] : []),
+        cells: reach.map(v => ({ value: v, role: v === 25 ? 'ok' : undefined })),
       },
     },
-    ...extra,
   };
 }
+
+/* Two teaching notes, kept out of the step flow (AUTHORING.md "Steps vs.
+ * notes"). Both were narration on phantom, non-executing steps in the original;
+ * they are now commentary attached to real execution steps. */
+const SETUP_AND_PITFALL =
+  'Setup: a doubly linked list 12 \u2194 37 \u2194 99, with a new node holding 25 already ' +
+  'allocated but not yet linked in \u2014 we want it before 37. A common mistake is to run ' +
+  'temp.prev = ins first: then ins.prev = temp.prev copies a pointer that already points ' +
+  'back at ins, so ins.prev becomes ins itself, and line 4 (ins.prev.next = ins) dereferences ' +
+  'a pointer that was never set. Setting ins.prev and ins.next first, as here, avoids that.';
+
+const CHALLENGE =
+  'What if line 4 (ins.prev.next = ins) had run before line 2 (ins.prev = temp.prev)? Trace it ' +
+  'yourself: which node would ins.prev still point at, and what would line 4 then write through?';
+
+/* A note per operation, keyed by op letter. Only the ordering-critical first
+ * assignment and the final one carry commentary. */
+const NOTES = { A: SETUP_AND_PITFALL, D: CHALLENGE };
 
 function makeTrace() {
   return function* () {
     const m = fresh();
 
-    yield snap(m, {
-      tag: 'setup', line: 1,
-      narrate: 'A doubly linked list: 12 \u2194 37 \u2194 99. A new node holding 25 has been allocated but is not yet part of the list. We want it before 37.',
-    });
-
-    yield snap(m, {
-      line: null,
-      narrate: 'A common error is running temp.prev = ins first. Then ins.prev = temp.prev copies a pointer that already points back at ins, so ins.prev becomes ins itself \u2014 and line 4, ins.prev.next = ins, dereferences a pointer that was never set to anything useful. The order below sets ins.prev and ins.next before any line reads them.',
-    });
-
+    // Steps are executions only: the four assignment lines, each highlighted.
+    // The setup framing and the common-mistake warning are notes, not steps;
+    // the post-watch challenge is a note on the final step. No step exists
+    // merely to display commentary.
     for (const key of ORDER) {
       const op = OPS[key];
       const say = op.say(m);
       const touched = op.apply(m);
-      yield snap(m, { line: op.line, tag: 'assign', narrate: `${op.name} \u2014 ${say}`, touched });
+      yield snap(m, {
+        line: op.line, tag: 'assign',
+        narrate: `${op.name} \u2014 ${say}`,
+        note: NOTES[key],
+        touched,
+      });
     }
-
-    const reach = walk(m);
-    const ok = reach.includes(25) && !reach.includes('\u21bb');
-    yield snap(m, {
-      tag: ok ? 'done' : 'corrupt', line: null, touched: null,
-      narrate: ok
-        ? 'Walking forward from head_pt: 12, 25, 37, 99. Every prev and next agree. The insertion is sound.'
-        : 'Walking forward from head_pt never reaches 25. Node 25 points at itself in both directions, and nothing points at it. It is unreachable and unfreeable \u2014 simply "losing it" is not an option.',
-    });
   };
 }
 
@@ -176,7 +188,7 @@ export default {
   profile: 'standard',
   columns: 2,
   languages: ['pseudo', 'java', 'cpp'],
-  hideTags: ['setup'],
+  hideTags: [],
 
   panels: [
     { type: 'code',   id: 'code', title: 'insert ins before temp',
