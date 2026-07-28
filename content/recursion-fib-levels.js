@@ -173,7 +173,7 @@ function makeTrace() {
           + 'of level is exactly the bug the n + level invariant guards against.'
         : undefined;
       yield snap(id, L.exit, 'exit',
-        `fib(${node.n}) returns. Its "Exiting" line sits at the same indent as its "Entering" line.`,
+        `fib(${node.n}) returns. Its "Exiting" line is printed at the same indent as its "Entering" line.`,
         { note: exitNote });
     }
 

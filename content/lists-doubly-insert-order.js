@@ -46,7 +46,7 @@ const LISTINGS = {
 const OPS = {
   A: { line: 2, name: 'ins.prev = temp.prev',
        apply: m => { m[m.ins].prev = m[m.temp].prev; return m.ins; },
-       say:   m => `ins.prev takes temp.prev, which is ${label(m, m[m.temp].prev)}.` },
+       say:   m => `ins.prev now points where temp.prev points — to ${label(m, m[m.temp].prev)}.` },
   B: { line: 3, name: 'ins.next = temp',
        apply: m => { m[m.ins].next = m.temp; return m.ins; },
        say:   () => `ins.next points forward at temp. The new node is now linked in from its own side.` },
@@ -55,7 +55,7 @@ const OPS = {
        say:   m => `Follow ins.prev to ${label(m, m[m.ins].prev)}, then set its next to ins. This line depends on line 2 having run.` },
   D: { line: 5, name: 'temp.prev = ins',
        apply: m => { m[m.temp].prev = m.ins; return m.temp; },
-       say:   () => `temp.prev turns around to face ins. The list is now stitched on both sides.` },
+       say:   () => `temp.prev now points to ins. 25 ↔ 37 is now linked in both directions.` },
 };
 
 const ORDER = ['A', 'B', 'C', 'D'];
@@ -167,9 +167,7 @@ const SETUP =
 
 const PITFALL =
   'A common mistake is to run temp.prev = ins first: then ins.prev = temp.prev copies a ' +
-  'pointer that already points back at ins, so ins.prev becomes ins itself, and line 4 ' +
-  '(ins.prev.next = ins) dereferences a pointer that was never set. Setting ins.prev and ' +
-  'ins.next first, as here, avoids that.';
+  'pointer that already points back at ins, so ins.prev points to ins itself.';
 
 const CHALLENGE =
   'What if line 4 (ins.prev.next = ins) had run before line 2 (ins.prev = temp.prev)? Trace it ' +
@@ -190,7 +188,7 @@ function makeTrace() {
     // are exactly what the four assignments draw. The setup note lives here.
     yield snap(m, {
       line: null, tag: 'init', touched: null,
-      narrate: 'The list before insertion. Node 25 is allocated and held by ins_pt, but not yet linked in.',
+      narrate: 'The list before insertion. Node 25 is allocated and held by ins_pt, and not yet linked in.',
       note: SETUP,
     });
 
