@@ -383,6 +383,25 @@ This separation is what makes "Next Step" mean an actual next step. It also give
 all non-execution commentary one consistent home instead of being crammed into
 fake steps.
 
+### Step 0 is the initial state (required)
+
+There is exactly one non-executing step, and every animation **must** have it:
+**step 0, the initial state, before anything runs.** No code line is highlighted
+(`line: null`). It shows the data as it starts — the list already linked, a
+to-be-inserted node allocated and held by its owning pointer, the call tree laid
+out but unentered, the array unsorted — so the student sees the "before" the
+algorithm transforms. This is not a phantom commentary step: it is **program
+state, not prose**, which is precisely why it is allowed where a commentary-only
+step is not. The **setup note attaches here.** Every step *after* step 0 is a real
+executing line.
+
+Concretely, in `lists-doubly-insert-order` step 0 shows 12 ↔ 37 ↔ 99 fully
+linked and node 25 allocated and held by `ins_pt` — one arrow, `ins_pt → 25` —
+with 25's own `prev`/`next` still null and **no** linking arrows between 25 and
+the list. The owning pointer is part of the initial state (the node is allocated,
+not floating in the void); the four linking assignments are what the later steps
+draw. The animation is therefore five steps: step 0, then the four assignments.
+
 ### How notes behave
 
 - A note **attaches to a specific step**. When the student reaches that step, the
@@ -392,8 +411,8 @@ fake steps.
   the layout reflows). A note *appearing* is meant to feel like the animation
   saying "pay attention to this."
 - An animation may have **several** notes across its run — e.g. a setup note on
-  step 1, a warning note on the tricky line, a challenge note on the final step.
-  Each shows only on its own step.
+  step 0 (the initial state), a warning note on the tricky line, a challenge note
+  on the final step. Each shows only on its own step.
 
 ### Authoring a note
 

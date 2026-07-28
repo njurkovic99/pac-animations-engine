@@ -177,6 +177,17 @@ function makeTrace() {
         { note: exitNote });
     }
 
+    // Step 0 (required): the initial state, before anything executes -- no line
+    // highlighted. The whole call tree is laid out (every node pending), the
+    // program output is empty, and the invariant panel shows the starting call
+    // fib(4, 0). The setup note lives here.
+    yield snap('c0', null, 'init',
+      'Before the first call. The call tree is laid out but nothing has run yet; we are about to evaluate fib(4, 0).',
+      { note:
+        'We trace fib(4, 0). The invariant is n + level = N = 4, holding at every node — watch the ' +
+        '"n + level" readout stay 4. Crucially, level is NOT the recursion depth; both are shown on ' +
+        'every node so you can see them diverge.' });
+
     yield* visit('c0');
   };
 }
@@ -187,7 +198,7 @@ export default {
   profile: 'standard',
   columns: 2,
   languages: ['pseudo', 'java', 'cpp'],
-  hideTags: ['call'],
+  hideTags: ['call', 'init'],
 
   panels: [
     { type: 'code',   id: 'code', title: 'fib(n, level)',

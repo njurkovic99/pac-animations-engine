@@ -1141,32 +1141,46 @@ function snap(m, { line, tag, narrate, note, touched }) {
   };
 }
 
-/* Two teaching notes, kept out of the step flow (AUTHORING.md "Steps vs.
- * notes"). Both were narration on phantom, non-executing steps in the original;
- * they are now commentary attached to real execution steps. */
-const SETUP_AND_PITFALL =
-  'Setup: a doubly linked list 12 \u2194 37 \u2194 99, with a new node holding 25 already ' +
-  'allocated but not yet linked in \u2014 we want it before 37. A common mistake is to run ' +
-  'temp.prev = ins first: then ins.prev = temp.prev copies a pointer that already points ' +
-  'back at ins, so ins.prev becomes ins itself, and line 4 (ins.prev.next = ins) dereferences ' +
-  'a pointer that was never set. Setting ins.prev and ins.next first, as here, avoids that.';
+/* Three teaching notes, kept out of the step flow (AUTHORING.md "Steps vs.
+ * notes"): a setup note on the initial-state step, the ordering-pitfall warning
+ * on the assignment it concerns, and the post-watch challenge on the last step. */
+const SETUP =
+  'A doubly linked list, 12 \u2194 37 \u2194 99, fully linked. A new node holding 25 has been ' +
+  'allocated and is held by ins_pt \u2014 but its own prev and next are still null, so it is ' +
+  'not yet part of the list. We want it before 37 (temp_pt); the four assignments below ' +
+  'link it in.';
+
+const PITFALL =
+  'A common mistake is to run temp.prev = ins first: then ins.prev = temp.prev copies a ' +
+  'pointer that already points back at ins, so ins.prev becomes ins itself, and line 4 ' +
+  '(ins.prev.next = ins) dereferences a pointer that was never set. Setting ins.prev and ' +
+  'ins.next first, as here, avoids that.';
 
 const CHALLENGE =
   'What if line 4 (ins.prev.next = ins) had run before line 2 (ins.prev = temp.prev)? Trace it ' +
   'yourself: which node would ins.prev still point at, and what would line 4 then write through?';
 
-/* A note per operation, keyed by op letter. Only the ordering-critical first
+/* A note per assignment, keyed by op letter. Only the ordering-critical first
  * assignment and the final one carry commentary. */
-const NOTES = { A: SETUP_AND_PITFALL, D: CHALLENGE };
+const NOTES = { A: PITFALL, D: CHALLENGE };
 
 function makeTrace() {
   return function* () {
     const m = fresh();
 
-    // Steps are executions only: the four assignment lines, each highlighted.
-    // The setup framing and the common-mistake warning are notes, not steps;
-    // the post-watch challenge is a note on the final step. No step exists
-    // merely to display commentary.
+    // Step 0 (required): the initial state, before anything executes -- no line
+    // highlighted. The list is already linked 12 <-> 37 <-> 99; node 25 is
+    // allocated and held by ins_pt (one arrow, ins_pt -> 25) with its own prev
+    // and next still null, so NO linking arrows join it to the list yet -- those
+    // are exactly what the four assignments draw. The setup note lives here.
+    yield snap(m, {
+      line: null, tag: 'init', touched: null,
+      narrate: 'The list before insertion. Node 25 is allocated and held by ins_pt, but not yet linked in.',
+      note: SETUP,
+    });
+
+    // Every remaining step is a real execution: the four assignment lines, each
+    // highlighted. The pitfall warning and the post-watch challenge are notes.
     for (const key of ORDER) {
       const op = OPS[key];
       const say = op.say(m);
@@ -1187,7 +1201,7 @@ const SPEC = {
   profile: 'standard',
   columns: 2,
   languages: ['pseudo', 'java', 'cpp'],
-  hideTags: [],
+  hideTags: ['init'],
 
   panels: [
     { type: 'code',   id: 'code', title: 'insert ins before temp',
