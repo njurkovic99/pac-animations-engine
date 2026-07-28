@@ -97,14 +97,26 @@ body {
 .pac-progress { color: var(--text-dim); font-size: 12px; margin-left: auto; }
 
 .pac-narrate {
-  background: var(--panel);
+  background: var(--accent-soft);
   border: 1px solid var(--border);
-  border-left: 3px solid var(--accent);
+  border-left: 4px solid var(--accent);
   border-radius: var(--radius);
-  padding: 11px 13px;
+  padding: 12px 14px 12px 16px;
   margin-top: var(--gap);
   min-height: 42px;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.55;
 }
+/* A brief in-scheme pulse when the step changes, so a new explanation
+ * actively pulls the eye instead of being missed. Retriggered per step
+ * by the engine (see render()). */
+@keyframes pac-narrate-flash {
+  0%   { background: var(--accent-soft); box-shadow: 0 0 0 0 rgba(74, 144, 226, 0); }
+  18%  { background: rgba(74, 144, 226, 0.34); box-shadow: 0 0 0 3px var(--accent-soft); }
+  100% { background: var(--accent-soft); box-shadow: 0 0 0 0 rgba(74, 144, 226, 0); }
+}
+.pac-narrate-flash { animation: pac-narrate-flash 0.55s ease-out; }
 
 /* ---- CODE panel ---- */
 .pac-lang-tabs { display: flex; gap: 4px; }
@@ -175,27 +187,9 @@ body {
 .pac-arrow { stroke: var(--accent); stroke-width: 1.6; fill: none; }
 .pac-arrow[data-style="stale"] { stroke: var(--error); stroke-dasharray: 4 3; }
 
-/* ---- predict gate ---- */
-.pac-predict {
-  background: var(--panel); border: 1px solid var(--highlight);
-  border-radius: var(--radius); padding: 14px; margin-top: var(--gap);
-}
-.pac-predict-q { margin: 0 0 10px; font-weight: 600; }
-.pac-predict-opts { display: flex; gap: 8px; flex-wrap: wrap; }
-.pac-predict-opt { font-family: var(--mono); }
-.pac-predict-verdict { margin-top: 10px; font-size: 13px; }
-.pac-predict-verdict[data-ok="true"]  { color: var(--ok); }
-.pac-predict-verdict[data-ok="false"] { color: var(--warn); }
-
 /* ---- metrics ---- */
 .pac-metrics { display: flex; gap: 16px; font-size: 12px; color: var(--text-dim); }
 .pac-metrics b { color: var(--text); font-weight: 600; font-family: var(--mono); }
 
 /* ---- beginner profile: enforced, not advisory ---- */
 .pac-root[data-profile="beginner"] .pac-addresses { display: none; }
-
-.pac-banner {
-  border-radius: var(--radius); padding: 9px 12px; margin-bottom: var(--gap);
-  font-size: 13px; border: 1px solid var(--warn); color: var(--warn);
-  background: rgba(224, 163, 58, .08);
-}

@@ -38,7 +38,7 @@ export class Engine {
     this.trace = spec.initialTrace ?? 'correct';
     this.i = 0;
     this.steps = [];
-    this.predictAnswered = new Set();
+    this._flashedAt = -1;              // last step index the narration pulsed on
     this._build();
     this.loadTrace(this.trace);
   }
@@ -69,13 +69,11 @@ export class Engine {
     return out;
   }
 
-  loadTrace(name, { banner = null } = {}) {
+  loadTrace(name) {
     this.stop();
     this.trace = name;
     this.steps = this.materialise(name);
     this.i = 0;
-    this.banner.textContent = banner ?? '';
-    this.banner.hidden = !banner;
     this.render();
   }
 
@@ -94,13 +92,11 @@ export class Engine {
 
   get step()   { return this.steps[this.i] ?? {}; }
   get atEnd()  { return this.i >= this.steps.length - 1; }
-  get gated()  { return this.step.type === 'predict' && !this.predictAnswered.has(this.i); }
 
   next() {
-    if (this.gated || this.atEnd) return this.stop();
+    if (this.atEnd) return this.stop();
     this.i++;
     this.render();
-    if (this.gated) this.stop();
   }
 
   prev() {
@@ -111,7 +107,6 @@ export class Engine {
   reset() {
     this.stop();
     this.i = 0;
-    this.predictAnswered.clear();
     this.render();
   }
 
@@ -138,7 +133,6 @@ export class Engine {
     this.root.innerHTML = `
       <h1 class="pac-title"></h1>
       <p class="pac-sub"></p>
-      <div class="pac-banner" hidden></div>
       <div class="pac-stage"></div>
       <div class="pac-controls">
         <button class="pac-btn" data-act="prev">&larr; Back</button>
@@ -148,15 +142,12 @@ export class Engine {
         <span class="pac-metrics"></span>
         <span class="pac-progress"></span>
       </div>
-      <div class="pac-narrate"></div>
-      <div class="pac-predict" hidden></div>`;
+      <div class="pac-narrate"></div>`;
 
     this.root.querySelector('.pac-title').textContent = s.title ?? '';
     this.root.querySelector('.pac-sub').textContent = s.subtitle ?? '';
-    this.banner   = this.root.querySelector('.pac-banner');
     this.stage    = this.root.querySelector('.pac-stage');
     this.narrate  = this.root.querySelector('.pac-narrate');
-    this.predictEl= this.root.querySelector('.pac-predict');
     this.metricsEl= this.root.querySelector('.pac-metrics');
     this.progress = this.root.querySelector('.pac-progress');
 
@@ -218,7 +209,7 @@ export class Engine {
       // not inside `panels.<codeId>` -- one line drives every code panel and
       // every language variant. Thread it in so the highlight actually moves.
       // Supports a plain number or a per-language {pseudo, java, cpp} object;
-      // a null/absent line means "highlight nothing" (intro, predict, final).
+      // a null/absent line means "highlight nothing" (intro, note, final).
       if (p.spec.type === 'code') data = { ...data, line: step.line };
       p.ctx.anchors.clear();
       p.renderer.render(p.el.querySelector('.pac-panel-body'),
@@ -228,6 +219,14 @@ export class Engine {
     this.overlay.draw(step.arrows ?? [], this.panels);
 
     this.narrate.textContent = step.narrate ?? '';
+    // Pulse the narration only when the step index actually changes, so a new
+    // explanation catches the eye but pausing/stopping in place does not reflash.
+    if (this.i !== this._flashedAt) {
+      this._flashedAt = this.i;
+      this.narrate.classList.remove('pac-narrate-flash');
+      void this.narrate.offsetWidth;   // force reflow so the animation restarts
+      this.narrate.classList.add('pac-narrate-flash');
+    }
     this.progress.textContent = `${Math.min(this.i + 1, this.steps.length)} / ${this.steps.length}`;
 
     const m = this.metrics();
@@ -236,46 +235,9 @@ export class Engine {
       .map(([k, v]) => `${k} <b>${v}</b>`).join('');
 
     this.root.querySelector('[data-act="prev"]').disabled = this.i === 0;
-    this.root.querySelector('[data-act="next"]').disabled = this.atEnd || this.gated;
+    this.root.querySelector('[data-act="next"]').disabled = this.atEnd;
     this.root.querySelector('[data-act="play"]').textContent = this.timer ? 'Pause' : 'Play';
-    this.root.querySelector('[data-act="play"]').disabled = this.atEnd || this.gated;
-
-    this._renderPredict(step);
-  }
-
-  _renderPredict(step) {
-    if (step.type !== 'predict') { this.predictEl.hidden = true; return; }
-    this.predictEl.hidden = false;
-
-    const answered = this.predictAnswered.has(this.i);
-    this.predictEl.innerHTML = `
-      <p class="pac-predict-q">${step.question}</p>
-      <div class="pac-predict-opts">${step.options.map((o, k) =>
-        `<button class="pac-btn pac-predict-opt" data-k="${k}" ${answered ? 'disabled' : ''}>${o.label}</button>`
-      ).join('')}</div>
-      <div class="pac-predict-verdict" hidden></div>`;
-
-    if (answered) return;
-
-    this.predictEl.querySelectorAll('.pac-predict-opt').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const opt = step.options[+btn.dataset.k];
-        this.predictAnswered.add(this.i);
-        const v = this.predictEl.querySelector('.pac-predict-verdict');
-        v.hidden = false;
-        v.dataset.ok = String(!!opt.correct);
-        v.textContent = opt.feedback;
-        this.predictEl.querySelectorAll('.pac-predict-opt').forEach(b => b.disabled = true);
-
-        // A wrong answer may branch into a different trace: the engine
-        // runs the buggy version so the student watches it fail.
-        if (opt.branch) {
-          setTimeout(() => this.loadTrace(opt.branch, { banner: opt.banner }), 1400);
-        } else {
-          this.render();
-        }
-      });
-    });
+    this.root.querySelector('[data-act="play"]').disabled = this.atEnd;
   }
 }
 

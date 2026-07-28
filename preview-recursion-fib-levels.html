@@ -101,14 +101,26 @@ body {
 .pac-progress { color: var(--text-dim); font-size: 12px; margin-left: auto; }
 
 .pac-narrate {
-  background: var(--panel);
+  background: var(--accent-soft);
   border: 1px solid var(--border);
-  border-left: 3px solid var(--accent);
+  border-left: 4px solid var(--accent);
   border-radius: var(--radius);
-  padding: 11px 13px;
+  padding: 12px 14px 12px 16px;
   margin-top: var(--gap);
   min-height: 42px;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.55;
 }
+/* A brief in-scheme pulse when the step changes, so a new explanation
+ * actively pulls the eye instead of being missed. Retriggered per step
+ * by the engine (see render()). */
+@keyframes pac-narrate-flash {
+  0%   { background: var(--accent-soft); box-shadow: 0 0 0 0 rgba(74, 144, 226, 0); }
+  18%  { background: rgba(74, 144, 226, 0.34); box-shadow: 0 0 0 3px var(--accent-soft); }
+  100% { background: var(--accent-soft); box-shadow: 0 0 0 0 rgba(74, 144, 226, 0); }
+}
+.pac-narrate-flash { animation: pac-narrate-flash 0.55s ease-out; }
 
 /* ---- CODE panel ---- */
 .pac-lang-tabs { display: flex; gap: 4px; }
@@ -179,30 +191,12 @@ body {
 .pac-arrow { stroke: var(--accent); stroke-width: 1.6; fill: none; }
 .pac-arrow[data-style="stale"] { stroke: var(--error); stroke-dasharray: 4 3; }
 
-/* ---- predict gate ---- */
-.pac-predict {
-  background: var(--panel); border: 1px solid var(--highlight);
-  border-radius: var(--radius); padding: 14px; margin-top: var(--gap);
-}
-.pac-predict-q { margin: 0 0 10px; font-weight: 600; }
-.pac-predict-opts { display: flex; gap: 8px; flex-wrap: wrap; }
-.pac-predict-opt { font-family: var(--mono); }
-.pac-predict-verdict { margin-top: 10px; font-size: 13px; }
-.pac-predict-verdict[data-ok="true"]  { color: var(--ok); }
-.pac-predict-verdict[data-ok="false"] { color: var(--warn); }
-
 /* ---- metrics ---- */
 .pac-metrics { display: flex; gap: 16px; font-size: 12px; color: var(--text-dim); }
 .pac-metrics b { color: var(--text); font-weight: 600; font-family: var(--mono); }
 
 /* ---- beginner profile: enforced, not advisory ---- */
 .pac-root[data-profile="beginner"] .pac-addresses { display: none; }
-
-.pac-banner {
-  border-radius: var(--radius); padding: 9px 12px; margin-bottom: var(--gap);
-  font-size: 13px; border: 1px solid var(--warn); color: var(--warn);
-  background: rgba(224, 163, 58, .08);
-}
 </style></head>
 <body><div id="pac"></div>
 <script type="module">
@@ -681,7 +675,7 @@ class Engine {
     this.trace = spec.initialTrace ?? 'correct';
     this.i = 0;
     this.steps = [];
-    this.predictAnswered = new Set();
+    this._flashedAt = -1;              // last step index the narration pulsed on
     this._build();
     this.loadTrace(this.trace);
   }
@@ -712,13 +706,11 @@ class Engine {
     return out;
   }
 
-  loadTrace(name, { banner = null } = {}) {
+  loadTrace(name) {
     this.stop();
     this.trace = name;
     this.steps = this.materialise(name);
     this.i = 0;
-    this.banner.textContent = banner ?? '';
-    this.banner.hidden = !banner;
     this.render();
   }
 
@@ -737,13 +729,11 @@ class Engine {
 
   get step()   { return this.steps[this.i] ?? {}; }
   get atEnd()  { return this.i >= this.steps.length - 1; }
-  get gated()  { return this.step.type === 'predict' && !this.predictAnswered.has(this.i); }
 
   next() {
-    if (this.gated || this.atEnd) return this.stop();
+    if (this.atEnd) return this.stop();
     this.i++;
     this.render();
-    if (this.gated) this.stop();
   }
 
   prev() {
@@ -754,7 +744,6 @@ class Engine {
   reset() {
     this.stop();
     this.i = 0;
-    this.predictAnswered.clear();
     this.render();
   }
 
@@ -781,7 +770,6 @@ class Engine {
     this.root.innerHTML = `
       <h1 class="pac-title"></h1>
       <p class="pac-sub"></p>
-      <div class="pac-banner" hidden></div>
       <div class="pac-stage"></div>
       <div class="pac-controls">
         <button class="pac-btn" data-act="prev">&larr; Back</button>
@@ -791,15 +779,12 @@ class Engine {
         <span class="pac-metrics"></span>
         <span class="pac-progress"></span>
       </div>
-      <div class="pac-narrate"></div>
-      <div class="pac-predict" hidden></div>`;
+      <div class="pac-narrate"></div>`;
 
     this.root.querySelector('.pac-title').textContent = s.title ?? '';
     this.root.querySelector('.pac-sub').textContent = s.subtitle ?? '';
-    this.banner   = this.root.querySelector('.pac-banner');
     this.stage    = this.root.querySelector('.pac-stage');
     this.narrate  = this.root.querySelector('.pac-narrate');
-    this.predictEl= this.root.querySelector('.pac-predict');
     this.metricsEl= this.root.querySelector('.pac-metrics');
     this.progress = this.root.querySelector('.pac-progress');
 
@@ -861,7 +846,7 @@ class Engine {
       // not inside `panels.<codeId>` -- one line drives every code panel and
       // every language variant. Thread it in so the highlight actually moves.
       // Supports a plain number or a per-language {pseudo, java, cpp} object;
-      // a null/absent line means "highlight nothing" (intro, predict, final).
+      // a null/absent line means "highlight nothing" (intro, note, final).
       if (p.spec.type === 'code') data = { ...data, line: step.line };
       p.ctx.anchors.clear();
       p.renderer.render(p.el.querySelector('.pac-panel-body'),
@@ -871,6 +856,14 @@ class Engine {
     this.overlay.draw(step.arrows ?? [], this.panels);
 
     this.narrate.textContent = step.narrate ?? '';
+    // Pulse the narration only when the step index actually changes, so a new
+    // explanation catches the eye but pausing/stopping in place does not reflash.
+    if (this.i !== this._flashedAt) {
+      this._flashedAt = this.i;
+      this.narrate.classList.remove('pac-narrate-flash');
+      void this.narrate.offsetWidth;   // force reflow so the animation restarts
+      this.narrate.classList.add('pac-narrate-flash');
+    }
     this.progress.textContent = `${Math.min(this.i + 1, this.steps.length)} / ${this.steps.length}`;
 
     const m = this.metrics();
@@ -879,46 +872,9 @@ class Engine {
       .map(([k, v]) => `${k} <b>${v}</b>`).join('');
 
     this.root.querySelector('[data-act="prev"]').disabled = this.i === 0;
-    this.root.querySelector('[data-act="next"]').disabled = this.atEnd || this.gated;
+    this.root.querySelector('[data-act="next"]').disabled = this.atEnd;
     this.root.querySelector('[data-act="play"]').textContent = this.timer ? 'Pause' : 'Play';
-    this.root.querySelector('[data-act="play"]').disabled = this.atEnd || this.gated;
-
-    this._renderPredict(step);
-  }
-
-  _renderPredict(step) {
-    if (step.type !== 'predict') { this.predictEl.hidden = true; return; }
-    this.predictEl.hidden = false;
-
-    const answered = this.predictAnswered.has(this.i);
-    this.predictEl.innerHTML = `
-      <p class="pac-predict-q">${step.question}</p>
-      <div class="pac-predict-opts">${step.options.map((o, k) =>
-        `<button class="pac-btn pac-predict-opt" data-k="${k}" ${answered ? 'disabled' : ''}>${o.label}</button>`
-      ).join('')}</div>
-      <div class="pac-predict-verdict" hidden></div>`;
-
-    if (answered) return;
-
-    this.predictEl.querySelectorAll('.pac-predict-opt').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const opt = step.options[+btn.dataset.k];
-        this.predictAnswered.add(this.i);
-        const v = this.predictEl.querySelector('.pac-predict-verdict');
-        v.hidden = false;
-        v.dataset.ok = String(!!opt.correct);
-        v.textContent = opt.feedback;
-        this.predictEl.querySelectorAll('.pac-predict-opt').forEach(b => b.disabled = true);
-
-        // A wrong answer may branch into a different trace: the engine
-        // runs the buggy version so the student watches it fail.
-        if (opt.branch) {
-          setTimeout(() => this.loadTrace(opt.branch, { banner: opt.banner }), 1400);
-        } else {
-          this.render();
-        }
-      });
-    });
+    this.root.querySelector('[data-act="play"]').disabled = this.atEnd;
   }
 }
 
@@ -1025,13 +981,14 @@ function buildTree(N, dl2) {
 
 /* ---- the trace ---- */
 
-function makeTrace({ dl2 = 2, gateAt = null } = {}) {
+function makeTrace() {
   return function* () {
+    const dl2 = 2;
     const nodes = buildTree(N, dl2);
     const byId = new Map(nodes.map(n => [n.id, n]));
     const state = new Map(nodes.map(n => [n.id, 'pending']));
     const out = [];
-    let gated = false;
+    let trapShown = false;
 
     const snap = (activeId, line, tag, narrate, extra = {}) => {
       const node = byId.get(activeId);
@@ -1076,24 +1033,12 @@ function makeTrace({ dl2 = 2, gateAt = null } = {}) {
       if (node.n <= 1) {
         yield snap(id, L.base, 'base', `Base case: fib(${node.n}) = ${node.n}. No further calls.`);
       } else {
-        if (gateAt === id && !gated) {
-          gated = true;
-          yield {
-            ...snap(id, L.callA, null,
-              'Before the first recursive call: the level argument must be chosen.'),
-            type: 'predict',
-            question: `fib is about to call itself with n - 2. What level should it pass?`,
-            options: [
-              { label: 'level + 1',
-                feedback: 'This is the most common submission, and it is wrong. Watch what it does.',
-                branch: 'buggy',
-                banner: 'Running the buggy version: fib(n - 2, level + 1). Watch n + level.' },
-              { label: 'level + 2', correct: true,
-                feedback: 'Correct. n drops by 2, so level must rise by 2. n + level stays 4.' },
-              { label: 'depth + 1',
-                feedback: 'level is not depth. fib(2) and fib(3) are both at depth 1, but at different levels.' },
-            ],
-          };
+        if (!trapShown) {
+          trapShown = true;
+          yield snap(id, L.callA, null,
+            `A common error here is fib(n - 2, level + 1). But n + level must stay constant at ${N}: `
+            + `if n drops by 2, level must rise by 2 — so it has to be level + 2. `
+            + `Watch the "n + level" readout stay ${N} as the correct calls proceed.`);
         }
 
         yield snap(id, L.callA, 'call',
@@ -1133,8 +1078,7 @@ const SPEC = {
 
   initialTrace: 'correct',
   traces: {
-    correct: makeTrace({ dl2: 2, gateAt: 'c0' }),
-    buggy:   makeTrace({ dl2: 1 }),
+    correct: makeTrace(),
   },
 };
 

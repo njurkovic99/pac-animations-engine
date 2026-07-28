@@ -90,13 +90,14 @@ function buildTree(N, dl2) {
 
 /* ---- the trace ---- */
 
-function makeTrace({ dl2 = 2, gateAt = null } = {}) {
+function makeTrace() {
   return function* () {
+    const dl2 = 2;
     const nodes = buildTree(N, dl2);
     const byId = new Map(nodes.map(n => [n.id, n]));
     const state = new Map(nodes.map(n => [n.id, 'pending']));
     const out = [];
-    let gated = false;
+    let trapShown = false;
 
     const snap = (activeId, line, tag, narrate, extra = {}) => {
       const node = byId.get(activeId);
@@ -141,24 +142,12 @@ function makeTrace({ dl2 = 2, gateAt = null } = {}) {
       if (node.n <= 1) {
         yield snap(id, L.base, 'base', `Base case: fib(${node.n}) = ${node.n}. No further calls.`);
       } else {
-        if (gateAt === id && !gated) {
-          gated = true;
-          yield {
-            ...snap(id, L.callA, null,
-              'Before the first recursive call: the level argument must be chosen.'),
-            type: 'predict',
-            question: `fib is about to call itself with n - 2. What level should it pass?`,
-            options: [
-              { label: 'level + 1',
-                feedback: 'This is the most common submission, and it is wrong. Watch what it does.',
-                branch: 'buggy',
-                banner: 'Running the buggy version: fib(n - 2, level + 1). Watch n + level.' },
-              { label: 'level + 2', correct: true,
-                feedback: 'Correct. n drops by 2, so level must rise by 2. n + level stays 4.' },
-              { label: 'depth + 1',
-                feedback: 'level is not depth. fib(2) and fib(3) are both at depth 1, but at different levels.' },
-            ],
-          };
+        if (!trapShown) {
+          trapShown = true;
+          yield snap(id, L.callA, null,
+            `A common error here is fib(n - 2, level + 1). But n + level must stay constant at ${N}: `
+            + `if n drops by 2, level must rise by 2 — so it has to be level + 2. `
+            + `Watch the "n + level" readout stay ${N} as the correct calls proceed.`);
         }
 
         yield snap(id, L.callA, 'call',
@@ -198,7 +187,6 @@ export default {
 
   initialTrace: 'correct',
   traces: {
-    correct: makeTrace({ dl2: 2, gateAt: 'c0' }),
-    buggy:   makeTrace({ dl2: 1 }),
+    correct: makeTrace(),
   },
 };
