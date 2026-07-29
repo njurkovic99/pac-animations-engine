@@ -31,6 +31,24 @@
   --radius:        6px;
   --gap:           14px;
   --mono:          "SF Mono", "Cascadia Code", Consolas, monospace;
+
+  /* ---- stable layout (see AUTHORING.md "Stable layout") ----
+   * The stage (panel grid) is BOUNDED: it never grows past --stage-max-h no
+   * matter how much content a panel holds. Panels scroll internally within
+   * their grid cell; the controls, narration bar, and note box are pinned
+   * below the stage and stay on screen at any viewport height.
+   *
+   * The bound is derived, not hardcoded to a resolution: start from "~15 code
+   * lines visible" and the current 2-row grid, and tune these values. The code
+   * panel occupies one grid row, so making a row tall enough for ~15 code lines
+   * fixes the whole stage height. All values below are tunable.
+   * Design target: a 1920x1080 window at 100%. */
+  --code-line-h:   20.6px;   /* code font-size 12.5px x line-height 1.65 */
+  --code-lines:    15;       /* code lines visible before the panel scrolls */
+  --panel-chrome:  54px;     /* a panel's header + body padding (non-content) */
+  --stage-rows:    2;        /* grid rows in the current animations (2x2) */
+  --stage-row-h:   calc(var(--code-lines) * var(--code-line-h) + var(--panel-chrome));
+  --stage-max-h:   calc(var(--stage-rows) * var(--stage-row-h) + (var(--stage-rows) - 1) * var(--gap));
 }
 
 * { box-sizing: border-box; }
@@ -42,20 +60,51 @@ body {
   font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
-.pac-root { padding: var(--gap); max-width: 1200px; margin: 0 auto; }
+/* The whole animation is a full-viewport flex column: the stage flexes to fill
+ * the space that is left after the pinned chrome (title, controls, narration,
+ * note), and the stage — never the page — is what shrinks on a short viewport.
+ * This is the safety net that keeps the note on screen at any viewport height. */
+.pac-root {
+  padding: var(--gap);
+  max-width: 1200px;
+  margin: 0 auto;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow: hidden;            /* the page itself never scrolls; panels do */
+}
+/* Everything except the stage keeps its natural height and is always visible;
+ * only the stage (below) flexes and yields space on a short viewport. */
+.pac-root > *:not(.pac-stage) { flex: 0 0 auto; }
 
 .pac-title { font-size: 17px; font-weight: 600; margin: 0 0 4px; }
 .pac-sub   { color: var(--text-dim); font-size: 13px; margin: 0 0 var(--gap); }
 
-/* ---- layout ---- */
+/* ---- layout: the bounded stage ----
+ * A grid of panels, bounded to --stage-max-h so it never grows the page. It
+ * flexes to fill the space above the pinned chrome but is capped at the bound,
+ * and its rows share the height equally (minmax(0,1fr) lets them shrink so each
+ * panel scrolls internally instead of overflowing). See AUTHORING.md. */
 .pac-stage {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
   gap: var(--gap);
   position: relative;          /* anchor origin for the arrow overlay */
+  flex: 1 1 auto;
+  min-height: 0;               /* allow the grid to shrink below content size */
+  max-height: var(--stage-max-h);
+  overflow: hidden;            /* the bound is hard; panels scroll, not the stage */
 }
 .pac-stage[data-cols="1"] { grid-template-columns: 1fr; }
 .pac-stage[data-cols="2"] { grid-template-columns: 1fr 1fr; }
+
+/* A panel that holds very little (e.g. a two-value count/capacity strip) opts
+ * out of stretching to fill its tall grid cell: it top-aligns and sizes to its
+ * content, so it reads as a compact strip rather than a tall box with a void.
+ * See AUTHORING.md "Panels fill their grid cells; don't oversize a cell". */
+.pac-panel[data-compact] { align-self: start; max-height: 100%; }
 
 /* ---- panel chrome ---- */
 .pac-panel {
@@ -176,21 +225,22 @@ body {
 .pac-code-line { display: flex; padding: 0 4px; border-radius: 3px; white-space: pre; }
 .pac-code-line.is-active { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
 .pac-code-line.is-active.is-danger { background: rgba(226, 86, 74, 0.16); box-shadow: inset 2px 0 0 var(--error); color: var(--error); }
+/* Parked caller line: the call site of a caller still on the stack, suspended
+ * while the callee runs. The same highlight as the active line, greyed with the
+ * SAME opacity token the CALLSTACK uses for its inactive (caller) frames -- not a
+ * new colour. One visual language across both panels: bright = running now, dim
+ * = suspended, waiting to resume. See AUTHORING.md "Line highlight — active line
+ * vs. parked caller lines". */
+.pac-code-line.is-parked { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); opacity: .5; }
 .pac-code-num { color: var(--text-dim); width: 2.2em; text-align: right; margin-right: 12px; user-select: none; }
 
 /* ---- STREAM panel ---- */
-/* Stable layout: the STREAM panel accumulates output as steps advance. It must
- * occupy its grid cell at a FIXED size and scroll internally (stream.js
- * auto-scrolls to the newest line) rather than growing the page and pushing the
- * controls/narration/note down. Nothing below the stage moves as steps advance.
- * See AUTHORING.md "Stable layout". The height is fixed (not max-height) so the
- * cell is the same size on step 0 as at the end. Any other accumulating panel
- * type gets the same treatment. */
-.pac-panel[data-type="stream"] .pac-panel-body {
-  height: var(--stream-h, 320px);
-  flex: none;
-  overflow-y: auto;
-}
+/* Stable layout: the STREAM panel accumulates output as steps advance. The
+ * bounded stage gives it a fixed grid cell, so it scrolls internally (stream.js
+ * auto-scrolls to the newest line at the bottom) rather than growing the page
+ * and pushing the controls/narration/note down. The default panel body already
+ * does flex:1 + overflow:auto; nothing extra is needed. See AUTHORING.md
+ * "Stable layout". Any other accumulating panel type gets the same treatment. */
 .pac-stream { font-family: var(--mono); font-size: 12.5px; line-height: 1.7; }
 .pac-stream-line { white-space: pre; }
 .pac-stream-line.dir-in   { color: var(--warn); }
@@ -218,6 +268,59 @@ body {
   display: flex; justify-content: space-between; text-align: left; min-width: 0;
 }
 .pac-cells[data-render="row"] .pac-cell-label { display: inline; }
+
+/* ---- CALLSTACK panel ----
+ * A debugger's locals/stack pane. Frames push on call / pop on return; the top
+ * (running) frame is emphasized and rendered first (newest on top), callers
+ * below are greyed but present, and `main` is the last (bottom) frame. Stable
+ * layout: the bounded stage gives the pane a fixed grid cell, so frames
+ * top-align within it and the pane scrolls internally if the stack ever grows
+ * past the cell -- the running frame stays visible at the top and nothing below
+ * the stage shifts. See AUTHORING.md "CALLSTACK panel" and "Stable layout". */
+.pac-callstack {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;    /* frames top-align; no empty void above them */
+  gap: 6px;
+}
+.pac-frame {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  padding: 6px 9px;
+  opacity: .5;                    /* caller frames are greyed but present */
+  transition: opacity .15s, border-color .15s;
+}
+/* The running (top) frame: full opacity + a blue outline, so "where are we
+ * executing" reads at a glance and matches the highlighted code line. */
+.pac-frame[data-active="true"] {
+  opacity: 1;
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent-soft);
+}
+.pac-frame-fn {
+  font-family: var(--mono); font-size: 12.5px; font-weight: 600;
+  color: var(--text); margin-bottom: 5px;
+}
+.pac-frame-vars { display: flex; flex-direction: column; gap: 3px; }
+.pac-frame-var {
+  display: flex; justify-content: space-between; gap: 14px;
+  font-family: var(--mono); font-size: 12px;
+  padding: 2px 6px; border-radius: 3px;
+  border: 1px solid transparent;
+}
+.pac-frame-var-name { color: var(--text-dim); }
+.pac-frame-var-val  { color: var(--text); }
+/* Activity channel (FILL) -- a local changing THIS step gets the blue fill, the
+ * same rule as nodes/cells. */
+.pac-frame-var[data-role="active"] {
+  background: var(--accent-soft); border-color: var(--accent);
+}
+.pac-frame-var[data-role="active"] .pac-frame-var-name { color: var(--text); }
+/* A finished local (e.g. loop i after the loop) stays visible but greyed until
+ * the function returns -- it does not vanish mid-frame. */
+.pac-frame-var[data-role="done"] { opacity: .45; }
+.pac-frame-empty { color: var(--text-dim); font-family: var(--mono); font-size: 11.5px; opacity: .6; }
 
 /* ---- NODES panel ---- */
 .pac-nodes { width: 100%; display: block; }
@@ -307,13 +410,36 @@ function render(body, data, ctx, { lang }) {
   // When the code line itself is the memory-integrity culprit, the step sets
   // `dangerLine: true` and the active line is tinted red instead of blue.
   const danger = !!data?.dangerLine;
+  // Parked caller lines: the call site of every caller still on the stack, shown
+  // DIMMED so the student keeps sight of where the call came from and where it
+  // returns (AUTHORING.md "Line highlight — active line vs. parked caller lines").
+  // Each entry is a plain number or a per-language {pseudo,java,cpp} object;
+  // resolve to THIS language. The active line always wins if they coincide
+  // (bright beats dim), so drop it from the parked set.
+  const parked = new Set((data?.parked ?? [])
+    .map(p => (p && typeof p === 'object') ? p[use] : p)
+    .filter(n => n != null && n !== active));
 
   body.querySelector('.pac-code').innerHTML = spec.listings[use].map((src, k) => {
     const n = k + 1;
-    const cls = n === active ? (danger ? ' is-active is-danger' : ' is-active') : '';
+    const cls = n === active ? (danger ? ' is-active is-danger' : ' is-active')
+              : parked.has(n) ? ' is-parked' : '';
     return `<div class="pac-code-line${cls}">` +
            `<span class="pac-code-num">${n}</span><span>${esc(src)}</span></div>`;
   }).join('');
+
+  // Stable layout: the CODE panel shows ~12–15 lines and scrolls internally, so
+  // the active line must be scrolled into view as it moves (a jump into a
+  // function body far down the listing would otherwise sit off-screen). Scroll
+  // only THIS panel body (the overflow:auto container), never the page — centre
+  // the active line in the visible area. See AUTHORING.md "Stable layout".
+  const activeEl = body.querySelector('.pac-code-line.is-active');
+  if (activeEl) {
+    const bodyRect = body.getBoundingClientRect();
+    const lineRect = activeEl.getBoundingClientRect();
+    const delta = (lineRect.top - bodyRect.top) - (body.clientHeight - lineRect.height) / 2;
+    body.scrollTop += delta;
+  }
 }
 
 const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
@@ -559,6 +685,62 @@ function render(body, data) {
 }
 
  return { mount, render }; })();
+const callstackPanel = (() => { /* CALLSTACK panel — a debugger's locals/stack pane.
+ *
+ * A vertical stack of call frames, newest on top (emphasized), callers below
+ * greyed but present. Each frame shows its function name, bound parameters, and
+ * active locals with live values. Frames push on call and pop on return; `main`
+ * is the bottom frame (the driver), so calls have a visible origin. This is what
+ * makes parameter binding visible: when ADD calls INSERT(count, value), the
+ * INSERT frame appears already showing index = 3 (count's value) and value = 40.
+ *
+ * Step data: { frames: [{fn, vars: [{name, value, role}], active}] }
+ *   - `frames` is ordered bottom-to-top: frames[0] is `main`, the last element
+ *     is the currently-running (top) frame. Rendered newest-on-top and
+ *     top-aligned within the panel's bounded grid cell, so the running frame is
+ *     always visible and the pane scrolls internally if the stack outgrows the
+ *     cell — the layout never reflows (AUTHORING.md "Stable layout").
+ *   - `active: true` marks the running frame (emphasized); the rest are greyed.
+ *   - a var's `role: 'active'` paints the blue activity fill — a local changing
+ *     THIS step, the same colour rule as nodes/cells. `role: 'done'` greys a
+ *     finished local (e.g. the loop `i` after the loop) so it stays visible in
+ *     the frame until the function returns rather than vanishing mid-frame.
+ *   - the data model tolerates a future per-var `kind: 'copy'|'reference'` for
+ *     pass-by-value vs. pass-by-reference animations; not rendered yet (deferred
+ *     per AUTHORING.md "CALLSTACK panel"). */
+
+function mount(body) { body.innerHTML = '<div class="pac-callstack"></div>'; }
+
+function render(body, data) {
+  const wrap = body.querySelector('.pac-callstack');
+  wrap.innerHTML = '';
+  const frames = data?.frames ?? [];
+
+  // Newest on top: walk from the top of the stack (end of the array) down to
+  // `main` (index 0), so the DOM order is newest → main.
+  for (let k = frames.length - 1; k >= 0; k--) {
+    const f = frames[k];
+    const frame = document.createElement('div');
+    frame.className = 'pac-frame';
+    frame.dataset.active = String(!!f.active);
+
+    const vars = (f.vars ?? []).map(v =>
+      `<div class="pac-frame-var"${v.role ? ` data-role="${esc(v.role)}"` : ''}>` +
+        `<span class="pac-frame-var-name">${esc(v.name)}</span>` +
+        `<span class="pac-frame-var-val">${esc(v.value)}</span>` +
+      `</div>`
+    ).join('');
+
+    frame.innerHTML =
+      `<div class="pac-frame-fn">${esc(f.fn)}</div>` +
+      `<div class="pac-frame-vars">${vars || '<div class="pac-frame-empty">no locals</div>'}</div>`;
+    wrap.appendChild(frame);
+  }
+}
+
+const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+ return { mount, render }; })();
 const { Overlay } = (() => { /* Arrow overlay — the piece cpoint1.html faked with four hand-tuned Beziers
  * and four colliding `arrowhead2` marker ids. Change a font size there and the
  * arrows pointed at nothing.
@@ -753,9 +935,10 @@ function port(box, tx, ty) {
 
 
 
+
 const RENDERERS = {
   code: codePanel, cells: cellsPanel, nodes: nodesPanel,
-  stream: streamPanel, chart: chartPanel,
+  stream: streamPanel, chart: chartPanel, callstack: callstackPanel,
 };
 
 const MAX_STEPS = 5000;
@@ -900,6 +1083,10 @@ class Engine {
       const el = document.createElement('section');
       el.className = 'pac-panel';
       el.dataset.type = p.type;          // lets CSS give accumulating panels (STREAM) a stable, scrolling cell
+      // A panel holding very little content (a two-value count/capacity strip)
+      // opts out of stretching to fill its tall grid cell: `compact: true` makes
+      // it top-align and size to content. See AUTHORING.md "Stable layout".
+      if (p.compact) el.dataset.compact = '';
       el.innerHTML = `<div class="pac-panel-head"><span>${p.title ?? p.type}</span>
                         <span class="pac-panel-tools"></span></div>
                       <div class="pac-panel-body"></div>`;
@@ -949,7 +1136,11 @@ class Engine {
       // a null/absent line means "highlight nothing" (intro, note, final).
       // `dangerLine` rides alongside: when set, the highlighted line is tinted
       // red instead of blue -- the code itself is the memory-integrity culprit.
-      if (p.spec.type === 'code') data = { ...data, line: step.line, dangerLine: step.dangerLine };
+      // `parked` also rides alongside: the call-site line of every caller still
+      // on the stack, dimmed so the student keeps sight of where the call came
+      // from (AUTHORING.md "Line highlight -- active line vs. parked caller
+      // lines"). Bright = running now, dim = suspended.
+      if (p.spec.type === 'code') data = { ...data, line: step.line, dangerLine: step.dangerLine, parked: step.parked };
       p.ctx.anchors.clear();
       p.renderer.render(p.el.querySelector('.pac-panel-body'),
                         data, p.ctx, { lang: this.lang, step });

@@ -31,6 +31,24 @@
   --radius:        6px;
   --gap:           14px;
   --mono:          "SF Mono", "Cascadia Code", Consolas, monospace;
+
+  /* ---- stable layout (see AUTHORING.md "Stable layout") ----
+   * The stage (panel grid) is BOUNDED: it never grows past --stage-max-h no
+   * matter how much content a panel holds. Panels scroll internally within
+   * their grid cell; the controls, narration bar, and note box are pinned
+   * below the stage and stay on screen at any viewport height.
+   *
+   * The bound is derived, not hardcoded to a resolution: start from "~15 code
+   * lines visible" and the current 2-row grid, and tune these values. The code
+   * panel occupies one grid row, so making a row tall enough for ~15 code lines
+   * fixes the whole stage height. All values below are tunable.
+   * Design target: a 1920x1080 window at 100%. */
+  --code-line-h:   20.6px;   /* code font-size 12.5px x line-height 1.65 */
+  --code-lines:    15;       /* code lines visible before the panel scrolls */
+  --panel-chrome:  54px;     /* a panel's header + body padding (non-content) */
+  --stage-rows:    2;        /* grid rows in the current animations (2x2) */
+  --stage-row-h:   calc(var(--code-lines) * var(--code-line-h) + var(--panel-chrome));
+  --stage-max-h:   calc(var(--stage-rows) * var(--stage-row-h) + (var(--stage-rows) - 1) * var(--gap));
 }
 
 * { box-sizing: border-box; }
@@ -42,20 +60,51 @@ body {
   font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
-.pac-root { padding: var(--gap); max-width: 1200px; margin: 0 auto; }
+/* The whole animation is a full-viewport flex column: the stage flexes to fill
+ * the space that is left after the pinned chrome (title, controls, narration,
+ * note), and the stage — never the page — is what shrinks on a short viewport.
+ * This is the safety net that keeps the note on screen at any viewport height. */
+.pac-root {
+  padding: var(--gap);
+  max-width: 1200px;
+  margin: 0 auto;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow: hidden;            /* the page itself never scrolls; panels do */
+}
+/* Everything except the stage keeps its natural height and is always visible;
+ * only the stage (below) flexes and yields space on a short viewport. */
+.pac-root > *:not(.pac-stage) { flex: 0 0 auto; }
 
 .pac-title { font-size: 17px; font-weight: 600; margin: 0 0 4px; }
 .pac-sub   { color: var(--text-dim); font-size: 13px; margin: 0 0 var(--gap); }
 
-/* ---- layout ---- */
+/* ---- layout: the bounded stage ----
+ * A grid of panels, bounded to --stage-max-h so it never grows the page. It
+ * flexes to fill the space above the pinned chrome but is capped at the bound,
+ * and its rows share the height equally (minmax(0,1fr) lets them shrink so each
+ * panel scrolls internally instead of overflowing). See AUTHORING.md. */
 .pac-stage {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
   gap: var(--gap);
   position: relative;          /* anchor origin for the arrow overlay */
+  flex: 1 1 auto;
+  min-height: 0;               /* allow the grid to shrink below content size */
+  max-height: var(--stage-max-h);
+  overflow: hidden;            /* the bound is hard; panels scroll, not the stage */
 }
 .pac-stage[data-cols="1"] { grid-template-columns: 1fr; }
 .pac-stage[data-cols="2"] { grid-template-columns: 1fr 1fr; }
+
+/* A panel that holds very little (e.g. a two-value count/capacity strip) opts
+ * out of stretching to fill its tall grid cell: it top-aligns and sizes to its
+ * content, so it reads as a compact strip rather than a tall box with a void.
+ * See AUTHORING.md "Panels fill their grid cells; don't oversize a cell". */
+.pac-panel[data-compact] { align-self: start; max-height: 100%; }
 
 /* ---- panel chrome ---- */
 .pac-panel {
@@ -186,18 +235,12 @@ body {
 .pac-code-num { color: var(--text-dim); width: 2.2em; text-align: right; margin-right: 12px; user-select: none; }
 
 /* ---- STREAM panel ---- */
-/* Stable layout: the STREAM panel accumulates output as steps advance. It must
- * occupy its grid cell at a FIXED size and scroll internally (stream.js
- * auto-scrolls to the newest line) rather than growing the page and pushing the
- * controls/narration/note down. Nothing below the stage moves as steps advance.
- * See AUTHORING.md "Stable layout". The height is fixed (not max-height) so the
- * cell is the same size on step 0 as at the end. Any other accumulating panel
- * type gets the same treatment. */
-.pac-panel[data-type="stream"] .pac-panel-body {
-  height: var(--stream-h, 320px);
-  flex: none;
-  overflow-y: auto;
-}
+/* Stable layout: the STREAM panel accumulates output as steps advance. The
+ * bounded stage gives it a fixed grid cell, so it scrolls internally (stream.js
+ * auto-scrolls to the newest line at the bottom) rather than growing the page
+ * and pushing the controls/narration/note down. The default panel body already
+ * does flex:1 + overflow:auto; nothing extra is needed. See AUTHORING.md
+ * "Stable layout". Any other accumulating panel type gets the same treatment. */
 .pac-stream { font-family: var(--mono); font-size: 12.5px; line-height: 1.7; }
 .pac-stream-line { white-space: pre; }
 .pac-stream-line.dir-in   { color: var(--warn); }
@@ -228,21 +271,16 @@ body {
 
 /* ---- CALLSTACK panel ----
  * A debugger's locals/stack pane. Frames push on call / pop on return; the top
- * (running) frame is emphasized, callers below are greyed but present, and `main`
- * sits at the bottom. Stable layout: the pane can grow a frame as calls nest, so
- * its cell holds a FIXED height and the content is pinned to the bottom (main
- * never moves) and scrolls internally if it ever overflows -- nothing below the
- * stage shifts. See AUTHORING.md "CALLSTACK panel" and "Stable layout". */
-.pac-panel[data-type="callstack"] .pac-panel-body {
-  height: var(--callstack-h, 300px);
-  flex: none;
-  overflow-y: auto;
-}
+ * (running) frame is emphasized and rendered first (newest on top), callers
+ * below are greyed but present, and `main` is the last (bottom) frame. Stable
+ * layout: the bounded stage gives the pane a fixed grid cell, so frames
+ * top-align within it and the pane scrolls internally if the stack ever grows
+ * past the cell -- the running frame stays visible at the top and nothing below
+ * the stage shifts. See AUTHORING.md "CALLSTACK panel" and "Stable layout". */
 .pac-callstack {
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;      /* main pinned to the bottom; stack grows up */
-  min-height: 100%;
+  justify-content: flex-start;    /* frames top-align; no empty void above them */
   gap: 6px;
 }
 .pac-frame {
@@ -389,6 +427,19 @@ function render(body, data, ctx, { lang }) {
     return `<div class="pac-code-line${cls}">` +
            `<span class="pac-code-num">${n}</span><span>${esc(src)}</span></div>`;
   }).join('');
+
+  // Stable layout: the CODE panel shows ~12–15 lines and scrolls internally, so
+  // the active line must be scrolled into view as it moves (a jump into a
+  // function body far down the listing would otherwise sit off-screen). Scroll
+  // only THIS panel body (the overflow:auto container), never the page — centre
+  // the active line in the visible area. See AUTHORING.md "Stable layout".
+  const activeEl = body.querySelector('.pac-code-line.is-active');
+  if (activeEl) {
+    const bodyRect = body.getBoundingClientRect();
+    const lineRect = activeEl.getBoundingClientRect();
+    const delta = (lineRect.top - bodyRect.top) - (body.clientHeight - lineRect.height) / 2;
+    body.scrollTop += delta;
+  }
 }
 
 const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
@@ -645,9 +696,10 @@ const callstackPanel = (() => { /* CALLSTACK panel — a debugger's locals/stack
  *
  * Step data: { frames: [{fn, vars: [{name, value, role}], active}] }
  *   - `frames` is ordered bottom-to-top: frames[0] is `main`, the last element
- *     is the currently-running (top) frame. Rendered newest-on-top, and pinned
- *     to the bottom of the (fixed-height) cell so `main` never moves and the
- *     layout never reflows (AUTHORING.md "Stable layout").
+ *     is the currently-running (top) frame. Rendered newest-on-top and
+ *     top-aligned within the panel's bounded grid cell, so the running frame is
+ *     always visible and the pane scrolls internally if the stack outgrows the
+ *     cell — the layout never reflows (AUTHORING.md "Stable layout").
  *   - `active: true` marks the running frame (emphasized); the rest are greyed.
  *   - a var's `role: 'active'` paints the blue activity fill — a local changing
  *     THIS step, the same colour rule as nodes/cells. `role: 'done'` greys a
@@ -1031,6 +1083,10 @@ class Engine {
       const el = document.createElement('section');
       el.className = 'pac-panel';
       el.dataset.type = p.type;          // lets CSS give accumulating panels (STREAM) a stable, scrolling cell
+      // A panel holding very little content (a two-value count/capacity strip)
+      // opts out of stretching to fill its tall grid cell: `compact: true` makes
+      // it top-align and size to content. See AUTHORING.md "Stable layout".
+      if (p.compact) el.dataset.compact = '';
       el.innerHTML = `<div class="pac-panel-head"><span>${p.title ?? p.type}</span>
                         <span class="pac-panel-tools"></span></div>
                       <div class="pac-panel-body"></div>`;
@@ -1738,7 +1794,7 @@ const SPEC = {
       listings: LISTINGS, labels: { pseudo: 'pseudocode', java: 'Java', cpp: 'C++' } },
     { type: 'cells',     id: 'cells', title: 'The array' },
     { type: 'callstack', id: 'stack', title: 'Call stack' },
-    { type: 'cells',     id: 'size',  title: 'count / capacity' },
+    { type: 'cells',     id: 'size',  title: 'count / capacity', compact: true },
   ],
 
   initialTrace: 'correct',
