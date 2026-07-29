@@ -697,3 +697,37 @@ animation's own unit. Do not use "step" for anything else. For indentation say
 "spaces" or "indent level"; for lines of code say "line"; for stages of an
 algorithm say "stage" or name the operation. Saying "indented 0 steps" collides
 with the execution-step meaning and confuses the student.
+
+---
+
+## ds course — source framing (use the instructor's own words)
+
+The ds animations back a course with detailed lecture notes; narration and notes
+should echo the instructor's actual framing, not paraphrase it. Key recurring
+framings to reuse:
+
+**Array-based lists (A1):**
+- The invariant is **contiguity — no holes**. Every operation preserves it. This
+  is the point of the whole assignment: an insert that would leave a gap (insert
+  at index 7 when count is 5) is invalid precisely because it breaks contiguity.
+- **ADD is INSERT at index = count** — not a separate operation. The instructor
+  explicitly requires ADD to call INSERT. Show ADD as "insert at the end," which
+  needs no shift because nothing follows.
+- **"Make room before you write, or you overwrite."** The shift exists to open a
+  slot; writing before shifting clobbers data. Frame the shift as overwrite-
+  avoidance, not just "move elements."
+- **"Update the count!"** — the most-forgotten step. Show count change explicitly
+  on every operation.
+- Range/border checking is the core misconception: "can you insert at index 6?
+  index 7?" Show an invalid insert and the holes it would create.
+
+**Linked lists (later animations) — the instructor's two "golden rules" of
+pointer manipulation, to echo verbatim in narration:**
+1. "First overwrite pointers where you could do the least damage — nil pointers."
+2. "If you want to point to some node and you're not sure how, find a pointer
+   already pointing to it and copy it."
+
+**The array→list motivation** (payoff note bridging A1 to linked lists): a linked
+list is "a dynamic analog to a static array"; the shift cost of array insert/
+delete is "the price we pay" for the array's simplicity, and it is why linked
+lists exist. Use this to end the array-list animation and set up the linked ones.
