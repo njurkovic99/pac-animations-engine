@@ -662,3 +662,38 @@ counter ONLY when the count is itself the lesson (e.g. a sorting race counting
 statements vs. swaps), and then label it in plain student-facing words
 ("statements", "swaps"), never the raw tag. An insertion, a traversal, a single
 algorithm walk-through shows no counter.
+
+---
+
+## Stable layout — the page never reflows as steps advance
+
+Everything below the stage — the controls (Back / Next / Play / Reset), the
+narration bar, the note box — holds a **fixed position** through the whole
+animation. The student's pointer is over "Next Step"; that button must not move
+when they click it.
+
+Therefore any panel whose content **accumulates** (STREAM output, a growing log,
+a filling call tree) must NOT expand and push the layout down. Instead:
+
+- The panel occupies its **grid cell at a stable size** and **scrolls internally**
+  when content exceeds it, auto-scrolling to the newest content so the latest line
+  is always visible.
+- The panel never grows the page. Nothing below the stage ever shifts.
+
+This applies to every accumulating panel, not just STREAM. If a panel can grow
+step-to-step, it scrolls within its cell rather than resizing.
+
+## Node sizing — fit content, never clip
+
+A node box sizes to fit its content: the label plus any `meta` lines (e.g.
+`level 3` / `depth 2`). Text must never be clipped by a too-small box. Either the
+box grows to fit its meta lines, or meta text is constrained to fit — but nothing
+overflows or gets cut off. Applies to all NODES templates (plain, record, class).
+
+## Reserved word — "step"
+
+In student-facing text, **"step" means one Next-click / one execution** — the
+animation's own unit. Do not use "step" for anything else. For indentation say
+"spaces" or "indent level"; for lines of code say "line"; for stages of an
+algorithm say "stage" or name the operation. Saying "indented 0 steps" collides
+with the execution-step meaning and confuses the student.
