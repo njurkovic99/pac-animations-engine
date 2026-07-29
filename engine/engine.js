@@ -12,16 +12,17 @@
  *  - Exactly one setInterval, cleared in exactly one place.
  */
 
-import * as codePanel   from './panels/code.js';
-import * as cellsPanel  from './panels/cells.js';
-import * as nodesPanel  from './panels/nodes.js';
-import * as streamPanel from './panels/stream.js';
-import * as chartPanel  from './panels/chart.js';
-import { Overlay }      from './overlay/arrows.js';
+import * as codePanel      from './panels/code.js';
+import * as cellsPanel     from './panels/cells.js';
+import * as nodesPanel     from './panels/nodes.js';
+import * as streamPanel    from './panels/stream.js';
+import * as chartPanel     from './panels/chart.js';
+import * as callstackPanel from './panels/callstack.js';
+import { Overlay }         from './overlay/arrows.js';
 
 const RENDERERS = {
   code: codePanel, cells: cellsPanel, nodes: nodesPanel,
-  stream: streamPanel, chart: chartPanel,
+  stream: streamPanel, chart: chartPanel, callstack: callstackPanel,
 };
 
 const MAX_STEPS = 5000;
