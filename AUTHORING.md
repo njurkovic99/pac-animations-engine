@@ -731,3 +731,44 @@ pointer manipulation, to echo verbatim in narration:**
 list is "a dynamic analog to a static array"; the shift cost of array insert/
 delete is "the price we pay" for the array's simplicity, and it is why linked
 lists exist. Use this to end the array-list animation and set up the linked ones.
+
+---
+
+## CALLSTACK panel — showing function calls and parameter binding
+
+When an animation steps *into* a function, the student must see what that function
+was called with. Definitions alone (`INSERT(index, value)`) don't reveal the
+bound values on this call — that's a comprehension hole. The CALLSTACK panel is a
+debugger-style locals/stack pane that fixes it.
+
+**Model (debugger-faithful):**
+- A vertical stack of **frames**, newest on top, most-recent emphasized; caller
+  frames below are greyed but visible. `main` is the bottom frame — the driver
+  that calls the operations.
+- Each frame shows the **function name**, its **bound parameters** (with values),
+  and its **active locals** (loop variables, etc.).
+- **Push on call:** calling a function adds its frame on top, already showing the
+  bound argument values — e.g. `ADD` calling `INSERT(count, value)` pushes an
+  INSERT frame showing `index = 3` (count's value) and `value = 40`. This is how
+  the ADD-is-INSERT lesson becomes visible: the student sees count's value bind to
+  index.
+- **Pop on return:** finishing a function removes its frame; control returns to
+  the caller's frame below.
+- A local that finishes (e.g. loop `i` after the loop) **stays greyed** in the
+  frame until the function returns — it doesn't vanish mid-frame.
+- The **active local** gets the blue activity fill (same color rule as nodes/
+  cells) on the step it changes.
+
+**Author it whenever an animation steps into a function** — which is most of the
+code-tracing animations, and it is *the whole point* of several beginner-course
+animations (functions-call-return, value-vs-reference, recursion). Show `main` as
+the driver so calls have a visible origin.
+
+**Deferred (not now):** animated argument→parameter *flow* (a value visibly moving
+from caller into callee) is polish; ship "frame appears with bound values" first.
+And pass-by-value vs. pass-by-reference (a parameter that is a *copy* vs. an
+*alias* of the caller's variable) is a later capability for the C++/Java courses —
+the data model allows it, but don't build it until those animations need it.
+
+The step's `line` highlight and the CALLSTACK stay in sync: when the highlight
+enters a function's body, that function's frame is the active (top) one.
