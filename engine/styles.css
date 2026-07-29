@@ -172,6 +172,13 @@ body {
 .pac-code-line { display: flex; padding: 0 4px; border-radius: 3px; white-space: pre; }
 .pac-code-line.is-active { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
 .pac-code-line.is-active.is-danger { background: rgba(226, 86, 74, 0.16); box-shadow: inset 2px 0 0 var(--error); color: var(--error); }
+/* Parked caller line: the call site of a caller still on the stack, suspended
+ * while the callee runs. The same highlight as the active line, greyed with the
+ * SAME opacity token the CALLSTACK uses for its inactive (caller) frames -- not a
+ * new colour. One visual language across both panels: bright = running now, dim
+ * = suspended, waiting to resume. See AUTHORING.md "Line highlight — active line
+ * vs. parked caller lines". */
+.pac-code-line.is-parked { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); opacity: .5; }
 .pac-code-num { color: var(--text-dim); width: 2.2em; text-align: right; margin-right: 12px; user-select: none; }
 
 /* ---- STREAM panel ---- */
@@ -214,6 +221,64 @@ body {
   display: flex; justify-content: space-between; text-align: left; min-width: 0;
 }
 .pac-cells[data-render="row"] .pac-cell-label { display: inline; }
+
+/* ---- CALLSTACK panel ----
+ * A debugger's locals/stack pane. Frames push on call / pop on return; the top
+ * (running) frame is emphasized, callers below are greyed but present, and `main`
+ * sits at the bottom. Stable layout: the pane can grow a frame as calls nest, so
+ * its cell holds a FIXED height and the content is pinned to the bottom (main
+ * never moves) and scrolls internally if it ever overflows -- nothing below the
+ * stage shifts. See AUTHORING.md "CALLSTACK panel" and "Stable layout". */
+.pac-panel[data-type="callstack"] .pac-panel-body {
+  height: var(--callstack-h, 300px);
+  flex: none;
+  overflow-y: auto;
+}
+.pac-callstack {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;      /* main pinned to the bottom; stack grows up */
+  min-height: 100%;
+  gap: 6px;
+}
+.pac-frame {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  padding: 6px 9px;
+  opacity: .5;                    /* caller frames are greyed but present */
+  transition: opacity .15s, border-color .15s;
+}
+/* The running (top) frame: full opacity + a blue outline, so "where are we
+ * executing" reads at a glance and matches the highlighted code line. */
+.pac-frame[data-active="true"] {
+  opacity: 1;
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent-soft);
+}
+.pac-frame-fn {
+  font-family: var(--mono); font-size: 12.5px; font-weight: 600;
+  color: var(--text); margin-bottom: 5px;
+}
+.pac-frame-vars { display: flex; flex-direction: column; gap: 3px; }
+.pac-frame-var {
+  display: flex; justify-content: space-between; gap: 14px;
+  font-family: var(--mono); font-size: 12px;
+  padding: 2px 6px; border-radius: 3px;
+  border: 1px solid transparent;
+}
+.pac-frame-var-name { color: var(--text-dim); }
+.pac-frame-var-val  { color: var(--text); }
+/* Activity channel (FILL) -- a local changing THIS step gets the blue fill, the
+ * same rule as nodes/cells. */
+.pac-frame-var[data-role="active"] {
+  background: var(--accent-soft); border-color: var(--accent);
+}
+.pac-frame-var[data-role="active"] .pac-frame-var-name { color: var(--text); }
+/* A finished local (e.g. loop i after the loop) stays visible but greyed until
+ * the function returns -- it does not vanish mid-frame. */
+.pac-frame-var[data-role="done"] { opacity: .45; }
+.pac-frame-empty { color: var(--text-dim); font-family: var(--mono); font-size: 11.5px; opacity: .6; }
 
 /* ---- NODES panel ---- */
 .pac-nodes { width: 100%; display: block; }

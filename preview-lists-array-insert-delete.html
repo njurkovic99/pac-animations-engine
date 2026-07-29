@@ -1,0 +1,1751 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lists-array-insert-delete — preview</title>
+<style>/* pac-animations — design system
+   15 tokens replacing the 188 distinct color values found across the
+   original 25 animation files. */
+
+:root {
+  /* surfaces */
+  --bg:            #0f1117;
+  --panel:         #171a23;
+  --panel-header:  #1e222d;
+  --border:        #2b3040;
+
+  /* text */
+  --text:          #d8dce6;
+  --text-dim:      #8b93a7;
+
+  /* accents — one blue, not four */
+  --accent:        #4a90e2;
+  --accent-soft:   rgba(74, 144, 226, 0.18);
+
+  /* semantic state */
+  --ok:            #4caf82;
+  --warn:          #e0a33a;
+  --error:         #e2564a;
+  --highlight:     #d4a13c;
+
+  /* structural */
+  --radius:        6px;
+  --gap:           14px;
+  --mono:          "SF Mono", "Cascadia Code", Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.pac-root { padding: var(--gap); max-width: 1200px; margin: 0 auto; }
+
+.pac-title { font-size: 17px; font-weight: 600; margin: 0 0 4px; }
+.pac-sub   { color: var(--text-dim); font-size: 13px; margin: 0 0 var(--gap); }
+
+/* ---- layout ---- */
+.pac-stage {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--gap);
+  position: relative;          /* anchor origin for the arrow overlay */
+}
+.pac-stage[data-cols="1"] { grid-template-columns: 1fr; }
+.pac-stage[data-cols="2"] { grid-template-columns: 1fr 1fr; }
+
+/* ---- panel chrome ---- */
+.pac-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.pac-panel-head {
+  background: var(--panel-header);
+  padding: 7px 11px;
+  font-size: 12px;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.pac-panel-body { padding: 11px; overflow: auto; flex: 1; min-height: 0; }
+
+/* ---- controls ---- */
+.pac-controls {
+  display: flex; gap: 8px; align-items: center;
+  margin: var(--gap) 0; flex-wrap: wrap;
+}
+.pac-btn {
+  background: var(--panel-header);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 7px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.pac-btn:hover:not(:disabled) { border-color: var(--accent); }
+.pac-btn:disabled { opacity: .38; cursor: default; }
+.pac-btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.pac-progress { color: var(--text-dim); font-size: 12px; margin-left: auto; }
+
+.pac-narrate {
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 12px 14px 12px 16px;
+  margin-top: var(--gap);
+  min-height: 42px;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.55;
+}
+/* A brief in-scheme pulse when the step changes, so a new explanation
+ * actively pulls the eye instead of being missed. Retriggered per step
+ * by the engine (see render()). */
+@keyframes pac-narrate-flash {
+  0%   { background: var(--accent-soft); box-shadow: 0 0 0 0 rgba(74, 144, 226, 0); }
+  18%  { background: rgba(74, 144, 226, 0.34); box-shadow: 0 0 0 3px var(--accent-soft); }
+  100% { background: var(--accent-soft); box-shadow: 0 0 0 0 rgba(74, 144, 226, 0); }
+}
+.pac-narrate-flash { animation: pac-narrate-flash 0.55s ease-out; }
+
+/* ---- teaching-note box ----
+ * Non-execution commentary (setup, common-mistake asides, post-watch
+ * challenge). A note attaches to a step and shows only while that step is
+ * current; on steps without one the box collapses to nothing (below) so the
+ * layout reflows. Amber-keyed so it reads as an aside, distinct from the blue
+ * narration bar. See AUTHORING.md "Steps vs. notes". */
+.pac-note {
+  background: rgba(212, 161, 60, 0.10);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--highlight);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  margin-top: 8px;
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.pac-note::before {
+  content: "note";
+  display: block;
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--highlight);
+  margin-bottom: 3px;
+}
+/* Collapsed: takes no space at all on steps that carry no note. */
+.pac-note-empty { display: none; }
+@keyframes pac-note-flash {
+  0%   { background: rgba(212, 161, 60, 0.10); box-shadow: 0 0 0 0 rgba(212, 161, 60, 0); }
+  18%  { background: rgba(212, 161, 60, 0.26); box-shadow: 0 0 0 3px rgba(212, 161, 60, 0.16); }
+  100% { background: rgba(212, 161, 60, 0.10); box-shadow: 0 0 0 0 rgba(212, 161, 60, 0); }
+}
+.pac-note-flash { animation: pac-note-flash 0.55s ease-out; }
+
+/* ---- memory-danger marker ----
+ * A red warning triangle (⚠) + --error on any narration or note segment that
+ * names a memory-integrity violation. Project-wide, cross-course convention.
+ * See AUTHORING.md "Memory-danger marker". */
+.pac-danger { color: var(--error); font-weight: 600; }
+
+/* ---- CODE panel ---- */
+.pac-lang-tabs { display: flex; gap: 4px; }
+.pac-lang-tab {
+  background: none; border: 1px solid transparent; color: var(--text-dim);
+  font-size: 11px; padding: 2px 8px; border-radius: 4px; cursor: pointer;
+}
+.pac-lang-tab[aria-selected="true"] {
+  color: var(--text); border-color: var(--border); background: var(--panel);
+}
+.pac-code { font-family: var(--mono); font-size: 12.5px; line-height: 1.65; }
+.pac-code-line { display: flex; padding: 0 4px; border-radius: 3px; white-space: pre; }
+.pac-code-line.is-active { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+.pac-code-line.is-active.is-danger { background: rgba(226, 86, 74, 0.16); box-shadow: inset 2px 0 0 var(--error); color: var(--error); }
+/* Parked caller line: the call site of a caller still on the stack, suspended
+ * while the callee runs. The same highlight as the active line, greyed with the
+ * SAME opacity token the CALLSTACK uses for its inactive (caller) frames -- not a
+ * new colour. One visual language across both panels: bright = running now, dim
+ * = suspended, waiting to resume. See AUTHORING.md "Line highlight — active line
+ * vs. parked caller lines". */
+.pac-code-line.is-parked { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); opacity: .5; }
+.pac-code-num { color: var(--text-dim); width: 2.2em; text-align: right; margin-right: 12px; user-select: none; }
+
+/* ---- STREAM panel ---- */
+/* Stable layout: the STREAM panel accumulates output as steps advance. It must
+ * occupy its grid cell at a FIXED size and scroll internally (stream.js
+ * auto-scrolls to the newest line) rather than growing the page and pushing the
+ * controls/narration/note down. Nothing below the stage moves as steps advance.
+ * See AUTHORING.md "Stable layout". The height is fixed (not max-height) so the
+ * cell is the same size on step 0 as at the end. Any other accumulating panel
+ * type gets the same treatment. */
+.pac-panel[data-type="stream"] .pac-panel-body {
+  height: var(--stream-h, 320px);
+  flex: none;
+  overflow-y: auto;
+}
+.pac-stream { font-family: var(--mono); font-size: 12.5px; line-height: 1.7; }
+.pac-stream-line { white-space: pre; }
+.pac-stream-line.dir-in   { color: var(--warn); }
+.pac-stream-line.dir-out  { color: var(--text); }
+.pac-stream-line.is-new   { background: var(--accent-soft); border-radius: 3px; }
+.pac-stream-cursor { color: var(--accent); animation: pac-blink 1s steps(2) infinite; }
+@keyframes pac-blink { 50% { opacity: 0; } }
+
+/* ---- CELLS panel ---- */
+.pac-cells { display: flex; flex-wrap: wrap; gap: 6px; }
+.pac-cells[data-render="row"] { flex-direction: column; gap: 3px; }
+.pac-cell {
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 5px 9px; font-family: var(--mono); font-size: 12.5px;
+  min-width: 40px; text-align: center; background: var(--bg);
+}
+.pac-cell-label { display: block; font-size: 10px; color: var(--text-dim); }
+.pac-cell[data-role="active"]   { border-color: var(--accent); background: var(--accent-soft); }
+.pac-cell[data-role="compared"] { border-color: var(--highlight); }
+.pac-cell[data-role="ok"]       { border-color: var(--ok); }
+.pac-cell[data-role="error"]    { border-color: var(--error); color: var(--error); }
+.pac-cell[data-role="empty"]    { opacity: .35; }
+
+.pac-cells[data-render="row"] .pac-cell {
+  display: flex; justify-content: space-between; text-align: left; min-width: 0;
+}
+.pac-cells[data-render="row"] .pac-cell-label { display: inline; }
+
+/* ---- CALLSTACK panel ----
+ * A debugger's locals/stack pane. Frames push on call / pop on return; the top
+ * (running) frame is emphasized, callers below are greyed but present, and `main`
+ * sits at the bottom. Stable layout: the pane can grow a frame as calls nest, so
+ * its cell holds a FIXED height and the content is pinned to the bottom (main
+ * never moves) and scrolls internally if it ever overflows -- nothing below the
+ * stage shifts. See AUTHORING.md "CALLSTACK panel" and "Stable layout". */
+.pac-panel[data-type="callstack"] .pac-panel-body {
+  height: var(--callstack-h, 300px);
+  flex: none;
+  overflow-y: auto;
+}
+.pac-callstack {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;      /* main pinned to the bottom; stack grows up */
+  min-height: 100%;
+  gap: 6px;
+}
+.pac-frame {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  padding: 6px 9px;
+  opacity: .5;                    /* caller frames are greyed but present */
+  transition: opacity .15s, border-color .15s;
+}
+/* The running (top) frame: full opacity + a blue outline, so "where are we
+ * executing" reads at a glance and matches the highlighted code line. */
+.pac-frame[data-active="true"] {
+  opacity: 1;
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent-soft);
+}
+.pac-frame-fn {
+  font-family: var(--mono); font-size: 12.5px; font-weight: 600;
+  color: var(--text); margin-bottom: 5px;
+}
+.pac-frame-vars { display: flex; flex-direction: column; gap: 3px; }
+.pac-frame-var {
+  display: flex; justify-content: space-between; gap: 14px;
+  font-family: var(--mono); font-size: 12px;
+  padding: 2px 6px; border-radius: 3px;
+  border: 1px solid transparent;
+}
+.pac-frame-var-name { color: var(--text-dim); }
+.pac-frame-var-val  { color: var(--text); }
+/* Activity channel (FILL) -- a local changing THIS step gets the blue fill, the
+ * same rule as nodes/cells. */
+.pac-frame-var[data-role="active"] {
+  background: var(--accent-soft); border-color: var(--accent);
+}
+.pac-frame-var[data-role="active"] .pac-frame-var-name { color: var(--text); }
+/* A finished local (e.g. loop i after the loop) stays visible but greyed until
+ * the function returns -- it does not vanish mid-frame. */
+.pac-frame-var[data-role="done"] { opacity: .45; }
+.pac-frame-empty { color: var(--text-dim); font-family: var(--mono); font-size: 11.5px; opacity: .6; }
+
+/* ---- NODES panel ---- */
+.pac-nodes { width: 100%; display: block; }
+.pac-node-box {
+  fill: var(--bg); stroke: var(--border); stroke-width: 1;
+  transition: fill .15s, stroke .15s;
+}
+.pac-node[data-state="pending"]  { opacity: .18; }
+.pac-node[data-state="entering"] .pac-node-box { stroke: var(--accent); fill: var(--accent-soft); }
+.pac-node[data-state="active"]   .pac-node-box { stroke: var(--accent); fill: var(--accent-soft); }
+.pac-node[data-state="exited"]   .pac-node-box { stroke: var(--ok); }
+/* Unlinked: allocated and held by a pointer but not yet a member of the
+ * structure (a doubly linked node whose neighbours don't yet point back). An
+ * amber OUTLINE only -- border, no background fill -- so it reads as clearly
+ * present yet visibly not settled, and distinct from the dimmed `pending`
+ * traversal state. It takes the normal outline once the insertion is complete.
+ * See AUTHORING.md "Node membership state". */
+.pac-node[data-state="unlinked"] .pac-node-box { stroke: var(--warn); fill: none; stroke-width: 1.5; }
+/* Settled member of a structure: green OUTLINE, no fill -- leaving the fill
+ * channel free for the activity signal below. Distinct from the tree's
+ * `exited`, which shares the green but means "traversal done". */
+.pac-node[data-state="member"]   .pac-node-box { stroke: var(--ok); }
+
+/* Activity channel (FILL) -- the second, INDEPENDENT node color channel (see
+ * AUTHORING.md "Node color channels"). A truthy `active` on a node means "this
+ * node is being modified on THIS step": paint a blue interior, orthogonal to
+ * the membership/traversal OUTLINE above. Declared last so it wins the `fill`
+ * property on equal specificity -- an amber `unlinked` node (fill:none) or a
+ * green `member` therefore also shows a blue activity fill in the same step
+ * (amber-outline + blue-fill, or green-outline + blue-fill). */
+.pac-node[data-active="true"]    .pac-node-box { fill: var(--accent-soft); }
+.pac-node-label { fill: var(--text); font-family: var(--mono); font-size: 12px; text-anchor: middle; }
+.pac-node-meta  { fill: var(--text-dim); font-family: var(--mono); font-size: 9.5px; text-anchor: middle; }
+.pac-node[data-state="pending"] .pac-node-label { fill: var(--text-dim); }
+.pac-edge { stroke: var(--border); stroke-width: 1.2; fill: none; }
+.pac-edge[data-state="taken"] { stroke: var(--accent); }
+
+/* ---- CHART panel ---- */
+.pac-chart-axis { stroke: var(--border); }
+.pac-chart-tick { fill: var(--text-dim); font-size: 9px; }
+.pac-chart-series { fill: none; stroke-width: 1.8; }
+
+/* ---- arrow overlay ---- */
+.pac-overlay { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+.pac-arrow { stroke: var(--accent); stroke-width: 1.6; fill: none; }
+.pac-arrow[data-style="stale"] { stroke: var(--error); stroke-dasharray: 4 3; }
+
+/* ---- metrics ---- */
+.pac-metrics { display: flex; gap: 16px; font-size: 12px; color: var(--text-dim); }
+.pac-metrics b { color: var(--text); font-weight: 600; font-family: var(--mono); }
+
+/* ---- beginner profile: enforced, not advisory ---- */
+.pac-root[data-profile="beginner"] .pac-addresses { display: none; }
+</style></head>
+<body><div id="pac"></div>
+<script type="module">
+const codePanel = (() => { /* CODE panel — listings with per-language variants.
+ *
+ * Step data: { line: 7 }  or  { line: {pseudo: 5, java: 7, cpp: 7} }
+ *
+ * Because each trace addresses its OWN listing's line numbers, the listings
+ * never need to stay line-aligned with each other. That constraint would have
+ * been unmaintainable across ~64 files and five years. */
+
+function mount(body, spec, ctx, tools) {
+  spec._langs = Object.keys(spec.listings);
+  if (spec._langs.length > 1) {
+    tools.innerHTML = `<span class="pac-lang-tabs">${spec._langs.map(l =>
+      `<button class="pac-lang-tab" data-lang="${l}">${spec.labels?.[l] ?? l}</button>`
+    ).join('')}</span>`;
+    tools.addEventListener('click', e => {
+      const l = e.target.dataset?.lang;
+      if (l) ctx.engine.setLanguage(l);
+    });
+  }
+  body.innerHTML = '<div class="pac-code"></div>';
+}
+
+function render(body, data, ctx, { lang }) {
+  const spec = ctx.spec;
+  const use = spec.listings[lang] ? lang : spec._langs[0];
+
+  ctx.engine.root.querySelectorAll('.pac-lang-tab').forEach(t =>
+    t.setAttribute('aria-selected', String(t.dataset.lang === use)));
+
+  const active = (data?.line && typeof data.line === 'object') ? data.line[use] : data?.line;
+  // When the code line itself is the memory-integrity culprit, the step sets
+  // `dangerLine: true` and the active line is tinted red instead of blue.
+  const danger = !!data?.dangerLine;
+  // Parked caller lines: the call site of every caller still on the stack, shown
+  // DIMMED so the student keeps sight of where the call came from and where it
+  // returns (AUTHORING.md "Line highlight — active line vs. parked caller lines").
+  // Each entry is a plain number or a per-language {pseudo,java,cpp} object;
+  // resolve to THIS language. The active line always wins if they coincide
+  // (bright beats dim), so drop it from the parked set.
+  const parked = new Set((data?.parked ?? [])
+    .map(p => (p && typeof p === 'object') ? p[use] : p)
+    .filter(n => n != null && n !== active));
+
+  body.querySelector('.pac-code').innerHTML = spec.listings[use].map((src, k) => {
+    const n = k + 1;
+    const cls = n === active ? (danger ? ' is-active is-danger' : ' is-active')
+              : parked.has(n) ? ' is-parked' : '';
+    return `<div class="pac-code-line${cls}">` +
+           `<span class="pac-code-num">${n}</span><span>${esc(src)}</span></div>`;
+  }).join('');
+}
+
+const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+ return { mount, render }; })();
+const cellsPanel = (() => { /* CELLS panel — 1D/2D grid. Absorbs arrays, sorting bars, hash buckets,
+ * matrices, memory blocks, variable tables, stack frames, vtables.
+ * Step data: { render: 'box'|'bar'|'row', cells: [{value,label,role,anchor}] } */
+
+function mount(body) { body.innerHTML = '<div class="pac-cells"></div>'; }
+
+function render(body, data, ctx) {
+  const wrap = body.querySelector('.pac-cells');
+  const mode = data?.render ?? 'box';
+  wrap.dataset.render = mode;
+  wrap.innerHTML = '';
+  const max = Math.max(1, ...(data?.cells ?? []).map(c => +c.value || 0));
+
+  for (const c of data?.cells ?? []) {
+    const el = document.createElement('div');
+    el.className = 'pac-cell';
+    if (c.role) el.dataset.role = c.role;
+    if (mode === 'bar') el.style.height = `${20 + 70 * (+c.value / max)}px`;
+    el.innerHTML = (c.label ? `<span class="pac-cell-label">${esc(c.label)}</span>` : '') +
+                   `<span class="pac-cell-value">${esc(c.value)}</span>`;
+    wrap.appendChild(el);
+    // Anchor the value glyph, not the whole cell: for a pointer variable that
+    // value is the dot, so a cross-panel arrow starts from the dot itself --
+    // matching the record-field pointers in the NODES panel.
+    if (c.anchor) ctx.anchor(`${ctx.spec.id}.${c.anchor}`, el.querySelector('.pac-cell-value'));
+  }
+}
+
+const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+ return { mount, render }; })();
+const nodesPanel = (() => { /* NODES panel — nodes with typed edges.
+ *
+ * One renderer for: linked lists, doubly linked lists, BSTs, heaps-as-trees,
+ * recursion call trees, class hierarchies, object graphs, GC reachability,
+ * UML diagrams, flowcharts, adjacency lists. They differ in node template,
+ * edge template, and layout -- and in nothing else.
+ *
+ * Step data:
+ *   { layout:   'tree' | 'linear' | 'graph',
+ *     template: 'plain' | 'record',
+ *     nodes: [{id, parent, label, meta[], state, active, fields[], slot, row}],
+ *     edges: [{from, to, state}] }       // implied by `parent` for trees
+ *
+ * Two INDEPENDENT color channels (AUTHORING.md "Node color channels"):
+ *   - `state`  -> the OUTLINE (membership/traversal): green member, amber
+ *                 `unlinked`, dim `pending`, blue traversal frontier.
+ *   - `active` -> the FILL (activity): a truthy `active` flags "this node is
+ *                 being modified on THIS step" and paints a blue interior,
+ *                 orthogonal to `state`. An unlinked node can be amber-outline
+ *                 + blue-fill at once; a settled member, green-outline +
+ *                 blue-fill. Fill never changes the outline, and vice versa.
+ *
+ * Snapshots include not-yet-visited nodes as state 'pending', so layout is
+ * computed over the whole structure and nodes never jump between steps.
+ *
+ * For `record` nodes, every field publishes its own anchor:
+ *     list.n25.prev   list.n25.next   list.n25
+ * which is what lets the arrow overlay draw pointer links as DATA. */
+
+const NW = 74, HGAP = 16, VGAP = 62, PAD = 20;
+const RW = 112, RH = 38, RGAP = 46, RROW = 84;   // record geometry
+
+/* Plain-node vertical metrics. The box height is DERIVED from how many `meta`
+ * lines a node carries so the label + every meta line (e.g. "level 3" /
+ * "depth 2") sit inside the box and are never clipped -- see AUTHORING.md
+ * "Node sizing". LABEL_Y / META_Y0 are text baselines from the box top. */
+const LABEL_Y = 17, META_Y0 = 30, META_LH = 11, META_PAD = 8, NH_MIN = 24;
+const plainH = metaMax =>
+  metaMax > 0 ? META_Y0 + (metaMax - 1) * META_LH + META_PAD : NH_MIN;
+
+function mount(body) {
+  body.innerHTML = `<svg class="pac-nodes" xmlns="http://www.w3.org/2000/svg"></svg>`;
+}
+
+function render(body, data, ctx) {
+  const svg = body.querySelector('svg');
+  if (!data?.nodes?.length) { svg.innerHTML = ''; return; }
+
+  const record = data.template === 'record';
+  // Box height fits the tallest node's meta stack, so meta text never clips.
+  const metaMax = Math.max(0, ...data.nodes.map(n => n.meta?.length ?? 0));
+  const w = record ? RW : NW, h = record ? RH : plainH(metaMax);
+  const pos = layout(data, record);
+
+  const xs = [...pos.values()].map(p => p.x), ys = [...pos.values()].map(p => p.y);
+  const W = Math.max(...xs) + w / 2 + PAD, H = Math.max(...ys) + h + PAD + 12;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('height', Math.min(H, 440));
+
+  const edges = (data.edges ?? impliedEdges(data.nodes)).map(e => {
+    const a = pos.get(e.from), b = pos.get(e.to);
+    if (!a || !b) return '';
+    return `<path class="pac-edge" data-state="${e.state ?? ''}" d="M ${a.x} ${a.y + h} L ${b.x} ${b.y}"/>`;
+  }).join('');
+
+  svg.innerHTML = edges + data.nodes.map(n => {
+    const p = pos.get(n.id);
+    return record ? recordNode(n, p) : plainNode(n, p, h);
+  }).join('');
+
+  const id = ctx.spec.id;
+  svg.querySelectorAll('[data-anchor]').forEach(el => ctx.anchor(`${id}.${el.dataset.anchor}`, el));
+}
+
+function plainNode(n, p, h) {
+  const meta = (n.meta ?? []).map((m, k) =>
+    `<text class="pac-node-meta" x="${p.x}" y="${p.y + META_Y0 + k * META_LH}">${esc(m)}</text>`).join('');
+  return `<g class="pac-node" data-state="${n.state ?? 'pending'}" data-active="${!!n.active}" data-anchor="${n.id}">
+    <rect class="pac-node-box" x="${p.x - NW / 2}" y="${p.y}" width="${NW}" height="${h}" rx="4"/>
+    <text class="pac-node-label" x="${p.x}" y="${p.y + LABEL_Y}">${esc(n.label)}</text>
+    ${meta}</g>`;
+}
+
+/** [ prev | value | next ] — the shape of lists.9.gif, made addressable. */
+function recordNode(n, p) {
+  const fields = n.fields ?? ['prev', 'value', 'next'];
+  const x0 = p.x - RW / 2;
+  let cx = x0;
+  const cells = fields.map(f => {
+    const fw = (f === 'value' ? 0.42 : 0.29) * RW;
+    const val = f === 'value' ? n.label : (n[f] == null ? '\u2205' : '\u25cf');
+    const g = `<g data-anchor="${n.id}.${f}">
+        <rect class="pac-node-box" x="${cx}" y="${p.y}" width="${fw}" height="${RH}"/>
+        <text class="pac-node-label" x="${cx + fw / 2}" y="${p.y + 24}">${esc(val)}</text></g>`;
+    cx += fw;
+    return g;
+  }).join('');
+  const meta = (n.meta ?? []).map((m, k) =>
+    `<text class="pac-node-meta" x="${p.x}" y="${p.y + RH + 13 + k * 11}">${esc(m)}</text>`).join('');
+  return `<g class="pac-node" data-state="${n.state ?? 'exited'}" data-active="${!!n.active}" data-anchor="${n.id}">${cells}${meta}</g>`;
+}
+
+/* ---- layout ---- */
+
+function layout(data, record) {
+  const mode = data.layout ?? 'tree';
+  const pos = new Map();
+  const w = record ? RW : NW;
+
+  if (mode === 'linear') {
+    const gap = record ? RGAP : 34;
+    data.nodes.forEach((n, k) => pos.set(n.id, {
+      x: PAD + w / 2 + (n.slot ?? k) * (w + gap),
+      y: PAD + (n.row ?? 0) * RROW,
+    }));
+    return pos;
+  }
+
+  if (mode === 'graph') {
+    const R = 30 + data.nodes.length * 13;
+    data.nodes.forEach((n, k) => {
+      const t = (k / data.nodes.length) * 2 * Math.PI - Math.PI / 2;
+      pos.set(n.id, { x: R + PAD + R * Math.cos(t), y: R + PAD + R * Math.sin(t) });
+    });
+    return pos;
+  }
+
+  const kids = new Map();
+  for (const n of data.nodes) {
+    if (n.parent == null) continue;
+    if (!kids.has(n.parent)) kids.set(n.parent, []);
+    kids.get(n.parent).push(n.id);
+  }
+  let leaf = 0;
+  const walk = (id, d) => {
+    const cs = kids.get(id) ?? [];
+    if (!cs.length) { pos.set(id, { x: PAD + NW / 2 + leaf++ * (NW + HGAP), y: PAD + d * VGAP }); return; }
+    cs.forEach(c => walk(c, d + 1));
+    const cx = cs.map(c => pos.get(c).x);
+    pos.set(id, { x: (Math.min(...cx) + Math.max(...cx)) / 2, y: PAD + d * VGAP });
+  };
+  data.nodes.filter(n => n.parent == null).forEach(r => walk(r.id, 0));
+  return pos;
+}
+
+function impliedEdges(nodes) {
+  return nodes.filter(n => n.parent != null)
+    .map(n => ({ from: n.parent, to: n.id, state: n.state === 'pending' ? '' : 'taken' }));
+}
+
+const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+ return { mount, render }; })();
+const streamPanel = (() => { /* STREAM panel — append-only text, two directions.
+ * Step data: { lines: [{text, dir, indent, isNew}], cursor: bool }
+ * `dir: 'in'` renders a prompt / visible pause / echoed input. No file in the
+ * original 25 modelled input at all, yet every CS1 assignment is prompt-driven. */
+
+function mount(body) { body.innerHTML = '<div class="pac-stream"></div>'; }
+
+function render(body, data) {
+  const lines = data?.lines ?? [];
+  const html = lines.map(l =>
+    `<div class="pac-stream-line dir-${l.dir ?? 'out'}${l.isNew ? ' is-new' : ''}">${
+      ' '.repeat((l.indent ?? 0) * 4)}${esc(l.text)}</div>`).join('');
+  const cur = data?.cursor ? '<div class="pac-stream-line dir-in"><span class="pac-stream-cursor">&#9608;</span></div>' : '';
+  body.querySelector('.pac-stream').innerHTML = html + cur;
+  body.scrollTop = body.scrollHeight;
+}
+
+const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+ return { mount, render }; })();
+const chartPanel = (() => { /* CHART panel — series over n.
+ * Required, not optional: ds7 grades a plot of execution time vs. n.
+ * Step data: { series: [{name, color, points:[[x,y],..]}], xLabel, yLabel, marker: x } */
+
+function mount(body) {
+  body.innerHTML = `<svg class="pac-chart" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200"></svg>`;
+}
+
+function render(body, data) {
+  const svg = body.querySelector('svg');
+  if (!data?.series?.length) { svg.innerHTML = ''; return; }
+  const W = 320, H = 200, L = 34, B = 24;
+  const pts = data.series.flatMap(s => s.points);
+  const mx = Math.max(...pts.map(p => p[0]), 1), my = Math.max(...pts.map(p => p[1]), 1);
+  const X = x => L + (x / mx) * (W - L - 8);
+  const Y = y => (H - B) - (y / my) * (H - B - 10);
+
+  const paths = data.series.map(s =>
+    `<path class="pac-chart-series" stroke="${s.color ?? 'var(--accent)'}"
+       d="${s.points.map((p, k) => `${k ? 'L' : 'M'} ${X(p[0])} ${Y(p[1])}`).join(' ')}"/>
+     <text class="pac-chart-tick" x="${X(s.points.at(-1)[0]) - 4}" y="${Y(s.points.at(-1)[1]) - 5}"
+       fill="${s.color ?? 'var(--accent)'}" text-anchor="end">${s.name}</text>`).join('');
+
+  const marker = data.marker != null
+    ? `<line class="pac-chart-axis" x1="${X(data.marker)}" y1="10" x2="${X(data.marker)}" y2="${H - B}"
+         stroke-dasharray="3 3"/>` : '';
+
+  svg.innerHTML = `
+    <line class="pac-chart-axis" x1="${L}" y1="10" x2="${L}" y2="${H - B}"/>
+    <line class="pac-chart-axis" x1="${L}" y1="${H - B}" x2="${W - 8}" y2="${H - B}"/>
+    <text class="pac-chart-tick" x="${W - 8}" y="${H - 8}" text-anchor="end">${data.xLabel ?? 'n'}</text>
+    <text class="pac-chart-tick" x="4" y="14">${data.yLabel ?? ''}</text>
+    ${marker}${paths}`;
+}
+
+ return { mount, render }; })();
+const callstackPanel = (() => { /* CALLSTACK panel — a debugger's locals/stack pane.
+ *
+ * A vertical stack of call frames, newest on top (emphasized), callers below
+ * greyed but present. Each frame shows its function name, bound parameters, and
+ * active locals with live values. Frames push on call and pop on return; `main`
+ * is the bottom frame (the driver), so calls have a visible origin. This is what
+ * makes parameter binding visible: when ADD calls INSERT(count, value), the
+ * INSERT frame appears already showing index = 3 (count's value) and value = 40.
+ *
+ * Step data: { frames: [{fn, vars: [{name, value, role}], active}] }
+ *   - `frames` is ordered bottom-to-top: frames[0] is `main`, the last element
+ *     is the currently-running (top) frame. Rendered newest-on-top, and pinned
+ *     to the bottom of the (fixed-height) cell so `main` never moves and the
+ *     layout never reflows (AUTHORING.md "Stable layout").
+ *   - `active: true` marks the running frame (emphasized); the rest are greyed.
+ *   - a var's `role: 'active'` paints the blue activity fill — a local changing
+ *     THIS step, the same colour rule as nodes/cells. `role: 'done'` greys a
+ *     finished local (e.g. the loop `i` after the loop) so it stays visible in
+ *     the frame until the function returns rather than vanishing mid-frame.
+ *   - the data model tolerates a future per-var `kind: 'copy'|'reference'` for
+ *     pass-by-value vs. pass-by-reference animations; not rendered yet (deferred
+ *     per AUTHORING.md "CALLSTACK panel"). */
+
+function mount(body) { body.innerHTML = '<div class="pac-callstack"></div>'; }
+
+function render(body, data) {
+  const wrap = body.querySelector('.pac-callstack');
+  wrap.innerHTML = '';
+  const frames = data?.frames ?? [];
+
+  // Newest on top: walk from the top of the stack (end of the array) down to
+  // `main` (index 0), so the DOM order is newest → main.
+  for (let k = frames.length - 1; k >= 0; k--) {
+    const f = frames[k];
+    const frame = document.createElement('div');
+    frame.className = 'pac-frame';
+    frame.dataset.active = String(!!f.active);
+
+    const vars = (f.vars ?? []).map(v =>
+      `<div class="pac-frame-var"${v.role ? ` data-role="${esc(v.role)}"` : ''}>` +
+        `<span class="pac-frame-var-name">${esc(v.name)}</span>` +
+        `<span class="pac-frame-var-val">${esc(v.value)}</span>` +
+      `</div>`
+    ).join('');
+
+    frame.innerHTML =
+      `<div class="pac-frame-fn">${esc(f.fn)}</div>` +
+      `<div class="pac-frame-vars">${vars || '<div class="pac-frame-empty">no locals</div>'}</div>`;
+    wrap.appendChild(frame);
+  }
+}
+
+const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+ return { mount, render }; })();
+const { Overlay } = (() => { /* Arrow overlay — the piece cpoint1.html faked with four hand-tuned Beziers
+ * and four colliding `arrowhead2` marker ids. Change a font size there and the
+ * arrows pointed at nothing.
+ *
+ * Renderers publish named anchors. Arrows are DATA:
+ *     { from: 'vars.p', to: 'list.n3', style: 'pointer'|'stale'|'ok' }
+ *
+ * Anchors are global across panels, because a pointer variable lives in CELLS
+ * while the node it points at lives in NODES. Coordinates are resolved against
+ * live DOM boxes at draw time, so nothing is ever cached or hand-tuned.
+ *
+ * Self-referencing arrows (a corrupted node pointing at itself) get a loop.
+ * That case is not decorative -- it is the failure mode of a doubly-linked
+ * insertion performed in the wrong order. */
+
+const NS = 'http://www.w3.org/2000/svg';
+
+// Length of the straight run into a target edge, so the arrowhead lands square
+// on the middle of the box edge instead of on a corner (see the band/port paths).
+const STUB = 8;
+
+class Overlay {
+  constructor(stage) {
+    this.stage = stage;
+    this.svg = document.createElementNS(NS, 'svg');
+    this.svg.setAttribute('class', 'pac-overlay');
+    this.svg.innerHTML = `<defs>
+      <marker id="pac-arrowhead" viewBox="0 0 8 8" refX="7.5" refY="4"
+              markerWidth="5.5" markerHeight="5.5" orient="auto">
+        <path d="M 0 0 L 8 4 L 0 8 z" fill="context-stroke"/>
+      </marker></defs>`;
+    stage.appendChild(this.svg);
+    this._ro = new ResizeObserver(() => this._redraw());
+    this._ro.observe(stage);
+    this._last = [[], new Map()];
+  }
+
+  draw(arrows, panels) { this._last = [arrows, panels]; this._redraw(); }
+
+  _redraw() {
+    const [arrows, panels] = this._last;
+    this._clear();
+    if (!arrows?.length) return;
+
+    const o = this.stage.getBoundingClientRect();
+    this.svg.setAttribute('viewBox', `0 0 ${o.width} ${o.height}`);
+
+    const find = name => {
+      for (const p of panels.values()) {
+        const el = p.ctx.anchors.get(name);
+        if (el) {
+          const r = el.getBoundingClientRect();
+          return { l: r.left - o.left, r: r.right - o.left,
+                   t: r.top - o.top, b: r.bottom - o.top,
+                   cx: r.left + r.width / 2 - o.left,
+                   cy: r.top + r.height / 2 - o.top };
+        }
+      }
+      return null;
+    };
+
+    // Phase 1 -- resolve every arrow and classify how it meets its target,
+    // recording which edge it lands on. Self-loops don't land on an edge.
+    const items = arrows.map(a => {
+      const f = find(a.from), t = find(a.to);
+      if (!f || !t) return null;
+      const selfLoop = nodeId(a.from) === nodeId(a.to);
+      const band = Math.abs(f.cy - t.cy) < 26 && (a.bend === 'up' || a.bend === 'down');
+      let edge = null;
+      if (!selfLoop) {
+        if (band) edge = a.bend === 'down' ? 'bottom' : 'top';
+        else { const e = port(t, f.cx, f.cy);
+               edge = e.ny > 0 ? 'bottom' : e.ny < 0 ? 'top' : e.nx > 0 ? 'right' : 'left'; }
+      }
+      return { a, f, t, selfLoop, band, edge, frac: 0.5 };
+    });
+
+    // Phase 2 -- when several arrows land on the SAME edge of the same node,
+    // fan them across it (1/3, 2/3 for two; 1/4, 2/4, 3/4 for three) instead
+    // of piling every arrowhead onto the edge midpoint. Order by source
+    // position along the edge so the lines don't needlessly cross.
+    const groups = new Map();
+    for (const it of items) {
+      if (!it || !it.edge) continue;
+      const key = `${it.a.to}|${it.edge}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(it);
+    }
+    for (const g of groups.values()) {
+      if (g.length < 2) continue;
+      const horiz = g[0].edge === 'top' || g[0].edge === 'bottom';
+      g.sort((p, q) => horiz ? p.f.cx - q.f.cx : p.f.cy - q.f.cy);
+      g.forEach((it, i) => { it.frac = (i + 1) / (g.length + 1); });
+    }
+
+    // Phase 3 -- draw.
+    const html = items.map(it => {
+      if (!it) return '';
+      const { a, f, t, selfLoop, band, edge, frac } = it;
+      const style = a.style ?? 'pointer';
+
+      // Self-loop: a node whose next/prev has been made to reference its own
+      // node -- the failure mode of a doubly-linked insert in the wrong order.
+      // Route next above and prev below so the two loops never overlap.
+      if (selfLoop) {
+        const down = a.bend === 'down';
+        const ed = down ? f.b : f.t, apex = ed + (down ? 32 : -32);
+        return path(`M ${f.cx} ${f.cy} C ${f.cx + 26} ${apex}, ${f.cx - 26} ${apex}, ${f.cx - 1} ${ed + (down ? 1 : -1)}`, style);
+      }
+
+      // Landing point on the target edge, fanned out across the box by `frac`
+      // (0.5 = the old midpoint, for the common single-arrow case).
+      const lx = t.l + frac * (t.r - t.l);
+      const ly = t.t + frac * (t.b - t.t);
+
+      // Same-row list pointers: next above the row, prev below it, each
+      // anchored at the box top/bottom. They no longer share the mid-row
+      // endpoints that turned next-over-prev into a diamond between nodes.
+      if (band) {
+        const down = a.bend === 'down';
+        const y1 = down ? f.b : f.t, y2 = down ? t.b : t.t;
+        const arc = Math.min(24, Math.max(14, Math.abs(t.cx - f.cx) * 0.32));
+        const yc = (down ? Math.max(y1, y2) + arc : Math.min(y1, y2) - arc);
+        // Finish with a short straight vertical stub into the target edge. The
+        // curve's endpoint tangent is already vertical, but over the arrowhead's
+        // length the arc still leans sideways -- enough to land the head on a
+        // corner rather than the middle of its base. The stub makes the final
+        // few px exactly vertical so the arrowhead sits square on the edge.
+        const yStub = down ? y2 + STUB : y2 - STUB;
+        return path(`M ${f.cx} ${f.cy} C ${f.cx} ${yc}, ${lx} ${yc}, ${lx} ${yStub} L ${lx} ${y2}`, style);
+      }
+
+      // Everything else (pointer variables, cross-row links): start at the
+      // source's centre -- which is the dot, since both record fields and
+      // pointer-variable cells now anchor their dot glyph -- and enter through
+      // the target's facing edge with handles normal to it. The source handle
+      // still leaves along the edge that faces the target, so the curve exits
+      // cleanly. Short, monotonic curves that don't cut across the list.
+      const s = port(f, t.cx, t.cy), e = port(t, f.cx, f.cy);
+      if (edge === 'top' || edge === 'bottom') e.x = lx; else e.y = ly;
+      const h = clamp(Math.hypot(e.x - f.cx, e.y - f.cy) * 0.4, 16, 66);
+      // Same square-landing trick: a short straight run along the entry normal.
+      const ex = e.x + e.nx * STUB, ey = e.y + e.ny * STUB;
+      return path(`M ${f.cx} ${f.cy} C ${s.x + s.nx * h} ${s.y + s.ny * h},
+                     ${ex + e.nx * h} ${ey + e.ny * h}, ${ex} ${ey} L ${e.x} ${e.y}`, style);
+    }).join('');
+
+    this.svg.insertAdjacentHTML('beforeend', html);
+  }
+
+  _clear() { this.svg.querySelectorAll('.pac-arrow').forEach(p => p.remove()); }
+}
+
+const path = (d, style) =>
+  `<path class="pac-arrow" data-style="${style}" marker-end="url(#pac-arrowhead)" d="${d}"/>`;
+
+/** The node an anchor belongs to: 'list.n25.next' -> 'list.n25', 'vars.head' -> 'vars.head'. */
+const nodeId = anchor => anchor.split('.').slice(0, 2).join('.');
+
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+/** The point on `box`'s perimeter facing (tx, ty), with the outward normal
+ *  of that edge, so a curve can leave/arrive perpendicular to it. */
+function port(box, tx, ty) {
+  const dx = tx - box.cx, dy = ty - box.cy;
+  if (Math.abs(dx) >= Math.abs(dy))
+    return dx >= 0 ? { x: box.r, y: box.cy, nx: 1, ny: 0 }
+                   : { x: box.l, y: box.cy, nx: -1, ny: 0 };
+  return dy >= 0 ? { x: box.cx, y: box.b, nx: 0, ny: 1 }
+                 : { x: box.cx, y: box.t, nx: 0, ny: -1 };
+}
+
+ return { Overlay }; })();
+/* pac-animations — engine
+ *
+ * Drives one or more generators in lockstep, renders declarative step
+ * snapshots into registered panels, derives metrics from step tags.
+ *
+ * Core decisions (see PANEL-INVENTORY.md):
+ *  - Steps are SNAPSHOTS, not deltas. render(step) is idempotent, so
+ *    stepping backwards is just render(steps[i-1]). No undo stack.
+ *  - A generator that yields literals IS a step array. Precomputed,
+ *    live, and race animations share one driver.
+ *  - Counters are DERIVED from step tags. Nothing increments by hand.
+ *  - Exactly one setInterval, cleared in exactly one place.
+ */
+
+
+
+
+
+
+
+
+
+const RENDERERS = {
+  code: codePanel, cells: cellsPanel, nodes: nodesPanel,
+  stream: streamPanel, chart: chartPanel, callstack: callstackPanel,
+};
+
+const MAX_STEPS = 5000;
+const AUTOPLAY_MS = 900;
+
+class Engine {
+  constructor(root, spec) {
+    this.root = root;
+    this.spec = spec;
+    this.lang = spec.languages?.[0] ?? null;
+    this.timer = null;                 // the ONLY timer handle
+    this.panels = new Map();
+    this.overlay = null;
+    this.trace = spec.initialTrace ?? 'correct';
+    this.i = 0;
+    this.steps = [];
+    this._flashedAt = -1;              // last step index the narration pulsed on
+    this._build();
+    this.loadTrace(this.trace);
+  }
+
+  /* ---------- materialisation ---------- */
+
+  /** Run a generator (or n of them, in lockstep) into a flat snapshot array. */
+  materialise(traceName) {
+    const t = this.spec.traces[traceName];
+    if (!t) throw new Error(`no trace "${traceName}"`);
+
+    // Single generator.
+    if (typeof t === 'function') return take(t(), MAX_STEPS);
+
+    // Race: { racers: {name: genFn}, merge(frames) -> step }
+    const gens = Object.entries(t.racers).map(([k, g]) => [k, g()]);
+    const out = [];
+    while (out.length < MAX_STEPS) {
+      const frame = {};
+      let live = 0;
+      for (const [k, g] of gens) {
+        const r = g.next();
+        if (!r.done) { frame[k] = r.value; live++; }
+      }
+      if (!live) break;
+      out.push(t.merge(frame, out.length));
+    }
+    return out;
+  }
+
+  loadTrace(name) {
+    this.stop();
+    this.trace = name;
+    this.steps = this.materialise(name);
+    this.i = 0;
+    this.render();
+  }
+
+  /* ---------- derived metrics ---------- */
+
+  metrics(upTo = this.i) {
+    const counts = {};
+    for (let k = 0; k <= upTo && k < this.steps.length; k++) {
+      const tag = this.steps[k].tag;
+      if (tag) counts[tag] = (counts[tag] ?? 0) + 1;
+    }
+    return counts;
+  }
+
+  /* ---------- stepping ---------- */
+
+  get step()   { return this.steps[this.i] ?? {}; }
+  get atEnd()  { return this.i >= this.steps.length - 1; }
+
+  next() {
+    if (this.atEnd) return this.stop();
+    this.i++;
+    this.render();
+  }
+
+  prev() {
+    this.stop();
+    if (this.i > 0) { this.i--; this.render(); }
+  }
+
+  reset() {
+    this.stop();
+    this.i = 0;
+    this.render();
+  }
+
+  play() {
+    if (this.timer || this.atEnd) return;
+    this.timer = setInterval(() => this.next(), AUTOPLAY_MS);
+    this.render();
+  }
+
+  /** The single clearInterval in the codebase. Seven of the original
+   *  thirteen files never called it at all. */
+  stop() {
+    if (this.timer) { clearInterval(this.timer); this.timer = null; }
+    this.render();
+  }
+
+  /* ---------- construction ---------- */
+
+  _build() {
+    const s = this.spec;
+    this.root.className = 'pac-root';
+    this.root.dataset.profile = s.profile ?? 'standard';
+
+    this.root.innerHTML = `
+      <h1 class="pac-title"></h1>
+      <p class="pac-sub"></p>
+      <div class="pac-stage"></div>
+      <div class="pac-controls">
+        <button class="pac-btn" data-act="prev">&larr; Back</button>
+        <button class="pac-btn pac-btn-primary" data-act="next">Next Step &rarr;</button>
+        <button class="pac-btn" data-act="play">Play</button>
+        <button class="pac-btn" data-act="reset">Reset</button>
+        <span class="pac-metrics"></span>
+        <span class="pac-progress"></span>
+      </div>
+      <div class="pac-narrate"></div>
+      <div class="pac-note pac-note-empty" role="note"></div>`;
+
+    this.root.querySelector('.pac-title').textContent = s.title ?? '';
+    this.root.querySelector('.pac-sub').textContent = s.subtitle ?? '';
+    this.stage    = this.root.querySelector('.pac-stage');
+    this.narrate  = this.root.querySelector('.pac-narrate');
+    this.noteBox  = this.root.querySelector('.pac-note');
+    this.metricsEl= this.root.querySelector('.pac-metrics');
+    this.progress = this.root.querySelector('.pac-progress');
+
+    if (s.columns) this.stage.dataset.cols = s.columns;
+
+    // Beginner profile is enforced here, not left to authorial restraint.
+    const panels = (s.panels ?? []).slice();
+    if (s.profile === 'beginner' && panels.length > 3) {
+      console.warn(`beginner profile caps panels at 3; dropping ${panels.length - 3}`);
+      panels.length = 3;
+    }
+
+    for (const p of panels) {
+      const el = document.createElement('section');
+      el.className = 'pac-panel';
+      el.dataset.type = p.type;          // lets CSS give accumulating panels (STREAM) a stable, scrolling cell
+      el.innerHTML = `<div class="pac-panel-head"><span>${p.title ?? p.type}</span>
+                        <span class="pac-panel-tools"></span></div>
+                      <div class="pac-panel-body"></div>`;
+      this.stage.appendChild(el);
+      const r = RENDERERS[p.type];
+      if (!r) throw new Error(`unknown panel type "${p.type}"`);
+      const ctx = {
+        engine: this,
+        spec: p,
+        anchors: new Map(),
+        anchor: (name, node) => ctx.anchors.set(name, node),
+      };
+      r.mount?.(el.querySelector('.pac-panel-body'), p, ctx,
+                el.querySelector('.pac-panel-tools'));
+      this.panels.set(p.id ?? p.type, { spec: p, el, renderer: r, ctx });
+    }
+
+    this.overlay = new Overlay(this.stage);
+
+    this.root.querySelector('.pac-controls').addEventListener('click', e => {
+      const act = e.target.dataset?.act;
+      if (!act) return;
+      if (act === 'play') this.timer ? this.stop() : this.play();
+      else this[act]();
+    });
+
+    // Back-stepping via keyboard, because beginners miss steps.
+    window.addEventListener('keydown', e => {
+      if (e.key === 'ArrowRight') this.next();
+      if (e.key === 'ArrowLeft')  this.prev();
+    });
+  }
+
+  setLanguage(lang) { this.lang = lang; this.render(); }
+
+  /* ---------- render ---------- */
+
+  render() {
+    const step = this.step;
+
+    for (const [id, p] of this.panels) {
+      let data = step.panels?.[id];
+      // A step carries its active source line at the TOP level (`step.line`),
+      // not inside `panels.<codeId>` -- one line drives every code panel and
+      // every language variant. Thread it in so the highlight actually moves.
+      // Supports a plain number or a per-language {pseudo, java, cpp} object;
+      // a null/absent line means "highlight nothing" (intro, note, final).
+      // `dangerLine` rides alongside: when set, the highlighted line is tinted
+      // red instead of blue -- the code itself is the memory-integrity culprit.
+      // `parked` also rides alongside: the call-site line of every caller still
+      // on the stack, dimmed so the student keeps sight of where the call came
+      // from (AUTHORING.md "Line highlight -- active line vs. parked caller
+      // lines"). Bright = running now, dim = suspended.
+      if (p.spec.type === 'code') data = { ...data, line: step.line, dangerLine: step.dangerLine, parked: step.parked };
+      p.ctx.anchors.clear();
+      p.renderer.render(p.el.querySelector('.pac-panel-body'),
+                        data, p.ctx, { lang: this.lang, step });
+    }
+
+    this.overlay.draw(step.arrows ?? [], this.panels);
+
+    // Narration and notes are both SEGMENTED content: a plain string, or an
+    // array of segments where {danger:true, text} renders a leading red warning
+    // triangle in --error. renderSegments handles both and returns whether any
+    // content was written.
+    renderSegments(this.narrate, step.narrate);
+
+    // The teaching-note box holds non-execution commentary (setup, a common-
+    // mistake aside, a post-watch challenge). A note attaches to a step and
+    // shows only while that step is current; on steps without one the box
+    // collapses to zero height (pac-note-empty -> display:none) and the layout
+    // reflows. See AUTHORING.md "Steps vs. notes".
+    const hasNote = renderSegments(this.noteBox, step.note);
+    this.noteBox.classList.toggle('pac-note-empty', !hasNote);
+
+    // Pulse narration (and a present note) only when the step index actually
+    // changes, so a new explanation catches the eye but pausing/stopping in
+    // place does not reflash. A note appearing should feel like the animation
+    // saying "pay attention to this."
+    if (this.i !== this._flashedAt) {
+      this._flashedAt = this.i;
+      flash(this.narrate, 'pac-narrate-flash');
+      if (hasNote) flash(this.noteBox, 'pac-note-flash');
+    }
+    this.progress.textContent = `${Math.min(this.i + 1, this.steps.length)} / ${this.steps.length}`;
+
+    // Metrics are HIDDEN BY DEFAULT (see AUTHORING.md "Metrics readout").
+    // The tag-derived counter is an internal mechanism; the raw tag name
+    // (`assign`) is engine jargon, not student-facing. An animation opts in
+    // via `spec.metrics`, a map from tag -> plain student-facing label. Only
+    // listed tags render, and always with the label, never the raw tag. No
+    // opt-in -> no readout (an insertion or single walk-through shows none).
+    const labels = this.spec.metrics ?? {};
+    const counts = this.metrics();
+    this.metricsEl.innerHTML = Object.entries(labels)
+      .filter(([tag]) => counts[tag] != null)
+      .map(([tag, label]) => `${label} <b>${counts[tag]}</b>`).join('');
+
+    this.root.querySelector('[data-act="prev"]').disabled = this.i === 0;
+    this.root.querySelector('[data-act="next"]').disabled = this.atEnd;
+    this.root.querySelector('[data-act="play"]').textContent = this.timer ? 'Pause' : 'Play';
+    this.root.querySelector('[data-act="play"]').disabled = this.atEnd;
+  }
+}
+
+function take(gen, max) {
+  const out = [];
+  for (const v of gen) { out.push(v); if (out.length >= max) break; }
+  return out;
+}
+
+/** Restart a one-shot CSS pulse: drop the class, force reflow, re-add. */
+function flash(el, cls) {
+  el.classList.remove(cls);
+  void el.offsetWidth;               // force reflow so the animation restarts
+  el.classList.add(cls);
+}
+
+/* The red warning triangle for a memory-integrity violation. Project-wide,
+ * cross-course convention -- red ⚠ always means "memory just went wrong". */
+const DANGER_MARK = '⚠';
+
+/**
+ * Render segmented content (narration or a note) into `el`.
+ *
+ * `content` is either a plain string (the common case -- nearly every step),
+ * or an array of segments. A segment is a string, or an object; an object with
+ * `danger: true` renders a leading red ⚠ and the danger-red colour (--error),
+ * naming a memory-integrity violation. Returns true iff anything was written,
+ * so the caller can collapse an empty note box.
+ */
+function renderSegments(el, content) {
+  el.textContent = '';
+  if (content == null || content === '') return false;
+  const segs = Array.isArray(content) ? content : [content];
+  let wrote = false;
+  for (const seg of segs) {
+    if (seg == null || seg === '') continue;
+    if (typeof seg === 'string') {
+      el.appendChild(document.createTextNode(seg));
+      wrote = true;
+    } else if (seg.danger) {
+      const span = document.createElement('span');
+      span.className = 'pac-danger';
+      span.textContent = `${DANGER_MARK} ${seg.text ?? ''}`;
+      el.appendChild(span);
+      wrote = true;
+    } else if (typeof seg.text === 'string') {
+      el.appendChild(document.createTextNode(seg.text));
+      wrote = true;
+    }
+  }
+  return wrote;
+}
+
+/** Mount an animation from its content module. */
+function mountAnimation(spec, el = document.getElementById('pac')) {
+  return new Engine(el, spec);
+}
+
+/* ds — A1 "Array-based list operations"
+ *
+ * The whole lesson is ONE invariant: contiguity. An array-based list packs its
+ * elements from index 0 with no holes; `count` says how many are in use, and the
+ * backing array has a fixed capacity MAX. Every operation must leave the list
+ * contiguous, and that requirement is what makes the operations cost what they
+ * cost.
+ *
+ * A `main` driver calls the operations in sequence — ADD(40); INSERT(1, 25);
+ * INSERT(7, 99) [the invalid one]; DELETE(1); badINSERT(1, 25) [the buggy one] —
+ * so every call has a visible origin. The CALLSTACK panel is a debugger's
+ * locals/stack pane: frames push on call (newest on top, showing their BOUND
+ * parameter values) and pop on return (the caller below is greyed but present).
+ * This makes the ADD-is-INSERT lesson visible: ADD(40) calls INSERT(count,
+ * value), and INSERT's frame appears already showing index = 3 (count's value)
+ * and value = 40 — the parameters you could previously only infer from narration.
+ *
+ * Operations, in the instructor's framing:
+ *   - ADD(value)          == INSERT(count, value)   -- append; no shift needed
+ *   - INSERT(index, value) -- make room by shifting the tail RIGHT, then write
+ *   - INSERT at a bad index -- range check fails; the write would leave holes
+ *   - DELETE(index)        -- shift the tail LEFT to close the gap
+ *   - badINSERT(index, value) -- the SAME insert, written with the shift going
+ *     the WRONG way (front-first): it corrupts the data, and shows why the
+ *     correct INSERT shifts from the far end first.
+ *
+ * A mid-run note bridges to linked lists: the shift cost -- up to n moves for a
+ * middle insert/delete -- is the price paid for the array's simplicity, and it
+ * is why linked lists exist.
+ *
+ * The closing section is a confusion-first demonstration (AUTHORING.md
+ * "Pedagogical pattern — name the student's confusion first"): a note first
+ * NAMES the nagging question — "why move the outermost item first? it seems
+ * backwards" — then badINSERT runs the intuitive-but-wrong inside-out shift and
+ * the student watches one value smear across the tail (each A[i+1] = A[i] reads a
+ * cell the previous iteration already clobbered). A payoff note answers the
+ * opening question. Because that IS data corruption (overwrite), every smear
+ * step carries the red memory-danger ⚠ (AUTHORING.md "Memory-danger marker").
+ *
+ * WATCH only: one trace, no gates, no predict steps. Common mistakes (writing
+ * before making room; inserting out of range; shifting the wrong way) are taught
+ * with NARRATION and NOTES on normal steps, never a question. No arrows, no
+ * STREAM, no metrics.
+ *
+ * The correct INSERT/DELETE section has no memory-integrity violation (an
+ * out-of-range index is a logic/contract error, not corruption); only the buggy
+ * badINSERT corrupts data, and only its smear steps carry the ⚠. Argument→
+ * parameter flow animation and pass-by-value/reference are deferred (AUTHORING.md
+ * "CALLSTACK panel"); this only shows frames appearing with bound values. */
+
+const MAX = 5;
+
+/* Listings are NOT line-aligned across languages (see AUTHORING.md "CODE"): the
+ * `L` map below addresses each listing's own line numbers, so `line` is a
+ * per-language object. `main` is included so each call has a highlightable
+ * origin line and the CALLSTACK stays in sync with the code. */
+const LISTINGS = {
+  pseudo: [
+    'main():',                                       // 1
+    '    ADD(40)',                                   // 2
+    '    INSERT(1, 25)',                             // 3
+    '    INSERT(7, 99)',                             // 4
+    '    DELETE(1)',                                 // 5
+    '    badINSERT(1, 25)',                          // 6
+    '',                                              // 7
+    'ADD(value):',                                   // 8
+    '    INSERT(count, value)',                       // 9
+    '',                                              // 10
+    'INSERT(index, value):',                          // 11
+    '    if index < 0 or index > count:',             // 12
+    '        report "invalid index"; return',         // 13
+    '    for i = count down to index + 1:',           // 14
+    '        A[i] = A[i - 1]',                         // 15
+    '    A[index] = value',                            // 16
+    '    count = count + 1',                           // 17
+    '',                                              // 18
+    'DELETE(index):',                                 // 19
+    '    if index < 0 or index >= count:',            // 20
+    '        report "invalid index"; return',         // 21
+    '    for i = index to count - 2:',                // 22
+    '        A[i] = A[i + 1]',                         // 23
+    '    count = count - 1',                           // 24
+    '',                                              // 25
+    'badINSERT(index, value):',                       // 26
+    '    if index < 0 or index > count:',             // 27
+    '        report "invalid index"; return',         // 28
+    '    for i = index to count - 1:',                // 29
+    '        A[i + 1] = A[i]',                         // 30
+    '    A[index] = value',                            // 31
+    '    count = count + 1',                           // 32
+  ],
+  java: [
+    'void main() {',                                 // 1
+    '    add(40);',                                   // 2
+    '    insert(1, 25);',                             // 3
+    '    insert(7, 99);',                             // 4
+    '    delete(1);',                                 // 5
+    '    badInsert(1, 25);',                          // 6
+    '}',                                             // 7
+    '',                                              // 8
+    'void add(int value) {',                          // 9
+    '    insert(count, value);',                      // 10
+    '}',                                             // 11
+    '',                                              // 12
+    'void insert(int index, int value) {',            // 13
+    '    if (index < 0 || index > count)',            // 14
+    '        throw new IndexOutOfBoundsException();',  // 15
+    '    for (int i = count; i > index; i--)',         // 16
+    '        A[i] = A[i - 1];',                        // 17
+    '    A[index] = value;',                           // 18
+    '    count++;',                                    // 19
+    '}',                                             // 20
+    '',                                              // 21
+    'void delete(int index) {',                       // 22
+    '    if (index < 0 || index >= count)',           // 23
+    '        throw new IndexOutOfBoundsException();',  // 24
+    '    for (int i = index; i < count - 1; i++)',     // 25
+    '        A[i] = A[i + 1];',                        // 26
+    '    count--;',                                    // 27
+    '}',                                             // 28
+    '',                                              // 29
+    'void badInsert(int index, int value) {',         // 30
+    '    if (index < 0 || index > count)',            // 31
+    '        throw new IndexOutOfBoundsException();',  // 32
+    '    for (int i = index; i < count; i++)',         // 33
+    '        A[i + 1] = A[i];',                        // 34
+    '    A[index] = value;',                           // 35
+    '    count++;',                                    // 36
+    '}',                                             // 37
+  ],
+  cpp: [
+    'int main() {',                                  // 1
+    '    add(40);',                                   // 2
+    '    insert(1, 25);',                             // 3
+    '    insert(7, 99);',                             // 4
+    '    remove(1);',                                 // 5
+    '    badInsert(1, 25);',                          // 6
+    '}',                                             // 7
+    '',                                              // 8
+    'void add(int value) {',                          // 9
+    '    insert(count, value);',                      // 10
+    '}',                                             // 11
+    '',                                              // 12
+    'void insert(int index, int value) {',            // 13
+    '    if (index < 0 || index > count) {',          // 14
+    '        cerr << "invalid index"; return;',       // 15
+    '    }',                                          // 16
+    '    for (int i = count; i > index; i--)',         // 17
+    '        A[i] = A[i - 1];',                        // 18
+    '    A[index] = value;',                           // 19
+    '    count++;',                                    // 20
+    '}',                                             // 21
+    '',                                              // 22
+    'void remove(int index) {',                       // 23
+    '    if (index < 0 || index >= count) {',         // 24
+    '        cerr << "invalid index"; return;',       // 25
+    '    }',                                          // 26
+    '    for (int i = index; i < count - 1; i++)',     // 27
+    '        A[i] = A[i + 1];',                        // 28
+    '    count--;',                                    // 29
+    '}',                                             // 30
+    '',                                              // 31
+    'void badInsert(int index, int value) {',         // 32
+    '    if (index < 0 || index > count) {',          // 33
+    '        cerr << "invalid index"; return;',       // 34
+    '    }',                                          // 35
+    '    for (int i = index; i < count; i++)',         // 36
+    '        A[i + 1] = A[i];',                        // 37
+    '    A[index] = value;',                           // 38
+    '    count++;',                                    // 39
+    '}',                                             // 40
+  ],
+};
+
+/* Semantic line keys -> per-language line numbers. */
+const L = {
+  mainAdd:   { pseudo: 2,  java: 2,  cpp: 2  },
+  mainIns25: { pseudo: 3,  java: 3,  cpp: 3  },
+  mainIns99: { pseudo: 4,  java: 4,  cpp: 4  },
+  mainDel:   { pseudo: 5,  java: 5,  cpp: 5  },
+  mainBad:   { pseudo: 6,  java: 6,  cpp: 6  },
+  addCall:   { pseudo: 9,  java: 10, cpp: 10 },
+  insCheck:  { pseudo: 12, java: 14, cpp: 14 },
+  insErr:    { pseudo: 13, java: 15, cpp: 15 },
+  insFor:    { pseudo: 14, java: 16, cpp: 17 },
+  insShift:  { pseudo: 15, java: 17, cpp: 18 },
+  insWrite:  { pseudo: 16, java: 18, cpp: 19 },
+  insCount:  { pseudo: 17, java: 19, cpp: 20 },
+  delCheck:  { pseudo: 20, java: 23, cpp: 24 },
+  delFor:    { pseudo: 22, java: 25, cpp: 27 },
+  delShift:  { pseudo: 23, java: 26, cpp: 28 },
+  delCount:  { pseudo: 24, java: 27, cpp: 29 },
+  badCheck:  { pseudo: 27, java: 31, cpp: 33 },
+  badFor:    { pseudo: 29, java: 33, cpp: 36 },
+  badShift:  { pseudo: 30, java: 34, cpp: 37 },
+  badWrite:  { pseudo: 31, java: 35, cpp: 38 },
+  badCount:  { pseudo: 32, java: 36, cpp: 39 },
+};
+
+const EMPTY = '·';   // middot: a slot that exists but holds no element
+
+/* ---- call-frame builders (immutable: a fresh frame each step, never mutated
+ * in place, so earlier snapshots stay intact) ----
+ * `call` is the call-site line this frame is PARKED at while a callee runs — the
+ * line the code panel dims (AUTHORING.md "Line highlight — active line vs. parked
+ * caller lines"). It is set only on frames acting as callers; the running (top)
+ * frame's `call` is ignored, since its executing line is the bright active one. */
+const vv    = (name, value, role) => (role ? { name, value, role } : { name, value });
+const iVar  = (value, role) => ({ name: 'i', value, role });   // role: 'active' | 'done'
+const mainF = (call)             => ({ fn: 'main',   vars: [], call });
+const addF  = (value, call)      => ({ fn: 'ADD',    vars: [vv('value', value)], call });
+const insF  = (index, value, i)  => ({ fn: 'INSERT', vars: [vv('index', index), vv('value', value), ...(i ? [i] : [])] });
+const delF  = (index, i)         => ({ fn: 'DELETE', vars: [vv('index', index), ...(i ? [i] : [])] });
+const badF  = (index, value, i)  => ({ fn: 'badINSERT', vars: [vv('index', index), vv('value', value), ...(i ? [i] : [])] });
+
+/* One snapshot. The array is a fixed row of MAX indexed boxes; occupied cells
+ * show their value, trailing free cells are dimmed (role 'empty') so capacity vs
+ * count stays visible. The single cell modified THIS step gets role 'active' --
+ * the blue activity fill (cells are always members here, so blue fill is the only
+ * per-step signal). `phantom` appends the would-be holes / attempted write for
+ * the invalid-index step, drawn in the error role beyond the real array. `frames`
+ * is the call stack, bottom-to-top; the top (last) frame is the running one, and
+ * every frame below it is a caller — its `call` line is dimmed in the code panel
+ * as a parked caller line, mirroring the greyed CALLSTACK frames exactly. */
+function snap({ line, tag, narrate, note, arr, count, active = null, countActive = false, phantom = null, frames }) {
+  const cells = [];
+  for (let i = 0; i < MAX; i++) {
+    const val = arr[i];
+    const empty = val == null;
+    let role;
+    if (i === active) role = 'active';          // blue fill: modified this step
+    else if (empty)   role = 'empty';           // dimmed: free trailing slot
+    cells.push({ label: String(i), value: empty ? EMPTY : val, role });
+  }
+  if (phantom) for (const p of phantom) cells.push(p);
+
+  // Parked caller lines = the call site of every frame BELOW the running (top)
+  // one. Dimmed in the code panel; the whole caller chain at once.
+  const parked = frames.slice(0, -1).map(f => f.call).filter(Boolean);
+
+  return {
+    tag, narrate, line, note, parked,
+    panels: {
+      cells: { render: 'box', cells },
+      size: {
+        render: 'row',
+        cells: [
+          { label: 'count', value: count, role: countActive ? 'active' : undefined },
+          { label: 'MAX',   value: MAX },
+        ],
+      },
+      stack: {
+        frames: frames.map((f, idx) => ({ fn: f.fn, vars: f.vars, active: idx === frames.length - 1 })),
+      },
+    },
+  };
+}
+
+/* ---- teaching notes (AUTHORING.md "Steps vs. notes"): each attaches to one
+ * step and shows only there. None describe memory corruption, so none is a
+ * danger segment. ---- */
+const SETUP =
+  'This is an array-based list. A fixed-capacity array (MAX = 5) holds the elements, and count ' +
+  'tracks how many are in use. The elements must stay contiguous — packed from index 0 with ' +
+  'no holes. main calls the four operations in turn; watch the call stack at right.';
+
+const ADD_NOTE =
+  'ADD is just INSERT at the end — nothing follows it, so no shifting is needed. Notice INSERT’s ' +
+  'frame binds index to count’s value (3), so ADD lands the new element at the first free slot.';
+
+const MAKE_ROOM_NOTE =
+  'Make room before writing, or you overwrite. And update the count.';
+
+const INVALID_NOTE =
+  'A list must stay contiguous, so you may insert only at an index from 0 to count — here 0 to 5. ' +
+  'Index 7 is out of range: writing there would leave indices 5 and 6 empty, breaking contiguity.';
+
+const DELETE_NOTE =
+  'Delete leaves a hole — close it by shifting left so the list stays contiguous.';
+
+const PAYOFF_NOTE =
+  'Inserting or deleting in the middle of an array-based list costs shifting everything after it ' +
+  '— up to n moves. That shift cost is the price we pay for the array’s simplicity, and it ' +
+  'is exactly why linked lists — the next topic — exist.';
+
+/* Confusion-first pattern (AUTHORING.md "Pedagogical pattern — name the
+ * student's confusion first"): name the nagging question BEFORE showing the
+ * intuitive-but-wrong version fail. */
+const CONFUSION_NOTE =
+  'Have you wondered why we make room by first moving the outermost item? It seems backwards. ' +
+  'Watch what happens if we start from the inside instead.';
+
+/* The payoff note that answers CONFUSION_NOTE using what the student just
+ * watched smear across the tail. */
+const BAD_PAYOFF_NOTE =
+  'That is why we shift from the far end first — each value is copied before the next step ' +
+  'overwrites it. Shift from the outside in.';
+
+function makeTrace() {
+  return function* () {
+    // Mutable array model. null marks a free slot. `count` is the live count.
+    const arr = [10, 20, 30, null, null];
+    let count = 3;
+
+    /* ---------- Step 0 (required): initial state, nothing executed ---------- */
+    yield snap({
+      line: null, tag: 'init',
+      narrate: 'The array-based list before any operation. Three elements occupy indices 0–2; indices 3 and 4 are free. Only main is on the call stack.',
+      note: SETUP,
+      arr, count, frames: [mainF()],
+    });
+
+    /* ================= main calls ADD(40)  ==  INSERT(count, 40) ================= */
+    yield snap({
+      line: L.mainAdd, tag: 'call',
+      narrate: 'main calls ADD(40). Control enters ADD next.',
+      arr, count, frames: [mainF()],
+    });
+    yield snap({
+      line: L.addCall, tag: 'call',
+      narrate: 'Inside ADD: the parameter value is bound to 40. ADD’s whole job is to call INSERT(count, 40).',
+      note: ADD_NOTE,
+      arr, count, frames: [mainF(L.mainAdd), addF(40)],
+    });
+    // ADD calls INSERT: its frame appears with index bound to count's value (3).
+    yield snap({
+      line: L.insCheck, tag: 'check',
+      narrate: 'Inside INSERT: index is bound to count, which is 3, and value to 40 — both now visible in the frame. Range check: 0 ≤ 3 ≤ 3, valid.',
+      arr, count, frames: [mainF(L.mainAdd), addF(40, L.addCall), insF(3, 40)],
+    });
+    yield snap({
+      line: L.insFor, tag: 'loop',
+      narrate: 'The shift loop runs from count (3) down to index + 1 (4): an empty range, so it never executes and i is never set. Appending needs no room made.',
+      arr, count, frames: [mainF(L.mainAdd), addF(40, L.addCall), insF(3, 40)],
+    });
+    arr[3] = 40;
+    yield snap({
+      line: L.insWrite, tag: 'write',
+      narrate: 'A[3] = 40. The value is written into the first free slot, index 3.',
+      arr, count, active: 3, frames: [mainF(L.mainAdd), addF(40, L.addCall), insF(3, 40)],
+    });
+    count = 4;
+    yield snap({
+      line: L.insCount, tag: 'count',
+      narrate: 'count = 4. Update the count — the list now holds four elements, indices 0–3.',
+      arr, count, countActive: true, frames: [mainF(L.mainAdd), addF(40, L.addCall), insF(3, 40)],
+    });
+
+    /* ================= main calls INSERT(1, 25) (shift the tail RIGHT) ================= */
+    // INSERT returns to ADD, ADD returns to main: both frames pop, shown by the
+    // stack collapsing back to [main] on this next call step.
+    yield snap({
+      line: L.mainIns25, tag: 'call',
+      narrate: 'INSERT returns to ADD, and ADD — whose only job was that call — returns to main. Now main calls INSERT(1, 25).',
+      arr, count, frames: [mainF()],
+    });
+    yield snap({
+      line: L.insCheck, tag: 'check',
+      narrate: 'Inside INSERT: index = 1, value = 25. Range check: is index (1) outside 0..count (0..4)? No, so it is valid.',
+      arr, count, frames: [mainF(L.mainIns25), insF(1, 25)],
+    });
+    yield snap({
+      line: L.insFor, tag: 'loop',
+      narrate: 'Make room at index 1: the loop runs i from count (4) down to index + 1 (2), shifting the tail right.',
+      note: MAKE_ROOM_NOTE,
+      arr, count, frames: [mainF(L.mainIns25), insF(1, 25)],
+    });
+    arr[4] = arr[3];   // 40
+    yield snap({
+      line: L.insShift, tag: 'shift',
+      narrate: 'i = 4. A[4] = A[3] = 40 — copy the last element into the free slot to its right.',
+      arr, count, active: 4, frames: [mainF(L.mainIns25), insF(1, 25, iVar(4, 'active'))],
+    });
+    arr[3] = arr[2];   // 30
+    yield snap({
+      line: L.insShift, tag: 'shift',
+      narrate: 'i = 3. A[3] = A[2] = 30.',
+      arr, count, active: 3, frames: [mainF(L.mainIns25), insF(1, 25, iVar(3, 'active'))],
+    });
+    arr[2] = arr[1];   // 20
+    yield snap({
+      line: L.insShift, tag: 'shift',
+      narrate: 'i = 2. A[2] = A[1] = 20. Index 1 is now safe to overwrite — its old value is already copied to index 2.',
+      arr, count, active: 2, frames: [mainF(L.mainIns25), insF(1, 25, iVar(2, 'active'))],
+    });
+    arr[1] = 25;
+    yield snap({
+      line: L.insWrite, tag: 'write',
+      narrate: 'The loop is finished. A[1] = 25 — write the new value into the room just made.',
+      arr, count, active: 1, frames: [mainF(L.mainIns25), insF(1, 25, iVar(1, 'done'))],
+    });
+    count = 5;
+    yield snap({
+      line: L.insCount, tag: 'count',
+      narrate: 'count = 5. Update the count — the list is now full: count = MAX = 5.',
+      arr, count, countActive: true, frames: [mainF(L.mainIns25), insF(1, 25, iVar(1, 'done'))],
+    });
+
+    /* ================= main calls INSERT(7, 99) (INVALID; the key step) ================= */
+    const holes = [
+      { label: '5', value: EMPTY, role: 'error' },
+      { label: '6', value: EMPTY, role: 'error' },
+      { label: '7', value: 99,    role: 'error' },
+    ];
+    yield snap({
+      line: L.mainIns99, tag: 'call',
+      narrate: 'INSERT returns to main. Now main calls INSERT(7, 99) — an attempt to insert 99 at index 7.',
+      arr, count, frames: [mainF()],
+    });
+    yield snap({
+      line: L.insCheck, tag: 'check',
+      narrate: 'Inside INSERT: index = 7, value = 99 — the arguments are now visible in the frame. Range check: is index (7) > count (5)? Yes. Index 7 is outside the valid range 0..5.',
+      note: INVALID_NOTE,
+      arr, count, phantom: holes, frames: [mainF(L.mainIns99), insF(7, 99)],
+    });
+    yield snap({
+      line: L.insErr, tag: 'error',
+      narrate: 'The index is invalid, so INSERT reports an error and returns without writing. The array is unchanged.',
+      arr, count, phantom: holes, frames: [mainF(L.mainIns99), insF(7, 99)],
+    });
+
+    /* ================= main calls DELETE(1) (shift the tail LEFT) ================= */
+    yield snap({
+      line: L.mainDel, tag: 'call',
+      narrate: 'INSERT returns to main without changing the array. Now main calls DELETE(1) — remove the element at index 1.',
+      arr, count, frames: [mainF()],
+    });
+    yield snap({
+      line: L.delCheck, tag: 'check',
+      narrate: 'Inside DELETE: index = 1. Range check: is index (1) within 0..count − 1 (0..4)? Yes, so it is valid.',
+      arr, count, frames: [mainF(L.mainDel), delF(1)],
+    });
+    yield snap({
+      line: L.delFor, tag: 'loop',
+      narrate: 'Removing index 1 would leave a hole there. To keep the list contiguous, the loop runs i from index (1) to count − 2 (3), shifting each later element one slot left.',
+      note: DELETE_NOTE,
+      arr, count, frames: [mainF(L.mainDel), delF(1)],
+    });
+    arr[1] = arr[2];   // 20 overwrites 25 -- the delete happens here
+    yield snap({
+      line: L.delShift, tag: 'shift',
+      narrate: 'i = 1. A[1] = A[2] = 20. The element 25 at index 1 is overwritten — the delete happens here.',
+      arr, count, active: 1, frames: [mainF(L.mainDel), delF(1, iVar(1, 'active'))],
+    });
+    arr[2] = arr[3];   // 30
+    yield snap({
+      line: L.delShift, tag: 'shift',
+      narrate: 'i = 2. A[2] = A[3] = 30.',
+      arr, count, active: 2, frames: [mainF(L.mainDel), delF(1, iVar(2, 'active'))],
+    });
+    arr[3] = arr[4];   // 40
+    yield snap({
+      line: L.delShift, tag: 'shift',
+      narrate: 'i = 3. A[3] = A[4] = 40. The elements are packed contiguously again.',
+      arr, count, active: 3, frames: [mainF(L.mainDel), delF(1, iVar(3, 'active'))],
+    });
+    count = 4;
+    arr[4] = null;     // the trailing duplicate falls outside the list
+    yield snap({
+      line: L.delCount, tag: 'count',
+      narrate: 'count = 4. Update the count — the duplicate left at index 4 now falls outside the list, which is contiguous again at indices 0–3.',
+      note: PAYOFF_NOTE,
+      arr, count, countActive: true, frames: [mainF(L.mainDel), delF(1, iVar(4, 'done'))],
+    });
+
+    /* ================= main calls badINSERT(1, 25) (WRONG shift direction) =================
+     * The array is back to [10, 20, 30, 40], count 4 — the same shape the correct
+     * INSERT(1, 25) faced. badINSERT is that insert with ONE thing changed: the
+     * loop shifts front-first (A[i+1] = A[i], i from index up), so each iteration
+     * reads a cell the previous one already overwrote. One value smears down the
+     * tail. This is overwrite corruption, so every smear step carries the red ⚠
+     * (AUTHORING.md "Memory-danger marker"). The confusion-first note runs first;
+     * the payoff note answers it after the smear. */
+    yield snap({
+      line: L.mainBad, tag: 'call',
+      narrate: 'main calls badINSERT(1, 25). It inserts the same way — range check, shift, write — but shifts in the opposite direction. Control enters badINSERT next.',
+      note: CONFUSION_NOTE,
+      arr, count, frames: [mainF()],
+    });
+    yield snap({
+      line: L.badCheck, tag: 'check',
+      narrate: 'Inside badINSERT: index = 1, value = 25. Range check: 0 ≤ 1 ≤ 4, valid — exactly as the correct INSERT checked.',
+      arr, count, frames: [mainF(L.mainBad), badF(1, 25)],
+    });
+    yield snap({
+      line: L.badFor, tag: 'loop',
+      narrate: 'This loop shifts front-first: i runs from index (1) up to count − 1 (3), each iteration copying a cell into the one to its right — A[i + 1] = A[i]. Watch the tail.',
+      arr, count, frames: [mainF(L.mainBad), badF(1, 25)],
+    });
+    arr[2] = arr[1];   // 20 overwrites 30 -- the first cell clobbered
+    yield snap({
+      line: L.badShift, tag: 'shift',
+      narrate: [
+        'i = 1. A[2] = A[1] copies 20 up into index 2. ',
+        { danger: true, text: 'Index 2 held 30, but we overwrite it before it was ever copied — the 30 is destroyed.' },
+      ],
+      arr, count, active: 2, frames: [mainF(L.mainBad), badF(1, 25, iVar(1, 'active'))],
+    });
+    arr[3] = arr[2];   // 20 again -- reads the cell just clobbered
+    yield snap({
+      line: L.badShift, tag: 'shift',
+      narrate: [
+        'i = 2. A[3] = A[2], but A[2] was just overwritten with 20, so 20 copies again — index 3 becomes 20 and the 40 there is destroyed. ',
+        { danger: true, text: 'Each step reads a cell we already clobbered, so one value smears down the tail.' },
+      ],
+      arr, count, active: 3, frames: [mainF(L.mainBad), badF(1, 25, iVar(2, 'active'))],
+    });
+    arr[4] = arr[3];   // 20 propagates once more
+    yield snap({
+      line: L.badShift, tag: 'shift',
+      narrate: [
+        'i = 3. A[4] = A[3] = 20 — the same 20 propagates once more, into index 4. ',
+        { danger: true, text: 'The whole tail is now the single value 20; every element after index 1 has been clobbered.' },
+      ],
+      arr, count, active: 4, frames: [mainF(L.mainBad), badF(1, 25, iVar(3, 'active'))],
+    });
+    arr[1] = 25;
+    yield snap({
+      line: L.badWrite, tag: 'write',
+      narrate: [
+        'The loop is finished. A[1] = 25 writes the new value. ',
+        { danger: true, text: 'But 30 and 40 are already gone — the list is [10, 25, 20, 20, 20], not [10, 25, 20, 30, 40]. The data is corrupted.' },
+      ],
+      arr, count, active: 1, frames: [mainF(L.mainBad), badF(1, 25, iVar(3, 'done'))],
+    });
+    count = 5;
+    yield snap({
+      line: L.badCount, tag: 'count',
+      narrate: 'count = 5. The count claims five elements, but three of them are the smeared 20 — the shift direction, not the count, is what corrupted the data.',
+      note: BAD_PAYOFF_NOTE,
+      arr, count, countActive: true, frames: [mainF(L.mainBad), badF(1, 25, iVar(3, 'done'))],
+    });
+  };
+}
+
+const SPEC = {
+  title: 'Array-based list: keeping it contiguous through insert and delete',
+  subtitle: 'Adding, inserting, and deleting in a fixed-capacity array.',
+  profile: 'standard',
+  columns: 2,
+  languages: ['pseudo', 'java', 'cpp'],
+
+  panels: [
+    { type: 'code',      id: 'code',  title: 'list operations',
+      listings: LISTINGS, labels: { pseudo: 'pseudocode', java: 'Java', cpp: 'C++' } },
+    { type: 'cells',     id: 'cells', title: 'The array' },
+    { type: 'callstack', id: 'stack', title: 'Call stack' },
+    { type: 'cells',     id: 'size',  title: 'count / capacity' },
+  ],
+
+  initialTrace: 'correct',
+  traces: {
+    correct: makeTrace(),
+  },
+};
+
+mountAnimation(SPEC);
+</script></body></html>

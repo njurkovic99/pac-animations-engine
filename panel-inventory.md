@@ -85,6 +85,25 @@ mistake the current 25 files make.
 - **Serves:** algorithm complexity (`ds` 3.1–3.7), ArrayList amortized doubling,
   linear-vs-binary comparison, heapsort vs quicksort.
 
+### CALLSTACK
+- A stack of **call frames** — a debugger's locals/stack pane. Each frame shows a
+  function's name, its **bound parameters**, and its **active locals**, with live
+  values. `main` is the bottom frame (the driver). Frames **push on call, pop on
+  return**; the top (currently executing) frame is emphasized, callers below are
+  greyed but present.
+- Data shape: `{frames: [{fn, vars: [{name, value, role}], active: bool}]}` where
+  a frame near the top is the running one. A var's `role` can carry the blue
+  activity highlight (a local changing this step). The data model should allow a
+  future `kind: 'copy'|'reference'` per parameter (for pass-by-value vs.
+  pass-by-reference animations) without requiring it now.
+- **Serves — and this is a load-bearing panel for the beginner courses**, where
+  the call stack IS the lesson: `functions-call-return` ("control returns to
+  where it left"), `functions-value-vs-reference` (arguments are copies),
+  pass-by-value/reference, recursion (fib etc. — frames pushing/popping with their
+  n/level bindings). Introduced on `lists-array-insert-delete` (ds A1) as auxiliary
+  support (main → ADD → INSERT), where parameter binding across frames needs to be
+  visible.
+
 ---
 
 ## 3. The overlay: anchors and arrows

@@ -12,16 +12,17 @@
  *  - Exactly one setInterval, cleared in exactly one place.
  */
 
-import * as codePanel   from './panels/code.js';
-import * as cellsPanel  from './panels/cells.js';
-import * as nodesPanel  from './panels/nodes.js';
-import * as streamPanel from './panels/stream.js';
-import * as chartPanel  from './panels/chart.js';
-import { Overlay }      from './overlay/arrows.js';
+import * as codePanel      from './panels/code.js';
+import * as cellsPanel     from './panels/cells.js';
+import * as nodesPanel     from './panels/nodes.js';
+import * as streamPanel    from './panels/stream.js';
+import * as chartPanel     from './panels/chart.js';
+import * as callstackPanel from './panels/callstack.js';
+import { Overlay }         from './overlay/arrows.js';
 
 const RENDERERS = {
   code: codePanel, cells: cellsPanel, nodes: nodesPanel,
-  stream: streamPanel, chart: chartPanel,
+  stream: streamPanel, chart: chartPanel, callstack: callstackPanel,
 };
 
 const MAX_STEPS = 5000;
@@ -215,7 +216,11 @@ export class Engine {
       // a null/absent line means "highlight nothing" (intro, note, final).
       // `dangerLine` rides alongside: when set, the highlighted line is tinted
       // red instead of blue -- the code itself is the memory-integrity culprit.
-      if (p.spec.type === 'code') data = { ...data, line: step.line, dangerLine: step.dangerLine };
+      // `parked` also rides alongside: the call-site line of every caller still
+      // on the stack, dimmed so the student keeps sight of where the call came
+      // from (AUTHORING.md "Line highlight -- active line vs. parked caller
+      // lines"). Bright = running now, dim = suspended.
+      if (p.spec.type === 'code') data = { ...data, line: step.line, dangerLine: step.dangerLine, parked: step.parked };
       p.ctx.anchors.clear();
       p.renderer.render(p.el.querySelector('.pac-panel-body'),
                         data, p.ctx, { lang: this.lang, step });

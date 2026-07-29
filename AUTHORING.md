@@ -731,3 +731,124 @@ pointer manipulation, to echo verbatim in narration:**
 list is "a dynamic analog to a static array"; the shift cost of array insert/
 delete is "the price we pay" for the array's simplicity, and it is why linked
 lists exist. Use this to end the array-list animation and set up the linked ones.
+
+---
+
+## CALLSTACK panel — showing function calls and parameter binding
+
+When an animation steps *into* a function, the student must see what that function
+was called with. Definitions alone (`INSERT(index, value)`) don't reveal the
+bound values on this call — that's a comprehension hole. The CALLSTACK panel is a
+debugger-style locals/stack pane that fixes it.
+
+**Model (debugger-faithful):**
+- A vertical stack of **frames**, newest on top, most-recent emphasized; caller
+  frames below are greyed but visible. `main` is the bottom frame — the driver
+  that calls the operations.
+- Each frame shows the **function name**, its **bound parameters** (with values),
+  and its **active locals** (loop variables, etc.).
+- **Push on call:** calling a function adds its frame on top, already showing the
+  bound argument values — e.g. `ADD` calling `INSERT(count, value)` pushes an
+  INSERT frame showing `index = 3` (count's value) and `value = 40`. This is how
+  the ADD-is-INSERT lesson becomes visible: the student sees count's value bind to
+  index.
+- **Pop on return:** finishing a function removes its frame; control returns to
+  the caller's frame below.
+- A local that finishes (e.g. loop `i` after the loop) **stays greyed** in the
+  frame until the function returns — it doesn't vanish mid-frame.
+- The **active local** gets the blue activity fill (same color rule as nodes/
+  cells) on the step it changes.
+
+**Author it whenever an animation steps into a function** — which is most of the
+code-tracing animations, and it is *the whole point* of several beginner-course
+animations (functions-call-return, value-vs-reference, recursion). Show `main` as
+the driver so calls have a visible origin.
+
+**Deferred (not now):** animated argument→parameter *flow* (a value visibly moving
+from caller into callee) is polish; ship "frame appears with bound values" first.
+And pass-by-value vs. pass-by-reference (a parameter that is a *copy* vs. an
+*alias* of the caller's variable) is a later capability for the C++/Java courses —
+the data model allows it, but don't build it until those animations need it.
+
+The step's `line` highlight and the CALLSTACK stay in sync: when the highlight
+enters a function's body, that function's frame is the active (top) one.
+
+---
+
+## Line highlight — active line vs. parked caller lines
+
+When execution steps into a function, the line that *called* it must stay marked,
+so the student always sees where the call originated and where control will
+return. A real debugger drops the caller out of view; this tool keeps it, because
+"a function is a detour you return from" is exactly what beginners miss.
+
+This means the code panel has **two highlight states**, and they must be visually
+distinct so "executing now" is never confused with "waiting to resume":
+
+- **Active line** — the line executing now. The existing bright blue highlight.
+- **Parked caller line(s)** — the call site in each caller still on the stack,
+  waiting for the call to return. Rendered **dimmed**, using the **same greyed
+  treatment the CALLSTACK panel uses for inactive (caller) frames**. Not the
+  bright active highlight.
+
+**Dim the whole caller chain.** If main called ADD which called INSERT, then while
+inside INSERT *both* parked lines are dimmed: main's `ADD(40)` line and ADD's
+`INSERT(count, value)` line. The code panel thus mirrors the CALLSTACK panel
+exactly — every frame on the stack has its parked line dimmed in the code, and the
+one active frame has its line bright.
+
+**One consistent visual language across both panels: bright = running now, dim =
+suspended, waiting to resume.** The dim style is the same token as the CALLSTACK's
+greyed frames — not a new color. On return, a frame pops, its line's dim clears,
+and the caller it returned to becomes bright/active again.
+
+---
+
+## CODE panel tabs — meaning differs by course
+
+The CODE panel's tabs mean different things depending on the course, and a build
+must use the right one:
+
+- **Data structures (ds):** the course is language-agnostic — it teaches concepts
+  shown in multiple languages. Tabs = **language variants** of the same logic:
+  pseudocode / Java / C++. (The two reference ds animations do this.)
+
+- **The four programming courses (bCpp, bJava, aCpp, aJava):** each course is a
+  SINGLE language. There is NO pseudocode/Java/C++ toggle — a bCpp animation is
+  C++ only, a bJava animation is Java only, etc. Do not add language tabs to these.
+  Instead, tabs are reserved for **multiple source files** in one program:
+  `main.cpp` vs `Student.h` vs `Student.cpp`, or `Main.java` vs `Account.java`.
+  When a program spans files (common in the OOP animations — class definition in
+  one file, driver in another), tabs let the student flip between source files.
+  A single-file program has no tabs at all.
+
+So: ds tabs = languages; programming-course tabs = source files (same language).
+The CODE renderer supports both — the content file declares which by what it puts
+in the listings map (language keys for ds; filename keys for the programming
+courses).
+
+---
+
+## Pedagogical pattern — name the student's confusion first
+
+When an animation demonstrates why a correct approach is correct — especially when
+the correct way is counterintuitive — first **name the confusion the student is
+already feeling**, then show why the intuitive-but-wrong way fails. Validating the
+instinct ("yes, this seems backwards") before refuting it is far stronger than
+presenting a bug cold: it connects to what the student was quietly wondering and
+makes them *want* to watch the failure.
+
+Structure:
+1. A note that names the counterintuitive thing as a question: e.g. "Have you
+   wondered why we make room by moving the outermost item first? It seems
+   backwards. Watch what happens if we start from the inside instead."
+2. Run the intuitive-but-wrong version; let the student watch it fail (with the
+   memory-danger ⚠ if it corrupts data).
+3. A payoff note that answers the opening question using what they just saw: "That
+   is why we start from the far end — each value is copied before the next step
+   overwrites it."
+
+This is WATCH-safe (no gate, no interaction) and is the WATCH-mode way to get the
+engagement a prediction question would give: curiosity is provoked by naming the
+confusion, and satisfied by watching the consequence. Use it wherever a correct
+method has a natural "why not the obvious way?" behind it.

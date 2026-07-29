@@ -4,6 +4,10 @@
     "title": "Data Structures",
     "languages": ["pseudo", "java", "cpp"],
     "modules": [
+      { "topic": "Array-Based Lists",
+        "animations": [
+          { "file": "lists-array-insert-delete", "backs": "A1", "built": true }
+        ] },
       { "topic": "2.5 Recursion; 4.2.3 Implementing Recursion",
         "animations": [
           { "file": "recursion-factorial-stack",  "backs": null },
