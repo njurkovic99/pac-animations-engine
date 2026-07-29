@@ -1200,32 +1200,45 @@ function mountAnimation(spec, el = document.getElementById('pac')) {
  * cost.
  *
  * A `main` driver calls the operations in sequence — ADD(40); INSERT(1, 25);
- * INSERT(7, 99) [the invalid one]; DELETE(1) — so every call has a visible
- * origin. The CALLSTACK panel is a debugger's locals/stack pane: frames push on
- * call (newest on top, showing their BOUND parameter values) and pop on return
- * (the caller below is greyed but present). This makes the ADD-is-INSERT lesson
- * visible: ADD(40) calls INSERT(count, value), and INSERT's frame appears already
- * showing index = 3 (count's value) and value = 40 — the parameters you could
- * previously only infer from narration.
+ * INSERT(7, 99) [the invalid one]; DELETE(1); badINSERT(1, 25) [the buggy one] —
+ * so every call has a visible origin. The CALLSTACK panel is a debugger's
+ * locals/stack pane: frames push on call (newest on top, showing their BOUND
+ * parameter values) and pop on return (the caller below is greyed but present).
+ * This makes the ADD-is-INSERT lesson visible: ADD(40) calls INSERT(count,
+ * value), and INSERT's frame appears already showing index = 3 (count's value)
+ * and value = 40 — the parameters you could previously only infer from narration.
  *
  * Operations, in the instructor's framing:
  *   - ADD(value)          == INSERT(count, value)   -- append; no shift needed
  *   - INSERT(index, value) -- make room by shifting the tail RIGHT, then write
  *   - INSERT at a bad index -- range check fails; the write would leave holes
  *   - DELETE(index)        -- shift the tail LEFT to close the gap
+ *   - badINSERT(index, value) -- the SAME insert, written with the shift going
+ *     the WRONG way (front-first): it corrupts the data, and shows why the
+ *     correct INSERT shifts from the far end first.
  *
- * The payoff (final note) bridges to linked lists: the shift cost -- up to n
- * moves for a middle insert/delete -- is the price paid for the array's
- * simplicity, and it is why linked lists exist.
+ * A mid-run note bridges to linked lists: the shift cost -- up to n moves for a
+ * middle insert/delete -- is the price paid for the array's simplicity, and it
+ * is why linked lists exist.
+ *
+ * The closing section is a confusion-first demonstration (AUTHORING.md
+ * "Pedagogical pattern — name the student's confusion first"): a note first
+ * NAMES the nagging question — "why move the outermost item first? it seems
+ * backwards" — then badINSERT runs the intuitive-but-wrong inside-out shift and
+ * the student watches one value smear across the tail (each A[i+1] = A[i] reads a
+ * cell the previous iteration already clobbered). A payoff note answers the
+ * opening question. Because that IS data corruption (overwrite), every smear
+ * step carries the red memory-danger ⚠ (AUTHORING.md "Memory-danger marker").
  *
  * WATCH only: one trace, no gates, no predict steps. Common mistakes (writing
- * before making room; inserting out of range) are taught with NARRATION and
- * NOTES on normal steps, never a question. No arrows, no STREAM, no metrics.
+ * before making room; inserting out of range; shifting the wrong way) are taught
+ * with NARRATION and NOTES on normal steps, never a question. No arrows, no
+ * STREAM, no metrics.
  *
- * There is NO memory-integrity violation here (no pointers, no leak/dangling/
- * corruption), so nothing carries the red danger triangle -- an out-of-range
- * index is a logic/contract error, not memory corruption. Argument→parameter
- * flow animation and pass-by-value/reference are deferred (AUTHORING.md
+ * The correct INSERT/DELETE section has no memory-integrity violation (an
+ * out-of-range index is a logic/contract error, not corruption); only the buggy
+ * badINSERT corrupts data, and only its smear steps carry the ⚠. Argument→
+ * parameter flow animation and pass-by-value/reference are deferred (AUTHORING.md
  * "CALLSTACK panel"); this only shows frames appearing with bound values. */
 
 const MAX = 5;
@@ -1241,24 +1254,33 @@ const LISTINGS = {
     '    INSERT(1, 25)',                             // 3
     '    INSERT(7, 99)',                             // 4
     '    DELETE(1)',                                 // 5
-    '',                                              // 6
-    'ADD(value):',                                   // 7
-    '    INSERT(count, value)',                       // 8
-    '',                                              // 9
-    'INSERT(index, value):',                          // 10
-    '    if index < 0 or index > count:',             // 11
-    '        report "invalid index"; return',         // 12
-    '    for i = count down to index + 1:',           // 13
-    '        A[i] = A[i - 1]',                         // 14
-    '    A[index] = value',                            // 15
-    '    count = count + 1',                           // 16
-    '',                                              // 17
-    'DELETE(index):',                                 // 18
-    '    if index < 0 or index >= count:',            // 19
-    '        report "invalid index"; return',         // 20
-    '    for i = index to count - 2:',                // 21
-    '        A[i] = A[i + 1]',                         // 22
-    '    count = count - 1',                           // 23
+    '    badINSERT(1, 25)',                          // 6
+    '',                                              // 7
+    'ADD(value):',                                   // 8
+    '    INSERT(count, value)',                       // 9
+    '',                                              // 10
+    'INSERT(index, value):',                          // 11
+    '    if index < 0 or index > count:',             // 12
+    '        report "invalid index"; return',         // 13
+    '    for i = count down to index + 1:',           // 14
+    '        A[i] = A[i - 1]',                         // 15
+    '    A[index] = value',                            // 16
+    '    count = count + 1',                           // 17
+    '',                                              // 18
+    'DELETE(index):',                                 // 19
+    '    if index < 0 or index >= count:',            // 20
+    '        report "invalid index"; return',         // 21
+    '    for i = index to count - 2:',                // 22
+    '        A[i] = A[i + 1]',                         // 23
+    '    count = count - 1',                           // 24
+    '',                                              // 25
+    'badINSERT(index, value):',                       // 26
+    '    if index < 0 or index > count:',             // 27
+    '        report "invalid index"; return',         // 28
+    '    for i = index to count - 1:',                // 29
+    '        A[i + 1] = A[i]',                         // 30
+    '    A[index] = value',                            // 31
+    '    count = count + 1',                           // 32
   ],
   java: [
     'void main() {',                                 // 1
@@ -1266,28 +1288,38 @@ const LISTINGS = {
     '    insert(1, 25);',                             // 3
     '    insert(7, 99);',                             // 4
     '    delete(1);',                                 // 5
-    '}',                                             // 6
-    '',                                              // 7
-    'void add(int value) {',                          // 8
-    '    insert(count, value);',                      // 9
-    '}',                                             // 10
-    '',                                              // 11
-    'void insert(int index, int value) {',            // 12
-    '    if (index < 0 || index > count)',            // 13
-    '        throw new IndexOutOfBoundsException();',  // 14
-    '    for (int i = count; i > index; i--)',         // 15
-    '        A[i] = A[i - 1];',                        // 16
-    '    A[index] = value;',                           // 17
-    '    count++;',                                    // 18
-    '}',                                             // 19
-    '',                                              // 20
-    'void delete(int index) {',                       // 21
-    '    if (index < 0 || index >= count)',           // 22
-    '        throw new IndexOutOfBoundsException();',  // 23
-    '    for (int i = index; i < count - 1; i++)',     // 24
-    '        A[i] = A[i + 1];',                        // 25
-    '    count--;',                                    // 26
-    '}',                                             // 27
+    '    badInsert(1, 25);',                          // 6
+    '}',                                             // 7
+    '',                                              // 8
+    'void add(int value) {',                          // 9
+    '    insert(count, value);',                      // 10
+    '}',                                             // 11
+    '',                                              // 12
+    'void insert(int index, int value) {',            // 13
+    '    if (index < 0 || index > count)',            // 14
+    '        throw new IndexOutOfBoundsException();',  // 15
+    '    for (int i = count; i > index; i--)',         // 16
+    '        A[i] = A[i - 1];',                        // 17
+    '    A[index] = value;',                           // 18
+    '    count++;',                                    // 19
+    '}',                                             // 20
+    '',                                              // 21
+    'void delete(int index) {',                       // 22
+    '    if (index < 0 || index >= count)',           // 23
+    '        throw new IndexOutOfBoundsException();',  // 24
+    '    for (int i = index; i < count - 1; i++)',     // 25
+    '        A[i] = A[i + 1];',                        // 26
+    '    count--;',                                    // 27
+    '}',                                             // 28
+    '',                                              // 29
+    'void badInsert(int index, int value) {',         // 30
+    '    if (index < 0 || index > count)',            // 31
+    '        throw new IndexOutOfBoundsException();',  // 32
+    '    for (int i = index; i < count; i++)',         // 33
+    '        A[i + 1] = A[i];',                        // 34
+    '    A[index] = value;',                           // 35
+    '    count++;',                                    // 36
+    '}',                                             // 37
   ],
   cpp: [
     'int main() {',                                  // 1
@@ -1295,30 +1327,41 @@ const LISTINGS = {
     '    insert(1, 25);',                             // 3
     '    insert(7, 99);',                             // 4
     '    remove(1);',                                 // 5
-    '}',                                             // 6
-    '',                                              // 7
-    'void add(int value) {',                          // 8
-    '    insert(count, value);',                      // 9
-    '}',                                             // 10
-    '',                                              // 11
-    'void insert(int index, int value) {',            // 12
-    '    if (index < 0 || index > count) {',          // 13
-    '        cerr << "invalid index"; return;',       // 14
-    '    }',                                          // 15
-    '    for (int i = count; i > index; i--)',         // 16
-    '        A[i] = A[i - 1];',                        // 17
-    '    A[index] = value;',                           // 18
-    '    count++;',                                    // 19
-    '}',                                             // 20
-    '',                                              // 21
-    'void remove(int index) {',                       // 22
-    '    if (index < 0 || index >= count) {',         // 23
-    '        cerr << "invalid index"; return;',       // 24
-    '    }',                                          // 25
-    '    for (int i = index; i < count - 1; i++)',     // 26
-    '        A[i] = A[i + 1];',                        // 27
-    '    count--;',                                    // 28
-    '}',                                             // 29
+    '    badInsert(1, 25);',                          // 6
+    '}',                                             // 7
+    '',                                              // 8
+    'void add(int value) {',                          // 9
+    '    insert(count, value);',                      // 10
+    '}',                                             // 11
+    '',                                              // 12
+    'void insert(int index, int value) {',            // 13
+    '    if (index < 0 || index > count) {',          // 14
+    '        cerr << "invalid index"; return;',       // 15
+    '    }',                                          // 16
+    '    for (int i = count; i > index; i--)',         // 17
+    '        A[i] = A[i - 1];',                        // 18
+    '    A[index] = value;',                           // 19
+    '    count++;',                                    // 20
+    '}',                                             // 21
+    '',                                              // 22
+    'void remove(int index) {',                       // 23
+    '    if (index < 0 || index >= count) {',         // 24
+    '        cerr << "invalid index"; return;',       // 25
+    '    }',                                          // 26
+    '    for (int i = index; i < count - 1; i++)',     // 27
+    '        A[i] = A[i + 1];',                        // 28
+    '    count--;',                                    // 29
+    '}',                                             // 30
+    '',                                              // 31
+    'void badInsert(int index, int value) {',         // 32
+    '    if (index < 0 || index > count) {',          // 33
+    '        cerr << "invalid index"; return;',       // 34
+    '    }',                                          // 35
+    '    for (int i = index; i < count; i++)',         // 36
+    '        A[i + 1] = A[i];',                        // 37
+    '    A[index] = value;',                           // 38
+    '    count++;',                                    // 39
+    '}',                                             // 40
   ],
 };
 
@@ -1328,17 +1371,23 @@ const L = {
   mainIns25: { pseudo: 3,  java: 3,  cpp: 3  },
   mainIns99: { pseudo: 4,  java: 4,  cpp: 4  },
   mainDel:   { pseudo: 5,  java: 5,  cpp: 5  },
-  addCall:   { pseudo: 8,  java: 9,  cpp: 9  },
-  insCheck:  { pseudo: 11, java: 13, cpp: 13 },
-  insErr:    { pseudo: 12, java: 14, cpp: 14 },
-  insFor:    { pseudo: 13, java: 15, cpp: 16 },
-  insShift:  { pseudo: 14, java: 16, cpp: 17 },
-  insWrite:  { pseudo: 15, java: 17, cpp: 18 },
-  insCount:  { pseudo: 16, java: 18, cpp: 19 },
-  delCheck:  { pseudo: 19, java: 22, cpp: 23 },
-  delFor:    { pseudo: 21, java: 24, cpp: 26 },
-  delShift:  { pseudo: 22, java: 25, cpp: 27 },
-  delCount:  { pseudo: 23, java: 26, cpp: 28 },
+  mainBad:   { pseudo: 6,  java: 6,  cpp: 6  },
+  addCall:   { pseudo: 9,  java: 10, cpp: 10 },
+  insCheck:  { pseudo: 12, java: 14, cpp: 14 },
+  insErr:    { pseudo: 13, java: 15, cpp: 15 },
+  insFor:    { pseudo: 14, java: 16, cpp: 17 },
+  insShift:  { pseudo: 15, java: 17, cpp: 18 },
+  insWrite:  { pseudo: 16, java: 18, cpp: 19 },
+  insCount:  { pseudo: 17, java: 19, cpp: 20 },
+  delCheck:  { pseudo: 20, java: 23, cpp: 24 },
+  delFor:    { pseudo: 22, java: 25, cpp: 27 },
+  delShift:  { pseudo: 23, java: 26, cpp: 28 },
+  delCount:  { pseudo: 24, java: 27, cpp: 29 },
+  badCheck:  { pseudo: 27, java: 31, cpp: 33 },
+  badFor:    { pseudo: 29, java: 33, cpp: 36 },
+  badShift:  { pseudo: 30, java: 34, cpp: 37 },
+  badWrite:  { pseudo: 31, java: 35, cpp: 38 },
+  badCount:  { pseudo: 32, java: 36, cpp: 39 },
 };
 
 const EMPTY = '·';   // middot: a slot that exists but holds no element
@@ -1355,6 +1404,7 @@ const mainF = (call)             => ({ fn: 'main',   vars: [], call });
 const addF  = (value, call)      => ({ fn: 'ADD',    vars: [vv('value', value)], call });
 const insF  = (index, value, i)  => ({ fn: 'INSERT', vars: [vv('index', index), vv('value', value), ...(i ? [i] : [])] });
 const delF  = (index, i)         => ({ fn: 'DELETE', vars: [vv('index', index), ...(i ? [i] : [])] });
+const badF  = (index, value, i)  => ({ fn: 'badINSERT', vars: [vv('index', index), vv('value', value), ...(i ? [i] : [])] });
 
 /* One snapshot. The array is a fixed row of MAX indexed boxes; occupied cells
  * show their value, trailing free cells are dimmed (role 'empty') so capacity vs
@@ -1425,6 +1475,19 @@ const PAYOFF_NOTE =
   'Inserting or deleting in the middle of an array-based list costs shifting everything after it ' +
   '— up to n moves. That shift cost is the price we pay for the array’s simplicity, and it ' +
   'is exactly why linked lists — the next topic — exist.';
+
+/* Confusion-first pattern (AUTHORING.md "Pedagogical pattern — name the
+ * student's confusion first"): name the nagging question BEFORE showing the
+ * intuitive-but-wrong version fail. */
+const CONFUSION_NOTE =
+  'Have you wondered why we make room by first moving the outermost item? It seems backwards. ' +
+  'Watch what happens if we start from the inside instead.';
+
+/* The payoff note that answers CONFUSION_NOTE using what the student just
+ * watched smear across the tail. */
+const BAD_PAYOFF_NOTE =
+  'That is why we shift from the far end first — each value is copied before the next step ' +
+  'overwrites it. Shift from the outside in.';
 
 function makeTrace() {
   return function* () {
@@ -1591,6 +1654,74 @@ function makeTrace() {
       narrate: 'count = 4. Update the count — the duplicate left at index 4 now falls outside the list, which is contiguous again at indices 0–3.',
       note: PAYOFF_NOTE,
       arr, count, countActive: true, frames: [mainF(L.mainDel), delF(1, iVar(4, 'done'))],
+    });
+
+    /* ================= main calls badINSERT(1, 25) (WRONG shift direction) =================
+     * The array is back to [10, 20, 30, 40], count 4 — the same shape the correct
+     * INSERT(1, 25) faced. badINSERT is that insert with ONE thing changed: the
+     * loop shifts front-first (A[i+1] = A[i], i from index up), so each iteration
+     * reads a cell the previous one already overwrote. One value smears down the
+     * tail. This is overwrite corruption, so every smear step carries the red ⚠
+     * (AUTHORING.md "Memory-danger marker"). The confusion-first note runs first;
+     * the payoff note answers it after the smear. */
+    yield snap({
+      line: L.mainBad, tag: 'call',
+      narrate: 'main calls badINSERT(1, 25). It inserts the same way — range check, shift, write — but shifts in the opposite direction. Control enters badINSERT next.',
+      note: CONFUSION_NOTE,
+      arr, count, frames: [mainF()],
+    });
+    yield snap({
+      line: L.badCheck, tag: 'check',
+      narrate: 'Inside badINSERT: index = 1, value = 25. Range check: 0 ≤ 1 ≤ 4, valid — exactly as the correct INSERT checked.',
+      arr, count, frames: [mainF(L.mainBad), badF(1, 25)],
+    });
+    yield snap({
+      line: L.badFor, tag: 'loop',
+      narrate: 'This loop shifts front-first: i runs from index (1) up to count − 1 (3), each iteration copying a cell into the one to its right — A[i + 1] = A[i]. Watch the tail.',
+      arr, count, frames: [mainF(L.mainBad), badF(1, 25)],
+    });
+    arr[2] = arr[1];   // 20 overwrites 30 -- the first cell clobbered
+    yield snap({
+      line: L.badShift, tag: 'shift',
+      narrate: [
+        'i = 1. A[2] = A[1] copies 20 up into index 2. ',
+        { danger: true, text: 'Index 2 held 30, but we overwrite it before it was ever copied — the 30 is destroyed.' },
+      ],
+      arr, count, active: 2, frames: [mainF(L.mainBad), badF(1, 25, iVar(1, 'active'))],
+    });
+    arr[3] = arr[2];   // 20 again -- reads the cell just clobbered
+    yield snap({
+      line: L.badShift, tag: 'shift',
+      narrate: [
+        'i = 2. A[3] = A[2], but A[2] was just overwritten with 20, so 20 copies again — index 3 becomes 20 and the 40 there is destroyed. ',
+        { danger: true, text: 'Each step reads a cell we already clobbered, so one value smears down the tail.' },
+      ],
+      arr, count, active: 3, frames: [mainF(L.mainBad), badF(1, 25, iVar(2, 'active'))],
+    });
+    arr[4] = arr[3];   // 20 propagates once more
+    yield snap({
+      line: L.badShift, tag: 'shift',
+      narrate: [
+        'i = 3. A[4] = A[3] = 20 — the same 20 propagates once more, into index 4. ',
+        { danger: true, text: 'The whole tail is now the single value 20; every element after index 1 has been clobbered.' },
+      ],
+      arr, count, active: 4, frames: [mainF(L.mainBad), badF(1, 25, iVar(3, 'active'))],
+    });
+    arr[1] = 25;
+    yield snap({
+      line: L.badWrite, tag: 'write',
+      narrate: [
+        'The loop is finished. A[1] = 25 writes the new value. ',
+        { danger: true, text: 'But 30 and 40 are already gone — the list is [10, 25, 20, 20, 20], not [10, 25, 20, 30, 40]. The data is corrupted.' },
+      ],
+      arr, count, active: 1, frames: [mainF(L.mainBad), badF(1, 25, iVar(3, 'done'))],
+    });
+    count = 5;
+    yield snap({
+      line: L.badCount, tag: 'count',
+      narrate: 'count = 5. The count claims five elements, but three of them are the smeared 20 — the shift direction, not the count, is what corrupted the data.',
+      note: BAD_PAYOFF_NOTE,
+      arr, count, countActive: true, frames: [mainF(L.mainBad), badF(1, 25, iVar(3, 'done'))],
     });
   };
 }
