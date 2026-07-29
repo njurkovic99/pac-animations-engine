@@ -172,6 +172,13 @@ body {
 .pac-code-line { display: flex; padding: 0 4px; border-radius: 3px; white-space: pre; }
 .pac-code-line.is-active { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
 .pac-code-line.is-active.is-danger { background: rgba(226, 86, 74, 0.16); box-shadow: inset 2px 0 0 var(--error); color: var(--error); }
+/* Parked caller line: the call site of a caller still on the stack, suspended
+ * while the callee runs. The same highlight as the active line, greyed with the
+ * SAME opacity token the CALLSTACK uses for its inactive (caller) frames -- not a
+ * new colour. One visual language across both panels: bright = running now, dim
+ * = suspended, waiting to resume. See AUTHORING.md "Line highlight — active line
+ * vs. parked caller lines". */
+.pac-code-line.is-parked { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); opacity: .5; }
 .pac-code-num { color: var(--text-dim); width: 2.2em; text-align: right; margin-right: 12px; user-select: none; }
 
 /* ---- STREAM panel ---- */

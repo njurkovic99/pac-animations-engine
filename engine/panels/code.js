@@ -31,10 +31,20 @@ export function render(body, data, ctx, { lang }) {
   // When the code line itself is the memory-integrity culprit, the step sets
   // `dangerLine: true` and the active line is tinted red instead of blue.
   const danger = !!data?.dangerLine;
+  // Parked caller lines: the call site of every caller still on the stack, shown
+  // DIMMED so the student keeps sight of where the call came from and where it
+  // returns (AUTHORING.md "Line highlight — active line vs. parked caller lines").
+  // Each entry is a plain number or a per-language {pseudo,java,cpp} object;
+  // resolve to THIS language. The active line always wins if they coincide
+  // (bright beats dim), so drop it from the parked set.
+  const parked = new Set((data?.parked ?? [])
+    .map(p => (p && typeof p === 'object') ? p[use] : p)
+    .filter(n => n != null && n !== active));
 
   body.querySelector('.pac-code').innerHTML = spec.listings[use].map((src, k) => {
     const n = k + 1;
-    const cls = n === active ? (danger ? ' is-active is-danger' : ' is-active') : '';
+    const cls = n === active ? (danger ? ' is-active is-danger' : ' is-active')
+              : parked.has(n) ? ' is-parked' : '';
     return `<div class="pac-code-line${cls}">` +
            `<span class="pac-code-num">${n}</span><span>${esc(src)}</span></div>`;
   }).join('');

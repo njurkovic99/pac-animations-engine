@@ -176,6 +176,13 @@ body {
 .pac-code-line { display: flex; padding: 0 4px; border-radius: 3px; white-space: pre; }
 .pac-code-line.is-active { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
 .pac-code-line.is-active.is-danger { background: rgba(226, 86, 74, 0.16); box-shadow: inset 2px 0 0 var(--error); color: var(--error); }
+/* Parked caller line: the call site of a caller still on the stack, suspended
+ * while the callee runs. The same highlight as the active line, greyed with the
+ * SAME opacity token the CALLSTACK uses for its inactive (caller) frames -- not a
+ * new colour. One visual language across both panels: bright = running now, dim
+ * = suspended, waiting to resume. See AUTHORING.md "Line highlight — active line
+ * vs. parked caller lines". */
+.pac-code-line.is-parked { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); opacity: .5; }
 .pac-code-num { color: var(--text-dim); width: 2.2em; text-align: right; margin-right: 12px; user-select: none; }
 
 /* ---- STREAM panel ---- */
@@ -365,10 +372,20 @@ function render(body, data, ctx, { lang }) {
   // When the code line itself is the memory-integrity culprit, the step sets
   // `dangerLine: true` and the active line is tinted red instead of blue.
   const danger = !!data?.dangerLine;
+  // Parked caller lines: the call site of every caller still on the stack, shown
+  // DIMMED so the student keeps sight of where the call came from and where it
+  // returns (AUTHORING.md "Line highlight — active line vs. parked caller lines").
+  // Each entry is a plain number or a per-language {pseudo,java,cpp} object;
+  // resolve to THIS language. The active line always wins if they coincide
+  // (bright beats dim), so drop it from the parked set.
+  const parked = new Set((data?.parked ?? [])
+    .map(p => (p && typeof p === 'object') ? p[use] : p)
+    .filter(n => n != null && n !== active));
 
   body.querySelector('.pac-code').innerHTML = spec.listings[use].map((src, k) => {
     const n = k + 1;
-    const cls = n === active ? (danger ? ' is-active is-danger' : ' is-active') : '';
+    const cls = n === active ? (danger ? ' is-active is-danger' : ' is-active')
+              : parked.has(n) ? ' is-parked' : '';
     return `<div class="pac-code-line${cls}">` +
            `<span class="pac-code-num">${n}</span><span>${esc(src)}</span></div>`;
   }).join('');
@@ -1063,7 +1080,11 @@ class Engine {
       // a null/absent line means "highlight nothing" (intro, note, final).
       // `dangerLine` rides alongside: when set, the highlighted line is tinted
       // red instead of blue -- the code itself is the memory-integrity culprit.
-      if (p.spec.type === 'code') data = { ...data, line: step.line, dangerLine: step.dangerLine };
+      // `parked` also rides alongside: the call-site line of every caller still
+      // on the stack, dimmed so the student keeps sight of where the call came
+      // from (AUTHORING.md "Line highlight -- active line vs. parked caller
+      // lines"). Bright = running now, dim = suspended.
+      if (p.spec.type === 'code') data = { ...data, line: step.line, dangerLine: step.dangerLine, parked: step.parked };
       p.ctx.anchors.clear();
       p.renderer.render(p.el.querySelector('.pac-panel-body'),
                         data, p.ctx, { lang: this.lang, step });
@@ -1323,11 +1344,15 @@ const L = {
 const EMPTY = '·';   // middot: a slot that exists but holds no element
 
 /* ---- call-frame builders (immutable: a fresh frame each step, never mutated
- * in place, so earlier snapshots stay intact) ---- */
+ * in place, so earlier snapshots stay intact) ----
+ * `call` is the call-site line this frame is PARKED at while a callee runs — the
+ * line the code panel dims (AUTHORING.md "Line highlight — active line vs. parked
+ * caller lines"). It is set only on frames acting as callers; the running (top)
+ * frame's `call` is ignored, since its executing line is the bright active one. */
 const vv    = (name, value, role) => (role ? { name, value, role } : { name, value });
 const iVar  = (value, role) => ({ name: 'i', value, role });   // role: 'active' | 'done'
-const mainF = ()                 => ({ fn: 'main',   vars: [] });
-const addF  = (value)            => ({ fn: 'ADD',    vars: [vv('value', value)] });
+const mainF = (call)             => ({ fn: 'main',   vars: [], call });
+const addF  = (value, call)      => ({ fn: 'ADD',    vars: [vv('value', value)], call });
 const insF  = (index, value, i)  => ({ fn: 'INSERT', vars: [vv('index', index), vv('value', value), ...(i ? [i] : [])] });
 const delF  = (index, i)         => ({ fn: 'DELETE', vars: [vv('index', index), ...(i ? [i] : [])] });
 
@@ -1337,7 +1362,9 @@ const delF  = (index, i)         => ({ fn: 'DELETE', vars: [vv('index', index), 
  * the blue activity fill (cells are always members here, so blue fill is the only
  * per-step signal). `phantom` appends the would-be holes / attempted write for
  * the invalid-index step, drawn in the error role beyond the real array. `frames`
- * is the call stack, bottom-to-top; the top (last) frame is the running one. */
+ * is the call stack, bottom-to-top; the top (last) frame is the running one, and
+ * every frame below it is a caller — its `call` line is dimmed in the code panel
+ * as a parked caller line, mirroring the greyed CALLSTACK frames exactly. */
 function snap({ line, tag, narrate, note, arr, count, active = null, countActive = false, phantom = null, frames }) {
   const cells = [];
   for (let i = 0; i < MAX; i++) {
@@ -1350,8 +1377,12 @@ function snap({ line, tag, narrate, note, arr, count, active = null, countActive
   }
   if (phantom) for (const p of phantom) cells.push(p);
 
+  // Parked caller lines = the call site of every frame BELOW the running (top)
+  // one. Dimmed in the code panel; the whole caller chain at once.
+  const parked = frames.slice(0, -1).map(f => f.call).filter(Boolean);
+
   return {
-    tag, narrate, line, note,
+    tag, narrate, line, note, parked,
     panels: {
       cells: { render: 'box', cells },
       size: {
@@ -1419,30 +1450,30 @@ function makeTrace() {
       line: L.addCall, tag: 'call',
       narrate: 'Inside ADD: the parameter value is bound to 40. ADD’s whole job is to call INSERT(count, 40).',
       note: ADD_NOTE,
-      arr, count, frames: [mainF(), addF(40)],
+      arr, count, frames: [mainF(L.mainAdd), addF(40)],
     });
     // ADD calls INSERT: its frame appears with index bound to count's value (3).
     yield snap({
       line: L.insCheck, tag: 'check',
       narrate: 'Inside INSERT: index is bound to count, which is 3, and value to 40 — both now visible in the frame. Range check: 0 ≤ 3 ≤ 3, valid.',
-      arr, count, frames: [mainF(), addF(40), insF(3, 40)],
+      arr, count, frames: [mainF(L.mainAdd), addF(40, L.addCall), insF(3, 40)],
     });
     yield snap({
       line: L.insFor, tag: 'loop',
       narrate: 'The shift loop runs from count (3) down to index + 1 (4): an empty range, so it never executes and i is never set. Appending needs no room made.',
-      arr, count, frames: [mainF(), addF(40), insF(3, 40)],
+      arr, count, frames: [mainF(L.mainAdd), addF(40, L.addCall), insF(3, 40)],
     });
     arr[3] = 40;
     yield snap({
       line: L.insWrite, tag: 'write',
       narrate: 'A[3] = 40. The value is written into the first free slot, index 3.',
-      arr, count, active: 3, frames: [mainF(), addF(40), insF(3, 40)],
+      arr, count, active: 3, frames: [mainF(L.mainAdd), addF(40, L.addCall), insF(3, 40)],
     });
     count = 4;
     yield snap({
       line: L.insCount, tag: 'count',
       narrate: 'count = 4. Update the count — the list now holds four elements, indices 0–3.',
-      arr, count, countActive: true, frames: [mainF(), addF(40), insF(3, 40)],
+      arr, count, countActive: true, frames: [mainF(L.mainAdd), addF(40, L.addCall), insF(3, 40)],
     });
 
     /* ================= main calls INSERT(1, 25) (shift the tail RIGHT) ================= */
@@ -1456,43 +1487,43 @@ function makeTrace() {
     yield snap({
       line: L.insCheck, tag: 'check',
       narrate: 'Inside INSERT: index = 1, value = 25. Range check: is index (1) outside 0..count (0..4)? No, so it is valid.',
-      arr, count, frames: [mainF(), insF(1, 25)],
+      arr, count, frames: [mainF(L.mainIns25), insF(1, 25)],
     });
     yield snap({
       line: L.insFor, tag: 'loop',
       narrate: 'Make room at index 1: the loop runs i from count (4) down to index + 1 (2), shifting the tail right.',
       note: MAKE_ROOM_NOTE,
-      arr, count, frames: [mainF(), insF(1, 25)],
+      arr, count, frames: [mainF(L.mainIns25), insF(1, 25)],
     });
     arr[4] = arr[3];   // 40
     yield snap({
       line: L.insShift, tag: 'shift',
       narrate: 'i = 4. A[4] = A[3] = 40 — copy the last element into the free slot to its right.',
-      arr, count, active: 4, frames: [mainF(), insF(1, 25, iVar(4, 'active'))],
+      arr, count, active: 4, frames: [mainF(L.mainIns25), insF(1, 25, iVar(4, 'active'))],
     });
     arr[3] = arr[2];   // 30
     yield snap({
       line: L.insShift, tag: 'shift',
       narrate: 'i = 3. A[3] = A[2] = 30.',
-      arr, count, active: 3, frames: [mainF(), insF(1, 25, iVar(3, 'active'))],
+      arr, count, active: 3, frames: [mainF(L.mainIns25), insF(1, 25, iVar(3, 'active'))],
     });
     arr[2] = arr[1];   // 20
     yield snap({
       line: L.insShift, tag: 'shift',
       narrate: 'i = 2. A[2] = A[1] = 20. Index 1 is now safe to overwrite — its old value is already copied to index 2.',
-      arr, count, active: 2, frames: [mainF(), insF(1, 25, iVar(2, 'active'))],
+      arr, count, active: 2, frames: [mainF(L.mainIns25), insF(1, 25, iVar(2, 'active'))],
     });
     arr[1] = 25;
     yield snap({
       line: L.insWrite, tag: 'write',
       narrate: 'The loop is finished. A[1] = 25 — write the new value into the room just made.',
-      arr, count, active: 1, frames: [mainF(), insF(1, 25, iVar(1, 'done'))],
+      arr, count, active: 1, frames: [mainF(L.mainIns25), insF(1, 25, iVar(1, 'done'))],
     });
     count = 5;
     yield snap({
       line: L.insCount, tag: 'count',
       narrate: 'count = 5. Update the count — the list is now full: count = MAX = 5.',
-      arr, count, countActive: true, frames: [mainF(), insF(1, 25, iVar(1, 'done'))],
+      arr, count, countActive: true, frames: [mainF(L.mainIns25), insF(1, 25, iVar(1, 'done'))],
     });
 
     /* ================= main calls INSERT(7, 99) (INVALID; the key step) ================= */
@@ -1510,12 +1541,12 @@ function makeTrace() {
       line: L.insCheck, tag: 'check',
       narrate: 'Inside INSERT: index = 7, value = 99 — the arguments are now visible in the frame. Range check: is index (7) > count (5)? Yes. Index 7 is outside the valid range 0..5.',
       note: INVALID_NOTE,
-      arr, count, phantom: holes, frames: [mainF(), insF(7, 99)],
+      arr, count, phantom: holes, frames: [mainF(L.mainIns99), insF(7, 99)],
     });
     yield snap({
       line: L.insErr, tag: 'error',
       narrate: 'The index is invalid, so INSERT reports an error and returns without writing. The array is unchanged.',
-      arr, count, phantom: holes, frames: [mainF(), insF(7, 99)],
+      arr, count, phantom: holes, frames: [mainF(L.mainIns99), insF(7, 99)],
     });
 
     /* ================= main calls DELETE(1) (shift the tail LEFT) ================= */
@@ -1527,31 +1558,31 @@ function makeTrace() {
     yield snap({
       line: L.delCheck, tag: 'check',
       narrate: 'Inside DELETE: index = 1. Range check: is index (1) within 0..count − 1 (0..4)? Yes, so it is valid.',
-      arr, count, frames: [mainF(), delF(1)],
+      arr, count, frames: [mainF(L.mainDel), delF(1)],
     });
     yield snap({
       line: L.delFor, tag: 'loop',
       narrate: 'Removing index 1 would leave a hole there. To keep the list contiguous, the loop runs i from index (1) to count − 2 (3), shifting each later element one slot left.',
       note: DELETE_NOTE,
-      arr, count, frames: [mainF(), delF(1)],
+      arr, count, frames: [mainF(L.mainDel), delF(1)],
     });
     arr[1] = arr[2];   // 20 overwrites 25 -- the delete happens here
     yield snap({
       line: L.delShift, tag: 'shift',
       narrate: 'i = 1. A[1] = A[2] = 20. The element 25 at index 1 is overwritten — the delete happens here.',
-      arr, count, active: 1, frames: [mainF(), delF(1, iVar(1, 'active'))],
+      arr, count, active: 1, frames: [mainF(L.mainDel), delF(1, iVar(1, 'active'))],
     });
     arr[2] = arr[3];   // 30
     yield snap({
       line: L.delShift, tag: 'shift',
       narrate: 'i = 2. A[2] = A[3] = 30.',
-      arr, count, active: 2, frames: [mainF(), delF(1, iVar(2, 'active'))],
+      arr, count, active: 2, frames: [mainF(L.mainDel), delF(1, iVar(2, 'active'))],
     });
     arr[3] = arr[4];   // 40
     yield snap({
       line: L.delShift, tag: 'shift',
       narrate: 'i = 3. A[3] = A[4] = 40. The elements are packed contiguously again.',
-      arr, count, active: 3, frames: [mainF(), delF(1, iVar(3, 'active'))],
+      arr, count, active: 3, frames: [mainF(L.mainDel), delF(1, iVar(3, 'active'))],
     });
     count = 4;
     arr[4] = null;     // the trailing duplicate falls outside the list
@@ -1559,7 +1590,7 @@ function makeTrace() {
       line: L.delCount, tag: 'count',
       narrate: 'count = 4. Update the count — the duplicate left at index 4 now falls outside the list, which is contiguous again at indices 0–3.',
       note: PAYOFF_NOTE,
-      arr, count, countActive: true, frames: [mainF(), delF(1, iVar(4, 'done'))],
+      arr, count, countActive: true, frames: [mainF(L.mainDel), delF(1, iVar(4, 'done'))],
     });
   };
 }

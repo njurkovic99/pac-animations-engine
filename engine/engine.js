@@ -216,7 +216,11 @@ export class Engine {
       // a null/absent line means "highlight nothing" (intro, note, final).
       // `dangerLine` rides alongside: when set, the highlighted line is tinted
       // red instead of blue -- the code itself is the memory-integrity culprit.
-      if (p.spec.type === 'code') data = { ...data, line: step.line, dangerLine: step.dangerLine };
+      // `parked` also rides alongside: the call-site line of every caller still
+      // on the stack, dimmed so the student keeps sight of where the call came
+      // from (AUTHORING.md "Line highlight -- active line vs. parked caller
+      // lines"). Bright = running now, dim = suspended.
+      if (p.spec.type === 'code') data = { ...data, line: step.line, dangerLine: step.dangerLine, parked: step.parked };
       p.ctx.anchors.clear();
       p.renderer.render(p.el.querySelector('.pac-panel-body'),
                         data, p.ctx, { lang: this.lang, step });
