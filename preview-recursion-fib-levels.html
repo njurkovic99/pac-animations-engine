@@ -179,6 +179,18 @@ body {
 .pac-code-num { color: var(--text-dim); width: 2.2em; text-align: right; margin-right: 12px; user-select: none; }
 
 /* ---- STREAM panel ---- */
+/* Stable layout: the STREAM panel accumulates output as steps advance. It must
+ * occupy its grid cell at a FIXED size and scroll internally (stream.js
+ * auto-scrolls to the newest line) rather than growing the page and pushing the
+ * controls/narration/note down. Nothing below the stage moves as steps advance.
+ * See AUTHORING.md "Stable layout". The height is fixed (not max-height) so the
+ * cell is the same size on step 0 as at the end. Any other accumulating panel
+ * type gets the same treatment. */
+.pac-panel[data-type="stream"] .pac-panel-body {
+  height: var(--stream-h, 320px);
+  flex: none;
+  overflow-y: auto;
+}
 .pac-stream { font-family: var(--mono); font-size: 12.5px; line-height: 1.7; }
 .pac-stream-line { white-space: pre; }
 .pac-stream-line.dir-in   { color: var(--warn); }
@@ -367,8 +379,16 @@ const nodesPanel = (() => { /* NODES panel — nodes with typed edges.
  *     list.n25.prev   list.n25.next   list.n25
  * which is what lets the arrow overlay draw pointer links as DATA. */
 
-const NW = 74, NH = 40, HGAP = 16, VGAP = 62, PAD = 20;
+const NW = 74, HGAP = 16, VGAP = 62, PAD = 20;
 const RW = 112, RH = 38, RGAP = 46, RROW = 84;   // record geometry
+
+/* Plain-node vertical metrics. The box height is DERIVED from how many `meta`
+ * lines a node carries so the label + every meta line (e.g. "level 3" /
+ * "depth 2") sit inside the box and are never clipped -- see AUTHORING.md
+ * "Node sizing". LABEL_Y / META_Y0 are text baselines from the box top. */
+const LABEL_Y = 17, META_Y0 = 30, META_LH = 11, META_PAD = 8, NH_MIN = 24;
+const plainH = metaMax =>
+  metaMax > 0 ? META_Y0 + (metaMax - 1) * META_LH + META_PAD : NH_MIN;
 
 function mount(body) {
   body.innerHTML = `<svg class="pac-nodes" xmlns="http://www.w3.org/2000/svg"></svg>`;
@@ -379,7 +399,9 @@ function render(body, data, ctx) {
   if (!data?.nodes?.length) { svg.innerHTML = ''; return; }
 
   const record = data.template === 'record';
-  const w = record ? RW : NW, h = record ? RH : NH;
+  // Box height fits the tallest node's meta stack, so meta text never clips.
+  const metaMax = Math.max(0, ...data.nodes.map(n => n.meta?.length ?? 0));
+  const w = record ? RW : NW, h = record ? RH : plainH(metaMax);
   const pos = layout(data, record);
 
   const xs = [...pos.values()].map(p => p.x), ys = [...pos.values()].map(p => p.y);
@@ -395,19 +417,19 @@ function render(body, data, ctx) {
 
   svg.innerHTML = edges + data.nodes.map(n => {
     const p = pos.get(n.id);
-    return record ? recordNode(n, p) : plainNode(n, p);
+    return record ? recordNode(n, p) : plainNode(n, p, h);
   }).join('');
 
   const id = ctx.spec.id;
   svg.querySelectorAll('[data-anchor]').forEach(el => ctx.anchor(`${id}.${el.dataset.anchor}`, el));
 }
 
-function plainNode(n, p) {
+function plainNode(n, p, h) {
   const meta = (n.meta ?? []).map((m, k) =>
-    `<text class="pac-node-meta" x="${p.x}" y="${p.y + 31 + k * 11}">${esc(m)}</text>`).join('');
+    `<text class="pac-node-meta" x="${p.x}" y="${p.y + META_Y0 + k * META_LH}">${esc(m)}</text>`).join('');
   return `<g class="pac-node" data-state="${n.state ?? 'pending'}" data-active="${!!n.active}" data-anchor="${n.id}">
-    <rect class="pac-node-box" x="${p.x - NW / 2}" y="${p.y}" width="${NW}" height="${NH}" rx="4"/>
-    <text class="pac-node-label" x="${p.x}" y="${p.y + 17}">${esc(n.label)}</text>
+    <rect class="pac-node-box" x="${p.x - NW / 2}" y="${p.y}" width="${NW}" height="${h}" rx="4"/>
+    <text class="pac-node-label" x="${p.x}" y="${p.y + LABEL_Y}">${esc(n.label)}</text>
     ${meta}</g>`;
 }
 
@@ -877,6 +899,7 @@ class Engine {
     for (const p of panels) {
       const el = document.createElement('section');
       el.className = 'pac-panel';
+      el.dataset.type = p.type;          // lets CSS give accumulating panels (STREAM) a stable, scrolling cell
       el.innerHTML = `<div class="pac-panel-head"><span>${p.title ?? p.type}</span>
                         <span class="pac-panel-tools"></span></div>
                       <div class="pac-panel-body"></div>`;
@@ -1171,7 +1194,7 @@ function makeTrace() {
       state.set(id, 'entering');
       out.push({ text: `Entering level ${node.level}`, indent: node.level, dir: 'out' });
       yield snap(id, L.enter, 'enter',
-        `fib(${node.n}) begins. It prints "Entering level ${node.level}" indented ${node.level} step${node.level === 1 ? '' : 's'}.`);
+        `fib(${node.n}) begins. It prints "Entering level ${node.level}" indented ${node.level} space${node.level === 1 ? '' : 's'}.`);
       state.set(id, 'active');
 
       if (node.n <= 1) {
@@ -1202,10 +1225,16 @@ function makeTrace() {
       out.push({ text: `Exiting level ${node.level}`, indent: node.level, dir: 'out' });
       state.set(id, 'exited');
       // The post-watch challenge is a note on the final step -- the root's exit.
+      // Final step (root exit): name the invariant explicitly as the payoff --
+      // the relationship step 0 primed the student to watch is now revealed --
+      // then pose the post-watch challenge. See AUTHORING.md "Steps vs. notes".
       const exitNote = id === 'c0'
-        ? 'What if "level" were the recursion depth instead? fib(2) and fib(3) both sit at '
+        ? 'Notice n + level stayed 4 at every node. That invariant is what keeps '
+          + 'each "Exiting" line at the same indent as its "Entering" line, so the '
+          + 'indentation always matches the recursion level. '
+          + 'What if "level" were the recursion depth instead? fib(2) and fib(3) both sit at '
           + 'depth 1 here — check the tree: are they at the same level? Following depth in place '
-          + 'of level is exactly the bug the n + level invariant guards against.'
+          + 'of level is exactly the bug this invariant guards against.'
         : undefined;
       yield snap(id, L.exit, 'exit',
         `fib(${node.n}) returns. Its "Exiting" line is printed at the same indent as its "Entering" line.`,
@@ -1216,12 +1245,15 @@ function makeTrace() {
     // highlighted. The whole call tree is laid out (every node pending), the
     // program output is empty, and the invariant panel shows the starting call
     // fib(4, 0). The setup note lives here.
+    // Step 0 note primes the student to watch the n/level relationship WITHOUT
+    // stating the invariant equation -- that reveal is the payoff on the final
+    // step. See AUTHORING.md "Steps vs. notes".
     yield snap('c0', null, 'init',
       'Before the first call. The call tree is laid out but nothing has run yet; we are about to evaluate fib(4, 0).',
       { note:
-        'We trace fib(4, 0). The invariant is n + level = N = 4, holding at every node — watch the ' +
-        '"n + level" readout stay 4. Crucially, level is NOT the recursion depth; both are shown on ' +
-        'every node so you can see them diverge.' });
+        'We trace fib(4, 0). As this runs, watch how n and level change together at each call. ' +
+        'Crucially, level is NOT the recursion depth; both are shown on every node so you can see ' +
+        'them diverge.' });
 
     yield* visit('c0');
   };
@@ -1238,7 +1270,7 @@ const SPEC = {
     { type: 'code',   id: 'code', title: 'fib(n, level)',
       listings: LISTINGS, labels: { pseudo: 'pseudocode', java: 'Java', cpp: 'C++' } },
     { type: 'nodes',  id: 'tree', title: 'Call tree' },
-    { type: 'stream', id: 'out',  title: 'Program output (the graded artifact)' },
+    { type: 'stream', id: 'out',  title: 'Program output' },
     { type: 'cells',  id: 'inv',  title: 'Invariant' },
   ],
 

@@ -175,6 +175,18 @@ body {
 .pac-code-num { color: var(--text-dim); width: 2.2em; text-align: right; margin-right: 12px; user-select: none; }
 
 /* ---- STREAM panel ---- */
+/* Stable layout: the STREAM panel accumulates output as steps advance. It must
+ * occupy its grid cell at a FIXED size and scroll internally (stream.js
+ * auto-scrolls to the newest line) rather than growing the page and pushing the
+ * controls/narration/note down. Nothing below the stage moves as steps advance.
+ * See AUTHORING.md "Stable layout". The height is fixed (not max-height) so the
+ * cell is the same size on step 0 as at the end. Any other accumulating panel
+ * type gets the same treatment. */
+.pac-panel[data-type="stream"] .pac-panel-body {
+  height: var(--stream-h, 320px);
+  flex: none;
+  overflow-y: auto;
+}
 .pac-stream { font-family: var(--mono); font-size: 12.5px; line-height: 1.7; }
 .pac-stream-line { white-space: pre; }
 .pac-stream-line.dir-in   { color: var(--warn); }

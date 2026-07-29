@@ -27,8 +27,16 @@
  *     list.n25.prev   list.n25.next   list.n25
  * which is what lets the arrow overlay draw pointer links as DATA. */
 
-const NW = 74, NH = 40, HGAP = 16, VGAP = 62, PAD = 20;
+const NW = 74, HGAP = 16, VGAP = 62, PAD = 20;
 const RW = 112, RH = 38, RGAP = 46, RROW = 84;   // record geometry
+
+/* Plain-node vertical metrics. The box height is DERIVED from how many `meta`
+ * lines a node carries so the label + every meta line (e.g. "level 3" /
+ * "depth 2") sit inside the box and are never clipped -- see AUTHORING.md
+ * "Node sizing". LABEL_Y / META_Y0 are text baselines from the box top. */
+const LABEL_Y = 17, META_Y0 = 30, META_LH = 11, META_PAD = 8, NH_MIN = 24;
+const plainH = metaMax =>
+  metaMax > 0 ? META_Y0 + (metaMax - 1) * META_LH + META_PAD : NH_MIN;
 
 export function mount(body) {
   body.innerHTML = `<svg class="pac-nodes" xmlns="http://www.w3.org/2000/svg"></svg>`;
@@ -39,7 +47,9 @@ export function render(body, data, ctx) {
   if (!data?.nodes?.length) { svg.innerHTML = ''; return; }
 
   const record = data.template === 'record';
-  const w = record ? RW : NW, h = record ? RH : NH;
+  // Box height fits the tallest node's meta stack, so meta text never clips.
+  const metaMax = Math.max(0, ...data.nodes.map(n => n.meta?.length ?? 0));
+  const w = record ? RW : NW, h = record ? RH : plainH(metaMax);
   const pos = layout(data, record);
 
   const xs = [...pos.values()].map(p => p.x), ys = [...pos.values()].map(p => p.y);
@@ -55,19 +65,19 @@ export function render(body, data, ctx) {
 
   svg.innerHTML = edges + data.nodes.map(n => {
     const p = pos.get(n.id);
-    return record ? recordNode(n, p) : plainNode(n, p);
+    return record ? recordNode(n, p) : plainNode(n, p, h);
   }).join('');
 
   const id = ctx.spec.id;
   svg.querySelectorAll('[data-anchor]').forEach(el => ctx.anchor(`${id}.${el.dataset.anchor}`, el));
 }
 
-function plainNode(n, p) {
+function plainNode(n, p, h) {
   const meta = (n.meta ?? []).map((m, k) =>
-    `<text class="pac-node-meta" x="${p.x}" y="${p.y + 31 + k * 11}">${esc(m)}</text>`).join('');
+    `<text class="pac-node-meta" x="${p.x}" y="${p.y + META_Y0 + k * META_LH}">${esc(m)}</text>`).join('');
   return `<g class="pac-node" data-state="${n.state ?? 'pending'}" data-active="${!!n.active}" data-anchor="${n.id}">
-    <rect class="pac-node-box" x="${p.x - NW / 2}" y="${p.y}" width="${NW}" height="${NH}" rx="4"/>
-    <text class="pac-node-label" x="${p.x}" y="${p.y + 17}">${esc(n.label)}</text>
+    <rect class="pac-node-box" x="${p.x - NW / 2}" y="${p.y}" width="${NW}" height="${h}" rx="4"/>
+    <text class="pac-node-label" x="${p.x}" y="${p.y + LABEL_Y}">${esc(n.label)}</text>
     ${meta}</g>`;
 }
 
