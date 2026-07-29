@@ -173,7 +173,7 @@ function makeTrace() {
           + 'of level is exactly the bug the n + level invariant guards against.'
         : undefined;
       yield snap(id, L.exit, 'exit',
-        `fib(${node.n}) returns. Its "Exiting" line sits at the same indent as its "Entering" line.`,
+        `fib(${node.n}) returns. Its "Exiting" line is printed at the same indent as its "Entering" line.`,
         { note: exitNote });
     }
 
@@ -194,11 +194,10 @@ function makeTrace() {
 
 export default {
   title: 'Recursion: what "level" really counts',
-  subtitle: 'ds A5 — Fibonacci trace. The invariant is n + level = N.',
+  subtitle: 'Tracing a recursive Fibonacci function.',
   profile: 'standard',
   columns: 2,
   languages: ['pseudo', 'java', 'cpp'],
-  hideTags: ['call', 'init'],
 
   panels: [
     { type: 'code',   id: 'code', title: 'fib(n, level)',

@@ -220,6 +220,19 @@ body {
  * traversal state. It takes the normal outline once the insertion is complete.
  * See AUTHORING.md "Node membership state". */
 .pac-node[data-state="unlinked"] .pac-node-box { stroke: var(--warn); fill: none; stroke-width: 1.5; }
+/* Settled member of a structure: green OUTLINE, no fill -- leaving the fill
+ * channel free for the activity signal below. Distinct from the tree's
+ * `exited`, which shares the green but means "traversal done". */
+.pac-node[data-state="member"]   .pac-node-box { stroke: var(--ok); }
+
+/* Activity channel (FILL) -- the second, INDEPENDENT node color channel (see
+ * AUTHORING.md "Node color channels"). A truthy `active` on a node means "this
+ * node is being modified on THIS step": paint a blue interior, orthogonal to
+ * the membership/traversal OUTLINE above. Declared last so it wins the `fill`
+ * property on equal specificity -- an amber `unlinked` node (fill:none) or a
+ * green `member` therefore also shows a blue activity fill in the same step
+ * (amber-outline + blue-fill, or green-outline + blue-fill). */
+.pac-node[data-active="true"]    .pac-node-box { fill: var(--accent-soft); }
 .pac-node-label { fill: var(--text); font-family: var(--mono); font-size: 12px; text-anchor: middle; }
 .pac-node-meta  { fill: var(--text-dim); font-family: var(--mono); font-size: 9.5px; text-anchor: middle; }
 .pac-node[data-state="pending"] .pac-node-label { fill: var(--text-dim); }

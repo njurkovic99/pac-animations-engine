@@ -597,3 +597,68 @@ reached by the current walk" (dimmed, used in tree/graph traversal); `unlinked`
 means "not a structural member yet/anymore" (amber outline). A node can't be both
 in a way that matters — use `unlinked` for membership, `pending` for traversal
 frontier.
+
+---
+
+## Node color channels — outline = membership, fill = activity
+
+Two **independent visual channels** on every node. They never compete; both are
+always shown.
+
+- **Outline (border) = membership.** Green = a stable member of the structure.
+  Amber = `unlinked` (not yet, or no longer, a member). Slow/stable: it reflects
+  a lasting state and changes rarely — e.g. an inserted node is amber for the
+  whole insertion and turns green ONCE, on the final step, when it is fully linked
+  in both directions. Never let activity or partial linking flip the outline to
+  green early.
+- **Fill (interior) = activity.** Blue fill = "this node's contents are being
+  modified on THIS step." Transparent otherwise. Transient: it flicks on for the
+  step a node is touched, off the next step.
+
+Because they are different channels (border vs. interior), a node shows both at
+once. A node being wired while still unlinked is **amber outline + blue fill**
+("still not a member, being modified right now"). A stable member being modified
+is **green outline + blue fill**. This is intended — do not treat one as
+overriding the other.
+
+Do not use fill color for membership or outline color for activity; keep the two
+channels separate so the student reads two clear stories: "where are we in
+joining/leaving the structure" (outline) and "which node is the current line
+touching" (fill).
+
+## Naming — one identifier per thing, matching the code panel
+
+A variable has exactly ONE name, used identically in the code panel, the
+narration, the notes, and the pointer/variable panels. The **code panel's name is
+canonical** — narration and panels must match it exactly. Do not introduce a
+parallel name (e.g. code says `ins`, narration must say `ins`, never `ins_pt`).
+Pick the name that reads well in the code and use it everywhere. Two names for one
+thing silently makes students wonder if they are two things.
+
+## No assignment references in student-visible text
+
+The assignment an animation backs is recorded ONLY in the hidden `?a=` URL marker
+(for the instructor). It must NEVER appear in any student-visible text — not the
+title, subtitle, narration, notes, or panels. Printing "ds A10" (or any
+assignment id) defeats the entire hidden-marker design, which exists so students
+don't cherry-pick the assignment-backing animations. Titles and subtitles
+describe the *topic*, never the assignment.
+
+## Subtitles orient, they don't spoil
+
+A subtitle (if used at all) gives plain orientation — what the animation is about
+— in terms the student understands *before* seeing the code. It must not reference
+line numbers, give away the punchline, or restate the lesson cryptically. Often
+the title alone orients well enough and no subtitle is needed. Bad: "line 4
+dereferences the pointer line 2 set." Good: "Inserting a node into a doubly linked
+list" — or nothing.
+
+## Metrics readout — hidden by default, labeled when shown
+
+The tag-derived counter (`assign`, `swap`, etc.) is an INTERNAL mechanism. By
+default it is **not displayed** — most animations have no count worth showing, and
+the raw tag name (`assign`) is engine jargon, not student-facing language. Show a
+counter ONLY when the count is itself the lesson (e.g. a sorting race counting
+statements vs. swaps), and then label it in plain student-facing words
+("statements", "swaps"), never the raw tag. An insertion, a traversal, a single
+algorithm walk-through shows no counter.
