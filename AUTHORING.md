@@ -801,3 +801,54 @@ one active frame has its line bright.
 suspended, waiting to resume.** The dim style is the same token as the CALLSTACK's
 greyed frames — not a new color. On return, a frame pops, its line's dim clears,
 and the caller it returned to becomes bright/active again.
+
+---
+
+## CODE panel tabs — meaning differs by course
+
+The CODE panel's tabs mean different things depending on the course, and a build
+must use the right one:
+
+- **Data structures (ds):** the course is language-agnostic — it teaches concepts
+  shown in multiple languages. Tabs = **language variants** of the same logic:
+  pseudocode / Java / C++. (The two reference ds animations do this.)
+
+- **The four programming courses (bCpp, bJava, aCpp, aJava):** each course is a
+  SINGLE language. There is NO pseudocode/Java/C++ toggle — a bCpp animation is
+  C++ only, a bJava animation is Java only, etc. Do not add language tabs to these.
+  Instead, tabs are reserved for **multiple source files** in one program:
+  `main.cpp` vs `Student.h` vs `Student.cpp`, or `Main.java` vs `Account.java`.
+  When a program spans files (common in the OOP animations — class definition in
+  one file, driver in another), tabs let the student flip between source files.
+  A single-file program has no tabs at all.
+
+So: ds tabs = languages; programming-course tabs = source files (same language).
+The CODE renderer supports both — the content file declares which by what it puts
+in the listings map (language keys for ds; filename keys for the programming
+courses).
+
+---
+
+## Pedagogical pattern — name the student's confusion first
+
+When an animation demonstrates why a correct approach is correct — especially when
+the correct way is counterintuitive — first **name the confusion the student is
+already feeling**, then show why the intuitive-but-wrong way fails. Validating the
+instinct ("yes, this seems backwards") before refuting it is far stronger than
+presenting a bug cold: it connects to what the student was quietly wondering and
+makes them *want* to watch the failure.
+
+Structure:
+1. A note that names the counterintuitive thing as a question: e.g. "Have you
+   wondered why we make room by moving the outermost item first? It seems
+   backwards. Watch what happens if we start from the inside instead."
+2. Run the intuitive-but-wrong version; let the student watch it fail (with the
+   memory-danger ⚠ if it corrupts data).
+3. A payoff note that answers the opening question using what they just saw: "That
+   is why we start from the far end — each value is copied before the next step
+   overwrites it."
+
+This is WATCH-safe (no gate, no interaction) and is the WATCH-mode way to get the
+engagement a prediction question would give: curiosity is provoked by naming the
+confusion, and satisfied by watching the consequence. Use it wherever a correct
+method has a natural "why not the obvious way?" behind it.
