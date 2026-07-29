@@ -165,6 +165,7 @@ export class Engine {
     for (const p of panels) {
       const el = document.createElement('section');
       el.className = 'pac-panel';
+      el.dataset.type = p.type;          // lets CSS give accumulating panels (STREAM) a stable, scrolling cell
       el.innerHTML = `<div class="pac-panel-head"><span>${p.title ?? p.type}</span>
                         <span class="pac-panel-tools"></span></div>
                       <div class="pac-panel-body"></div>`;

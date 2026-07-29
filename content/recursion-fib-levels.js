@@ -136,7 +136,7 @@ function makeTrace() {
       state.set(id, 'entering');
       out.push({ text: `Entering level ${node.level}`, indent: node.level, dir: 'out' });
       yield snap(id, L.enter, 'enter',
-        `fib(${node.n}) begins. It prints "Entering level ${node.level}" indented ${node.level} step${node.level === 1 ? '' : 's'}.`);
+        `fib(${node.n}) begins. It prints "Entering level ${node.level}" indented ${node.level} space${node.level === 1 ? '' : 's'}.`);
       state.set(id, 'active');
 
       if (node.n <= 1) {
@@ -167,10 +167,16 @@ function makeTrace() {
       out.push({ text: `Exiting level ${node.level}`, indent: node.level, dir: 'out' });
       state.set(id, 'exited');
       // The post-watch challenge is a note on the final step -- the root's exit.
+      // Final step (root exit): name the invariant explicitly as the payoff --
+      // the relationship step 0 primed the student to watch is now revealed --
+      // then pose the post-watch challenge. See AUTHORING.md "Steps vs. notes".
       const exitNote = id === 'c0'
-        ? 'What if "level" were the recursion depth instead? fib(2) and fib(3) both sit at '
+        ? 'Notice n + level stayed 4 at every node. That invariant is what keeps '
+          + 'each "Exiting" line at the same indent as its "Entering" line, so the '
+          + 'indentation always matches the recursion level. '
+          + 'What if "level" were the recursion depth instead? fib(2) and fib(3) both sit at '
           + 'depth 1 here — check the tree: are they at the same level? Following depth in place '
-          + 'of level is exactly the bug the n + level invariant guards against.'
+          + 'of level is exactly the bug this invariant guards against.'
         : undefined;
       yield snap(id, L.exit, 'exit',
         `fib(${node.n}) returns. Its "Exiting" line is printed at the same indent as its "Entering" line.`,
@@ -181,12 +187,15 @@ function makeTrace() {
     // highlighted. The whole call tree is laid out (every node pending), the
     // program output is empty, and the invariant panel shows the starting call
     // fib(4, 0). The setup note lives here.
+    // Step 0 note primes the student to watch the n/level relationship WITHOUT
+    // stating the invariant equation -- that reveal is the payoff on the final
+    // step. See AUTHORING.md "Steps vs. notes".
     yield snap('c0', null, 'init',
       'Before the first call. The call tree is laid out but nothing has run yet; we are about to evaluate fib(4, 0).',
       { note:
-        'We trace fib(4, 0). The invariant is n + level = N = 4, holding at every node — watch the ' +
-        '"n + level" readout stay 4. Crucially, level is NOT the recursion depth; both are shown on ' +
-        'every node so you can see them diverge.' });
+        'We trace fib(4, 0). As this runs, watch how n and level change together at each call. ' +
+        'Crucially, level is NOT the recursion depth; both are shown on every node so you can see ' +
+        'them diverge.' });
 
     yield* visit('c0');
   };
@@ -203,7 +212,7 @@ export default {
     { type: 'code',   id: 'code', title: 'fib(n, level)',
       listings: LISTINGS, labels: { pseudo: 'pseudocode', java: 'Java', cpp: 'C++' } },
     { type: 'nodes',  id: 'tree', title: 'Call tree' },
-    { type: 'stream', id: 'out',  title: 'Program output (the graded artifact)' },
+    { type: 'stream', id: 'out',  title: 'Program output' },
     { type: 'cells',  id: 'inv',  title: 'Invariant' },
   ],
 
