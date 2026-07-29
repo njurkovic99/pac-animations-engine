@@ -772,3 +772,32 @@ the data model allows it, but don't build it until those animations need it.
 
 The step's `line` highlight and the CALLSTACK stay in sync: when the highlight
 enters a function's body, that function's frame is the active (top) one.
+
+---
+
+## Line highlight — active line vs. parked caller lines
+
+When execution steps into a function, the line that *called* it must stay marked,
+so the student always sees where the call originated and where control will
+return. A real debugger drops the caller out of view; this tool keeps it, because
+"a function is a detour you return from" is exactly what beginners miss.
+
+This means the code panel has **two highlight states**, and they must be visually
+distinct so "executing now" is never confused with "waiting to resume":
+
+- **Active line** — the line executing now. The existing bright blue highlight.
+- **Parked caller line(s)** — the call site in each caller still on the stack,
+  waiting for the call to return. Rendered **dimmed**, using the **same greyed
+  treatment the CALLSTACK panel uses for inactive (caller) frames**. Not the
+  bright active highlight.
+
+**Dim the whole caller chain.** If main called ADD which called INSERT, then while
+inside INSERT *both* parked lines are dimmed: main's `ADD(40)` line and ADD's
+`INSERT(count, value)` line. The code panel thus mirrors the CALLSTACK panel
+exactly — every frame on the stack has its parked line dimmed in the code, and the
+one active frame has its line bright.
+
+**One consistent visual language across both panels: bright = running now, dim =
+suspended, waiting to resume.** The dim style is the same token as the CALLSTACK's
+greyed frames — not a new color. On return, a frame pops, its line's dim clears,
+and the caller it returned to becomes bright/active again.
