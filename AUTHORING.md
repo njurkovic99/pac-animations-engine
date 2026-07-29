@@ -665,23 +665,46 @@ algorithm walk-through shows no counter.
 
 ---
 
-## Stable layout — the page never reflows as steps advance
+## Stable layout — bounded stage, panels scroll internally, note pinned
 
-Everything below the stage — the controls (Back / Next / Play / Reset), the
-narration bar, the note box — holds a **fixed position** through the whole
-animation. The student's pointer is over "Next Step"; that button must not move
-when they click it.
+The animation must fit on screen and never reflow as steps advance. This is a
+general engine behavior, resolution-independent by construction: bound the stage,
+divide it proportionally, let overflow scroll — never grow the page.
 
-Therefore any panel whose content **accumulates** (STREAM output, a growing log,
-a filling call tree) must NOT expand and push the layout down. Instead:
+**The stage has a bounded height.** The stage (the panel grid) has a max-height
+sized so a code panel shows roughly **12–15 lines** before scrolling. Below that
+height everything fits; the stage never grows past it regardless of how much
+content a panel holds. (The exact max-height and the row/column proportions are
+tunable — start from "~15 code lines visible" and adjust. Do NOT hardcode to a
+specific screen resolution; bound the stage and let proportion + scrolling handle
+every viewport.)
 
-- The panel occupies its **grid cell at a stable size** and **scrolls internally**
-  when content exceeds it, auto-scrolling to the newest content so the latest line
-  is always visible.
-- The panel never grows the page. Nothing below the stage ever shifts.
+**Every panel scrolls internally within its grid cell.** No panel grows the page.
+A panel whose content exceeds its cell shows a scrollbar and auto-scrolls to the
+relevant content:
+- CODE: ~12–15 lines visible; the active (highlighted) line auto-scrolls into
+  view as it moves. A 30-line listing scrolls; it does not stretch the cell.
+- STREAM / call log / CALLSTACK / any accumulating panel: fixed cell, internal
+  scroll, newest content auto-scrolled into view.
 
-This applies to every accumulating panel, not just STREAM. If a panel can grow
-step-to-step, it scrolls within its cell rather than resizing.
+**Panels fill their grid cells; don't oversize a cell for little content.** A
+two-value panel (e.g. count/capacity) should be a compact strip, not a tall boxed
+panel with a void. Frames/content top-align within a cell — no large empty region
+above or below.
+
+**Controls and note are pinned below the stage, always visible.** The controls
+(Back / Next / Play / Reset), the narration bar, and the note box sit below the
+bounded stage and are ALWAYS on screen — they are never pushed below the fold by
+panel content, at any viewport size. This is the safety net: on a short viewport
+the panels show less and scroll more, but the student can always step and always
+read the narration and note. Losing the note off-screen is the one failure the
+layout must prevent.
+
+The result degrades gracefully: tall viewport → everything roomy; short viewport
+→ panels show less and scroll, but nothing overflows the page and nothing (least
+of all the note) falls off. Design target is a 1920×1080 browser window at 100%;
+the pinned note makes smaller viewports (and smaller Canvas iframes) degrade to
+"cramped but complete" rather than "clean but truncated."
 
 ## Node sizing — fit content, never clip
 
@@ -852,3 +875,39 @@ This is WATCH-safe (no gate, no interaction) and is the WATCH-mode way to get th
 engagement a prediction question would give: curiosity is provoked by naming the
 confusion, and satisfied by watching the consequence. Use it wherever a correct
 method has a natural "why not the obvious way?" behind it.
+
+---
+
+## Planned primitive — the index pointer (labeled marker over a linear structure)
+
+A **labeled pointer that points at an array cell and moves as its index changes** —
+the array-world analog of the linked-list pointer arrows. E.g. a marker labeled
+`first` under cell 0 and `rear` under cell 3, tracking as they change.
+
+**When it applies — the key distinction (index as loop mechanic vs. semantic
+pointer):**
+
+- **Raw array + a loop counter** → NO index pointer. A `for i = ...` counter that
+  just walks the array to shift/scan elements is ephemeral bookkeeping, not novel
+  (students saw it in the beginning course). Drawing it as a pointer would be
+  hollow — it spatializes a throwaway variable. `lists-array-insert-delete`'s `i`
+  is this case: the lesson is the shift cost, not the index. No pointer.
+- **Array-based STRUCTURE + semantic indices** → YES, this is what the pointer is
+  for. When an index *defines the structure* — persists between operations, carries
+  meaning, and manipulating it IS the algorithm — it deserves a labeled moving
+  pointer. A queue *is* "an array + `first` + `rear` + wraparound"; those indices
+  are the structure. A stack is "an array + `top`."
+
+The unifying principle: **the index pointer visualizes the semantic indices that
+turn a raw array into a data structure.** It belongs to array-*based structures*,
+not to the raw array.
+
+**Debut: `queues-count-vs-rear` (ds A2)** — where `first`/`rear` are semantic,
+persistent, and are the whole lesson (including the full-vs-empty ambiguity two
+indices create, and count-vs-computed-from-indices). Build and prove the primitive
+there, where it is load-bearing. The stack animations (`top`) inherit it. Also
+useful later for binary search (`low`/`mid`/`high` converging) and the sorting
+animations (`i`/`j`), where moving index markers are central.
+
+**Deferred until then** — do not build it on the raw-array animation. Recorded so
+the queue animation introduces it deliberately as its natural new capability.
