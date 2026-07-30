@@ -9,9 +9,10 @@
  *
  * Step data: { frames: [{fn, vars: [{name, value, role}], active}] }
  *   - `frames` is ordered bottom-to-top: frames[0] is `main`, the last element
- *     is the currently-running (top) frame. Rendered newest-on-top, and pinned
- *     to the bottom of the (fixed-height) cell so `main` never moves and the
- *     layout never reflows (AUTHORING.md "Stable layout").
+ *     is the currently-running (top) frame. Rendered newest-on-top and
+ *     top-aligned within the panel's bounded grid cell, so the running frame is
+ *     always visible and the pane scrolls internally if the stack outgrows the
+ *     cell — the layout never reflows (AUTHORING.md "Stable layout").
  *   - `active: true` marks the running frame (emphasized); the rest are greyed.
  *   - a var's `role: 'active'` paints the blue activity fill — a local changing
  *     THIS step, the same colour rule as nodes/cells. `role: 'done'` greys a

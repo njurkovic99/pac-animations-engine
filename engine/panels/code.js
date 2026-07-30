@@ -48,6 +48,19 @@ export function render(body, data, ctx, { lang }) {
     return `<div class="pac-code-line${cls}">` +
            `<span class="pac-code-num">${n}</span><span>${esc(src)}</span></div>`;
   }).join('');
+
+  // Stable layout: the CODE panel shows ~12–15 lines and scrolls internally, so
+  // the active line must be scrolled into view as it moves (a jump into a
+  // function body far down the listing would otherwise sit off-screen). Scroll
+  // only THIS panel body (the overflow:auto container), never the page — centre
+  // the active line in the visible area. See AUTHORING.md "Stable layout".
+  const activeEl = body.querySelector('.pac-code-line.is-active');
+  if (activeEl) {
+    const bodyRect = body.getBoundingClientRect();
+    const lineRect = activeEl.getBoundingClientRect();
+    const delta = (lineRect.top - bodyRect.top) - (body.clientHeight - lineRect.height) / 2;
+    body.scrollTop += delta;
+  }
 }
 
 const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
