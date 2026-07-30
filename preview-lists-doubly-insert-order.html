@@ -39,16 +39,27 @@
    * below the stage and stay on screen at any viewport height.
    *
    * The bound is derived, not hardcoded to a resolution: start from "~15 code
-   * lines visible" and the current 2-row grid, and tune these values. The code
-   * panel occupies one grid row, so making a row tall enough for ~15 code lines
-   * fixes the whole stage height. All values below are tunable.
-   * Design target: a 1920x1080 window at 100%. */
+   * lines visible" and the current 2-row grid, and tune these values. All
+   * values below are tunable. Design target: a 1920x1080 window at 100%.
+   *
+   * The two grid rows are sized to their content, NOT equally: the top row
+   * (code + array) gets ~15 code lines; the bottom row (call stack +
+   * count/capacity) holds a shallow call stack -- main -> ADD -> INSERT is the
+   * maximum, 3 frames -- and a two-value strip, so it is sized to about 2
+   * call-stack frames rather than a large reserve. Both rows are FIXED, so row
+   * heights stay stable across steps; a deeper stack scrolls internally instead
+   * of resizing the row. */
   --code-line-h:   20.6px;   /* code font-size 12.5px x line-height 1.65 */
-  --code-lines:    15;       /* code lines visible before the panel scrolls */
-  --panel-chrome:  54px;     /* a panel's header + body padding (non-content) */
-  --stage-rows:    2;        /* grid rows in the current animations (2x2) */
-  --stage-row-h:   calc(var(--code-lines) * var(--code-line-h) + var(--panel-chrome));
-  --stage-max-h:   calc(var(--stage-rows) * var(--stage-row-h) + (var(--stage-rows) - 1) * var(--gap));
+  --code-lines:    15;       /* code lines visible before the CODE panel scrolls */
+  --panel-chrome:  54px;     /* a panel's header + body vertical padding (non-content) */
+  --body-pad:      22px;     /* a panel body's vertical padding alone */
+  --frame-h:       88px;     /* a representative call-stack frame (fn + ~1-2 vars) */
+  --callstack-frames: 2;     /* call-stack frames shown before the pane scrolls */
+
+  --callstack-stack-h: calc(var(--callstack-frames) * var(--frame-h) + (var(--callstack-frames) - 1) * 6px);
+  --stage-row-top:     calc(var(--code-lines) * var(--code-line-h) + var(--panel-chrome));
+  --stage-row-bottom:  calc(var(--callstack-stack-h) + var(--panel-chrome));
+  --stage-max-h:       calc(var(--stage-row-top) + var(--stage-row-bottom) + var(--gap));
 }
 
 * { box-sizing: border-box; }
@@ -83,12 +94,16 @@ body {
 
 /* ---- layout: the bounded stage ----
  * A grid of panels, bounded to --stage-max-h so it never grows the page. It
- * flexes to fill the space above the pinned chrome but is capped at the bound,
- * and its rows share the height equally (minmax(0,1fr) lets them shrink so each
- * panel scrolls internally instead of overflowing). See AUTHORING.md. */
+ * flexes to fill the space above the pinned chrome but is capped at the bound.
+ * The two rows are sized to their content (tall top for code, short bottom for
+ * the shallow call stack + count/capacity strip) rather than split equally;
+ * both are FIXED so panels scroll internally instead of reflowing. Any extra
+ * rows (an animation with >4 panels) fall back to sharing leftover space.
+ * See AUTHORING.md. */
 .pac-stage {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-rows: var(--stage-row-top) var(--stage-row-bottom);
   grid-auto-rows: minmax(0, 1fr);
   gap: var(--gap);
   position: relative;          /* anchor origin for the arrow overlay */
@@ -105,6 +120,16 @@ body {
  * content, so it reads as a compact strip rather than a tall box with a void.
  * See AUTHORING.md "Panels fill their grid cells; don't oversize a cell". */
 .pac-panel[data-compact] { align-self: start; max-height: 100%; }
+
+/* The CALLSTACK panel hugs its content the same way (top-aligned, no reserve
+ * for the maximum depth), but its body is capped at ~2 frames: a shallow stack
+ * (1-2 frames) shows with no void, and a deeper one (up to main -> ADD ->
+ * INSERT) scrolls internally with the running frame kept in view. The cap keeps
+ * the box from ever exceeding its (already short) grid row. See AUTHORING.md. */
+.pac-panel[data-type="callstack"] { align-self: start; max-height: 100%; }
+.pac-panel[data-type="callstack"] .pac-panel-body {
+  max-height: calc(var(--callstack-stack-h) + var(--body-pad));
+}
 
 /* ---- panel chrome ---- */
 .pac-panel {
