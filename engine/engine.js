@@ -134,6 +134,7 @@ export class Engine {
     this.root.innerHTML = `
       <h1 class="pac-title"></h1>
       <p class="pac-sub"></p>
+      <a class="pac-openwin" target="_blank" rel="noopener" hidden></a>
       <div class="pac-stage"></div>
       <div class="pac-controls">
         <button class="pac-btn" data-act="prev">&larr; Back</button>
@@ -148,6 +149,7 @@ export class Engine {
 
     this.root.querySelector('.pac-title').textContent = s.title ?? '';
     this.root.querySelector('.pac-sub').textContent = s.subtitle ?? '';
+    this._buildOpenWindowLink();
     this.stage    = this.root.querySelector('.pac-stage');
     this.narrate  = this.root.querySelector('.pac-narrate');
     this.noteBox  = this.root.querySelector('.pac-note');
@@ -202,6 +204,33 @@ export class Engine {
       if (e.key === 'ArrowRight') this.next();
       if (e.key === 'ArrowLeft')  this.prev();
     });
+  }
+
+  /**
+   * The open-in-own-window escape hatch (AUTHORING.md "Open-in-own-window
+   * link"). Canvas steals ~300px of chrome before an embedded animation even
+   * begins; a self-link with target="_blank" opens the same page in a new tab
+   * where it gets the whole window. It is iframe-aware: a lifeline shown
+   * prominently when embedded, silent when the animation is already
+   * full-window (standalone). Built into the engine, so every animation
+   * inherits it -- no per-animation opt-in.
+   */
+  _buildOpenWindowLink() {
+    const link = this.root.querySelector('.pac-openwin');
+    if (!link) return;
+    // The iframe's own URL, which is exactly what we want to open full-window.
+    link.href = window.location.href;
+    // window.self !== window.top is the embedding test. The identity comparison
+    // is same-origin-safe: it never touches a cross-origin property, so it
+    // cannot throw even when Canvas serves the page from another origin.
+    const embedded = window.self !== window.top;
+    if (embedded) {
+      link.textContent = '⛶ Scrolling to see it all? Open in its own window';
+      link.hidden = false;
+    } else {
+      // Already full-window -- the hint would just be noise, so stay silent.
+      link.hidden = true;
+    }
   }
 
   setLanguage(lang) { this.lang = lang; this.render(); }
