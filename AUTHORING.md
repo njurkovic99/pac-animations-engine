@@ -405,9 +405,13 @@ non-execution commentary.
 - A note **attaches to a specific step**. When the student reaches that step, the
   note appears; when they leave it, the note disappears. Notes are **transient,
   not persistent** — synchronized to the moment they're relevant, then gone.
-- On steps with no note, the note box is **empty and collapses** (takes no space;
-  the layout reflows). A note *appearing* is meant to feel like the animation
-  saying "pay attention to this."
+- On steps with no note, the note box is **empty and invisible** — nothing is
+  painted (no border, background, or "note" label), so a note-less step reads as
+  blank space. The box **keeps its reserved height** rather than collapsing, so
+  a note appearing or disappearing never shifts the controls above it (see
+  "Stable layout" — the controls must never move as steps advance). A note
+  *appearing* is still meant to feel like the animation saying "pay attention to
+  this," but it materializes in place without reflowing the page.
 - An animation may have **several** notes across its run — e.g. a setup note on
   step 1, a warning note on the tricky line, a challenge note on the final step.
   Each shows only on its own step.
@@ -431,7 +435,8 @@ yield {
 };
 ```
 
-The note box shows that text only while this step is current, then collapses.
+The note box shows that text only while this step is current, then goes blank
+(its reserved space stays, so nothing above it moves).
 
 ### What goes in a note vs. narration
 
@@ -699,6 +704,23 @@ panel content, at any viewport size. This is the safety net: on a short viewport
 the panels show less and scroll more, but the student can always step and always
 read the narration and note. Losing the note off-screen is the one failure the
 layout must prevent.
+
+**The controls never move as steps advance.** This is the most important
+guarantee of the layout: a student clicking *Next* repeatedly must be able to
+keep clicking the same spot without looking. The trap is that the stage is the
+element that flexes to absorb the viewport (so it can shrink on a short viewport
+and keep the note on screen) — which means anything that changes the height of
+the footer *below* the controls would resize the stage and move the controls.
+So the footer is held at a **constant height**: the narration bar and the note
+box each have a fixed reserved height (`--narrate-h`, `--note-h`), and longer
+content scrolls inside them rather than growing the box. A note appearing or
+disappearing changes only what is painted inside its already-reserved slot, not
+any height. With the footer constant, the stage no longer resizes step-to-step,
+so the controls, narration bar, and note box stay put on every step — at every
+viewport. (On the design viewport this reserved footer simply fills space that
+was otherwise bottom slack; on a short viewport it trades a little stage height
+for the no-jump guarantee, and the open-in-own-window link is the escape hatch
+for anyone whose viewport is genuinely too short.)
 
 The result degrades gracefully: tall viewport → everything roomy; short viewport
 → panels show less and scroll, but nothing overflows the page and nothing (least

@@ -60,6 +60,19 @@
   --stage-row-top:     calc(var(--code-lines) * var(--code-line-h) + var(--panel-chrome));
   --stage-row-bottom:  calc(var(--callstack-stack-h) + var(--panel-chrome));
   --stage-max-h:       calc(var(--stage-row-top) + var(--stage-row-bottom) + var(--gap));
+
+  /* ---- fixed footer heights (see AUTHORING.md "Stable layout") ----
+   * The narration bar and note box are RESERVED at a constant height so their
+   * content changing step-to-step (longer narration, a note appearing or
+   * disappearing) never changes the height of anything below the controls. The
+   * stage stays the viewport absorber -- it shrinks on a short viewport so the
+   * note is never pushed off the fold -- but because the footer below it is now
+   * a constant height, the stage no longer resizes step-to-step, so the
+   * controls / narration / note never move as steps advance. Longer content
+   * scrolls internally within these fixed boxes. Sized to the measured maxima
+   * (~2-line narration, ~4-line note) with headroom; tunable. */
+  --narrate-h:     72px;
+  --note-h:        104px;
 }
 
 * { box-sizing: border-box; }
@@ -200,7 +213,10 @@ body {
   border-radius: var(--radius);
   padding: 12px 14px 12px 16px;
   margin-top: var(--gap);
-  min-height: 42px;
+  /* Fixed height (not min-height): longer narration scrolls internally so the
+   * note below never shifts and the controls above never move. */
+  height: var(--narrate-h);
+  overflow: auto;
   color: var(--text);
   font-size: 14px;
   line-height: 1.55;
@@ -228,6 +244,11 @@ body {
   border-radius: var(--radius);
   padding: 10px 14px;
   margin-top: 8px;
+  /* Reserved at a constant height so a note appearing or disappearing never
+   * moves anything above it (the controls) -- see the footer note in :root. A
+   * longer note scrolls internally rather than growing the box. */
+  height: var(--note-h);
+  overflow: auto;
   color: var(--text-dim);
   font-size: 13px;
   line-height: 1.55;
@@ -241,8 +262,14 @@ body {
   color: var(--highlight);
   margin-bottom: 3px;
 }
-/* Collapsed: takes no space at all on steps that carry no note. */
-.pac-note-empty { display: none; }
+/* No note on this step: the box is rendered invisible (nothing painted -- no
+ * border, background, or "note" label) but KEEPS its reserved --note-h height,
+ * so a note appearing or disappearing never shifts the controls above it. A
+ * note-less step therefore reads as blank space, not an empty amber box. On the
+ * design viewport this simply fills space that was previously bottom slack, so
+ * it costs nothing there; on a short viewport it trades stage height for the
+ * guarantee that Back/Next never move (AUTHORING.md "Stable layout"). */
+.pac-note-empty { visibility: hidden; }
 @keyframes pac-note-flash {
   0%   { background: rgba(212, 161, 60, 0.10); box-shadow: 0 0 0 0 rgba(212, 161, 60, 0); }
   18%  { background: rgba(212, 161, 60, 0.26); box-shadow: 0 0 0 3px rgba(212, 161, 60, 0.16); }
