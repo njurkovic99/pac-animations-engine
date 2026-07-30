@@ -911,3 +911,39 @@ animations (`i`/`j`), where moving index markers are central.
 
 **Deferred until then** — do not build it on the raw-array animation. Recorded so
 the queue animation introduces it deliberately as its natural new capability.
+
+---
+
+## Open-in-own-window link (every animation, iframe-aware)
+
+Canvas steals a large fixed band of vertical space (nav, page title, chrome —
+~300px) before an embedded animation even begins, at every resolution. Rather than
+fight this, every animation carries a self-link that opens it in its own browser
+tab, where there is no Canvas chrome and the animation gets the whole window
+(roomy even at 1366×768). This is the escape hatch that makes Canvas fit a
+non-problem: the embedded view can be a little cramped because one click gives the
+full view.
+
+**Behavior (built into the engine — every animation inherits it):**
+- A small control links the animation to **itself** with `target="_blank"` (opens
+  in a new tab). Placement: the animation **header**, near the title.
+- **Iframe-aware.** The animation detects whether it is embedded
+  (`window.self !== window.top`):
+  - **Embedded (in Canvas):** the link is shown **prominently** — it's a lifeline.
+    Text e.g. "⛶ Scrolling to see it all? Open in its own window".
+  - **Standalone (already full-window):** the link is minimized or hidden — you're
+    already full-window, no need to shout.
+- **Color:** use the **warn amber-orange (`--warn`, #e0a33a)** so it stands out and
+  doesn't blend into the body text — but NOT the error red (`--error`), which would
+  read as alarm. Style it clearly as a link (icon + underline on hover) so it reads
+  as a helpful clickable hint, not a warning about the content. (If in practice the
+  amber reads as related to the danger/unlinked amber, give the link its own token;
+  keep it in the amber-orange family, not red.)
+
+**Why iframe-aware matters:** the prominent hint is only useful when the animation
+is cramped inside Canvas. Standalone, it's noise. Detecting the iframe lets the
+same animation be a lifeline when embedded and clean when opened directly.
+
+This dissolves the "how far do I accommodate low-res screens" question: make the
+embedded view fit reasonably for the majority, and the full-window link covers
+everyone whose viewport is too short — at any resolution.
