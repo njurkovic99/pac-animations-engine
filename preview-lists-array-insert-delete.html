@@ -92,6 +92,25 @@ body {
 .pac-title { font-size: 17px; font-weight: 600; margin: 0 0 4px; }
 .pac-sub   { color: var(--text-dim); font-size: 13px; margin: 0 0 var(--gap); }
 
+/* ---- open-in-own-window link (see AUTHORING.md "Open-in-own-window link") ----
+ * The escape hatch every animation carries: a self-link (target="_blank") that
+ * opens the page full-window, where there's no Canvas chrome. The engine shows
+ * it prominently only when embedded (window.self !== window.top) and hides it
+ * standalone. Colour is --warn amber-orange so it stands out from body text
+ * without reading as the --error danger red; styled as a plain link (icon +
+ * underline on hover) so it reads as a helpful hint, not a content warning. */
+.pac-openwin {
+  display: inline-block;
+  margin: -6px 0 var(--gap);
+  color: var(--warn);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+}
+.pac-openwin:hover  { text-decoration: underline; }
+.pac-openwin:focus-visible { outline: 2px solid var(--warn); outline-offset: 2px; }
+.pac-openwin[hidden] { display: none; }
+
 /* ---- layout: the bounded stage ----
  * A grid of panels, bounded to --stage-max-h so it never grows the page. It
  * flexes to fill the space above the pinned chrome but is capped at the bound.
@@ -1075,6 +1094,7 @@ class Engine {
     this.root.innerHTML = `
       <h1 class="pac-title"></h1>
       <p class="pac-sub"></p>
+      <a class="pac-openwin" target="_blank" rel="noopener" hidden></a>
       <div class="pac-stage"></div>
       <div class="pac-controls">
         <button class="pac-btn" data-act="prev">&larr; Back</button>
@@ -1089,6 +1109,7 @@ class Engine {
 
     this.root.querySelector('.pac-title').textContent = s.title ?? '';
     this.root.querySelector('.pac-sub').textContent = s.subtitle ?? '';
+    this._buildOpenWindowLink();
     this.stage    = this.root.querySelector('.pac-stage');
     this.narrate  = this.root.querySelector('.pac-narrate');
     this.noteBox  = this.root.querySelector('.pac-note');
@@ -1143,6 +1164,33 @@ class Engine {
       if (e.key === 'ArrowRight') this.next();
       if (e.key === 'ArrowLeft')  this.prev();
     });
+  }
+
+  /**
+   * The open-in-own-window escape hatch (AUTHORING.md "Open-in-own-window
+   * link"). Canvas steals ~300px of chrome before an embedded animation even
+   * begins; a self-link with target="_blank" opens the same page in a new tab
+   * where it gets the whole window. It is iframe-aware: a lifeline shown
+   * prominently when embedded, silent when the animation is already
+   * full-window (standalone). Built into the engine, so every animation
+   * inherits it -- no per-animation opt-in.
+   */
+  _buildOpenWindowLink() {
+    const link = this.root.querySelector('.pac-openwin');
+    if (!link) return;
+    // The iframe's own URL, which is exactly what we want to open full-window.
+    link.href = window.location.href;
+    // window.self !== window.top is the embedding test. The identity comparison
+    // is same-origin-safe: it never touches a cross-origin property, so it
+    // cannot throw even when Canvas serves the page from another origin.
+    const embedded = window.self !== window.top;
+    if (embedded) {
+      link.textContent = '⛶ Scrolling to see it all? Open in its own window';
+      link.hidden = false;
+    } else {
+      // Already full-window -- the hint would just be noise, so stay silent.
+      link.hidden = true;
+    }
   }
 
   setLanguage(lang) { this.lang = lang; this.render(); }

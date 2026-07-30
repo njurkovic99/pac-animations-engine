@@ -88,6 +88,25 @@ body {
 .pac-title { font-size: 17px; font-weight: 600; margin: 0 0 4px; }
 .pac-sub   { color: var(--text-dim); font-size: 13px; margin: 0 0 var(--gap); }
 
+/* ---- open-in-own-window link (see AUTHORING.md "Open-in-own-window link") ----
+ * The escape hatch every animation carries: a self-link (target="_blank") that
+ * opens the page full-window, where there's no Canvas chrome. The engine shows
+ * it prominently only when embedded (window.self !== window.top) and hides it
+ * standalone. Colour is --warn amber-orange so it stands out from body text
+ * without reading as the --error danger red; styled as a plain link (icon +
+ * underline on hover) so it reads as a helpful hint, not a content warning. */
+.pac-openwin {
+  display: inline-block;
+  margin: -6px 0 var(--gap);
+  color: var(--warn);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+}
+.pac-openwin:hover  { text-decoration: underline; }
+.pac-openwin:focus-visible { outline: 2px solid var(--warn); outline-offset: 2px; }
+.pac-openwin[hidden] { display: none; }
+
 /* ---- layout: the bounded stage ----
  * A grid of panels, bounded to --stage-max-h so it never grows the page. It
  * flexes to fill the space above the pinned chrome but is capped at the bound.
