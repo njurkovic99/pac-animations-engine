@@ -67,6 +67,11 @@ three execution models found in the original files:
 | live | generator yields as it computes |
 | race | `traces.x = { racers: {a, b}, merge(frame, i) }` — *n* generators, `.next()` in lockstep |
 
+**Race is DESIGNED BUT NOT BUILT** (as of the third merged animation). It debuts on
+`queues-count-vs-rear`, where it drives a *comparison*, not a competition: two
+representations of the same queue, stepped side by side, no winner and no timing.
+See "Race mode — lockstep comparison" below before authoring one.
+
 `racebubsel.html` hand-rolled a resumable state machine (`bState`, `bI`, `bJ`,
 a switch) to do what `function*` does natively. Do not do that again.
 
@@ -285,8 +290,10 @@ animation; the student who engages gets a reward.
 Phrase it as a "what if" tied to what they just watched:
 - (doubly-linked insertion) "What would have happened if line 4 ran before
   line 2?"
-- (queue) "What if we tracked `rear` instead of `count` — how would you detect a
-  full queue then?"
+- (queue) "What would the full test become if you gave up one cell?" — note that
+  the older example here ("what if we tracked `rear` instead of `count`") is now
+  *answered inside* `queues-count-vs-rear`, so it is no longer a challenge. A
+  challenge must ask something the animation did NOT resolve.
 - (linked list) "What breaks if we don't keep a `tail` pointer?"
 
 It never waits for or checks an answer. It is the WATCH-safe way to capture some
@@ -900,6 +907,40 @@ method has a natural "why not the obvious way?" behind it.
 
 ---
 
+## Race mode — lockstep comparison (debuts on `queues-count-vs-rear`)
+
+Two (or more) generators advanced together and merged into one view. Its first use
+is a **non-race compare**: two implementations of the same structure, side by side,
+so the student reads the difference rather than a winner. Conventions:
+
+- **The author aligns the racers, not the engine.** Every operation is broken into
+  the same number of *phases* in both racers, and phase *i* in one lines up with
+  phase *i* in the other. The engine merges frame *i* with frame *i* and nothing
+  more.
+- **Idle steps.** When one racer has nothing to do in a phase, it yields
+  `{idle: true}`: its panel state carries over unchanged and **no line is
+  highlighted in its code panel**. An idle must read as "this side had no work
+  here," never as a stall. Idles are pedagogically useful — a blank where the other
+  side runs a statement is a visible cost difference.
+- **Line-align the two listings to each other**, not just across languages, so the
+  differences appear as horizontal gaps at matching line numbers. Where one racer
+  needs a statement the other doesn't, leave the other's line blank rather than
+  closing up the listing.
+- **Neither side is the villain.** When comparing two valid approaches, a
+  divergence shows a *trade-off*, not a bug. Say what the losing side would need to
+  work (a flag, a sacrificed cell), so a student who chose it isn't told they chose
+  wrong.
+- **No metrics counter by default**, even here. Show a count only where the count is
+  itself the lesson (the sorting race), not merely because two things are running.
+- **Shared vs. per-racer panels:** give each racer its own panels and keep them
+  visually identical in every respect except the thing being compared. The
+  comparison lands because everything else is held constant.
+
+Side-by-side layout is otherwise discouraged on density grounds — reach for race
+mode only when the *comparison itself* is the subject of the animation.
+
+---
+
 ## Planned primitive — the index pointer (labeled marker over a linear structure)
 
 A **labeled pointer that points at an array cell and moves as its index changes** —
@@ -924,9 +965,10 @@ The unifying principle: **the index pointer visualizes the semantic indices that
 turn a raw array into a data structure.** It belongs to array-*based structures*,
 not to the raw array.
 
-**Debut: `queues-count-vs-rear` (ds A2)** — where `first`/`rear` are semantic,
+**Debut: `queues-count-vs-rear` (ds A2)** — where `front`/`rear` are semantic,
 persistent, and are the whole lesson (including the full-vs-empty ambiguity two
-indices create, and count-vs-computed-from-indices). Build and prove the primitive
+indices create, and count-vs-computed-from-indices). Note that A2 debuts the race
+driver at the same time; it is a two-capability build, not a pure inherit. Build and prove the primitive
 there, where it is load-bearing. The stack animations (`top`) inherit it. Also
 useful later for binary search (`low`/`mid`/`high` converging) and the sorting
 animations (`i`/`j`), where moving index markers are central.

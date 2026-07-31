@@ -29,6 +29,38 @@ Built, rendered, merged to main:
 - `content/lists-doubly-insert-order.js` — ds A10. Four-line doubly-linked
   insertion; arrows fixed and merged.
 
+### Capabilities: DESIGNED vs BUILT
+
+Several capabilities are fully specified in `AUTHORING.md` / `panel-inventory.md`
+but do not exist in `engine/`. The docs describe them in the present tense, which
+has repeatedly made builds look cheaper than they are. Check this table before
+estimating an animation.
+
+| Capability | Designed in | Built? | Debuts on |
+|---|---|---|---|
+| CODE / CELLS / NODES / STREAM / CHART | panel-inventory §2 | YES | — |
+| Arrow overlay | panel-inventory §3 | YES | `lists-doubly-insert-order` |
+| CALLSTACK panel | AUTHORING, panel-inventory §2 | YES | `lists-array-insert-delete` |
+| Caller-line dimming | AUTHORING | YES | `lists-array-insert-delete` |
+| Bounded stage / pinned note | AUTHORING | YES | `lists-array-insert-delete` |
+| **Index-pointer markers** | AUTHORING "Planned primitive" | **NO** | `queues-count-vs-rear` |
+| **Race driver (lockstep generators)** | AUTHORING exec-model table, panel-inventory §4 | **NO** | `queues-count-vs-rear` |
+| `stale` CELLS role | panel-inventory §2 | unverified | `queues-count-vs-rear` |
+| Loop controls (step out / run to end) | AUTHORING | NO | first loop animation |
+| THINK mode | this doc | NO | deferred in full |
+
+`queues-count-vs-rear` therefore carries **two** unbuilt capabilities, not one.
+It is the race driver's first real exercise as much as the index pointer's —
+budget accordingly, and do not treat a slow first draft there as a process
+problem. The animation after it (stacks, A3) inherits both and is the honest
+throughput test.
+
+Known doc conflict, unresolved: `AUTHORING.md` lists CELLS roles as
+`active, compared, ok, error, empty`; `panel-inventory.md` §2 lists
+`active, compared, swapped, sorted, probe, empty, stale`. Neither is a superset.
+Read `engine/` for the truth and report which doc is stale; do not edit either
+doc unilaterally (doc edits are a chat decision).
+
 Two reversible engine decisions:
 - **Steps are snapshots, not deltas** — this is what makes Back free.
 - **The n-2 branch is evaluated first** in `recursion-fib-levels`, matching
@@ -101,8 +133,8 @@ phase, order is flexible; across phases, go in order.
 
 ### Phase 1 — ds core (20) · proves every renderer
 ```
-lists-array-insert-delete       ds A1
-queues-count-vs-rear            ds A2   (race driver used for a non-race compare)
+lists-array-insert-delete       ds A1   BUILT
+queues-count-vs-rear            ds A2   race driver + index pointer — BOTH UNBUILT
 stacks-paren-scanner            ds A3   predict/trap
 stacks-postfix-eval             ds A4
 recursion-factorial-stack       ds
