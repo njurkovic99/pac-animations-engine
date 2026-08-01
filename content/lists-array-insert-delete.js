@@ -229,8 +229,10 @@ function snap({ line, tag, narrate, note, arr, count, active = null, countActive
     const empty = val == null;
     let role;
     if (i === active) role = 'active';          // blue fill: modified this step
-    else if (empty)   role = 'empty';           // dimmed: free trailing slot
-    cells.push({ label: String(i), value: empty ? EMPTY : val, role });
+    else if (empty)   role = 'empty';           // dashed box + faint X: free slot
+    // An empty cell carries no value: the renderer's `empty` role draws the
+    // dashed box and X. (Phantom invalid-index holes below keep the middot.)
+    cells.push({ label: String(i), value: empty ? '' : val, role });
   }
   if (phantom) for (const p of phantom) cells.push(p);
 

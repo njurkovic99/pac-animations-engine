@@ -351,11 +351,29 @@ body {
   min-width: 40px; text-align: center; background: var(--bg);
 }
 .pac-cell-label { display: block; font-size: 10px; color: var(--text-dim); }
+/* The value always reserves one line of height, so a cell with no value (an
+ * `empty` cell) keeps the SAME dimensions as a filled one -- the X then spans a
+ * full box rather than a squashed strip. */
+.pac-cell-value { display: block; min-height: 1.25em; }
 .pac-cell[data-role="active"]   { border-color: var(--accent); background: var(--accent-soft); }
 .pac-cell[data-role="compared"] { border-color: var(--highlight); }
 .pac-cell[data-role="ok"]       { border-color: var(--ok); }
 .pac-cell[data-role="error"]    { border-color: var(--error); color: var(--error); }
-.pac-cell[data-role="empty"]    { opacity: .35; }
+/* empty: a cell that never held a value. Same box and dimensions as a member,
+ * but a DASHED dimmed border and a thin, low-opacity X drawn corner to corner
+ * across the interior (an SVG stretched to the cell). The X means the cell holds
+ * nothing -- it cannot be mistaken for a cell holding a space character or for a
+ * rendering failure. It is a different SHAPE from `stale`'s greyed character, so
+ * the two never read alike. */
+.pac-cell[data-role="empty"] {
+  border-style: dashed;
+  border-color: var(--border);
+  color: var(--text-dim);
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20preserveAspectRatio='none'%20viewBox='0%200%20100%20100'%3E%3Cg%20stroke='%238b93a7'%20stroke-width='2'%20stroke-opacity='0.3'%3E%3Cline%20x1='9'%20y1='9'%20x2='91'%20y2='91'/%3E%3Cline%20x1='91'%20y1='9'%20x2='9'%20y2='91'/%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100% 100%;
+}
 /* stale: a cell whose value is no longer a queue member. The value is STILL
  * shown, greyed (~40%), with NO member outline -- distinct from `empty` (a cell
  * that never held anything). Blanking it would wrongly imply the program can see
@@ -1767,8 +1785,10 @@ function snap({ line, tag, narrate, note, arr, count, active = null, countActive
     const empty = val == null;
     let role;
     if (i === active) role = 'active';          // blue fill: modified this step
-    else if (empty)   role = 'empty';           // dimmed: free trailing slot
-    cells.push({ label: String(i), value: empty ? EMPTY : val, role });
+    else if (empty)   role = 'empty';           // dashed box + faint X: free slot
+    // An empty cell carries no value: the renderer's `empty` role draws the
+    // dashed box and X. (Phantom invalid-index holes below keep the middot.)
+    cells.push({ label: String(i), value: empty ? '' : val, role });
   }
   if (phantom) for (const p of phantom) cells.push(p);
 
