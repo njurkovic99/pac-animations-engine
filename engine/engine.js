@@ -80,7 +80,36 @@ export class Engine {
     this.trace = name;
     this.steps = this.materialise(name);
     this.i = 0;
+    this.reserveHeights();
     this.render();
+  }
+
+  /**
+   * Reserve every panel's height ONCE, from the maximum content it holds across
+   * the ENTIRE step sequence, so a step that is empty or shallow renders as
+   * reserved empty space rather than a smaller panel. Nothing below any panel
+   * moves as steps advance -- no reflow, ever. Measured up front by rendering
+   * each step's data for the panel and taking the tallest, then pinning the
+   * body's min-height. Panels that manage their own fixed viewport (CODE = 15
+   * lines, STREAM = 3 lines) are skipped -- their height is already constant.
+   * This is the general cure for the height-change bug class (collapsed empty
+   * cells, the parked-marker lane, an accumulating STREAM, a growing CALLSTACK).
+   * See AUTHORING.md "Stable layout".
+   */
+  reserveHeights() {
+    for (const [id, p] of this.panels) {
+      if (p.spec.type === 'code' || p.spec.type === 'stream') continue;
+      const bodyEl = p.el.querySelector('.pac-panel-body');
+      if (!bodyEl) continue;
+      bodyEl.style.minHeight = '';                 // reset before measuring
+      let maxH = 0;
+      for (const step of this.steps) {
+        p.ctx.anchors.clear();
+        p.renderer.render(bodyEl, step.panels?.[id], p.ctx, { lang: this.lang, step });
+        if (bodyEl.scrollHeight > maxH) maxH = bodyEl.scrollHeight;
+      }
+      bodyEl.style.minHeight = `${maxH}px`;
+    }
   }
 
   /* ---------- derived metrics ---------- */

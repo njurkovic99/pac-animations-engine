@@ -47,6 +47,8 @@
    * of resizing the row. */
   --code-line-h:   20.6px;   /* code font-size 12.5px x line-height 1.65 */
   --code-lines:    15;       /* code lines visible before the CODE panel scrolls */
+  --stream-line-h: 21.25px;  /* stream font-size 12.5px x line-height 1.7 */
+  --stream-lines:  3;        /* text lines the STREAM reserves before scrolling */
   --panel-chrome:  54px;     /* a panel's header + body vertical padding (non-content) */
   --body-pad:      22px;     /* a panel body's vertical padding alone */
   --frame-h:       88px;     /* a representative call-stack frame (fn + ~1-2 vars) */
@@ -121,23 +123,25 @@ body {
 .pac-openwin[hidden] { display: none; }
 
 /* ---- layout: the bounded stage ----
- * A grid of panels, bounded to --stage-max-h so it never grows the page. It
- * flexes to fill the space above the pinned chrome but is capped at the bound.
- * The two rows are sized to their content (tall top for code, short bottom for
- * the shallow call stack + count/capacity strip) rather than split equally;
- * both are FIXED so panels scroll internally instead of reflowing. Any extra
- * rows (an animation with >4 panels) fall back to sharing leftover space.
- * See AUTHORING.md. */
+ * A grid of panels that sizes to its content and never grows the page. The top
+ * row holds the fixed 15-line code viewport; the bottom row is at least
+ * --stage-row-bottom (a shallow call stack + strip) but GROWS to fit a taller
+ * reserved panel (e.g. a call stack whose deepest state is main -> ADD -> INSERT
+ * -- three frames -- reserved fully visible by the engine). Because every panel's
+ * height is reserved to its per-run maximum (reserveHeights), the content height
+ * is constant, so the stage never changes height as steps advance. It shrinks on
+ * a short viewport (flex-shrink) so the note is never pushed off screen.
+ * See AUTHORING.md "Stable layout". */
 .pac-stage {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  grid-template-rows: var(--stage-row-top) var(--stage-row-bottom);
+  grid-template-rows: var(--stage-row-top) minmax(var(--stage-row-bottom), auto);
   grid-auto-rows: minmax(0, 1fr);
   gap: var(--gap);
   position: relative;          /* anchor origin for the arrow overlay */
-  flex: 1 1 auto;
+  flex: 0 1 auto;              /* hug content; never grow past it */
   min-height: 0;               /* allow the grid to shrink below content size */
-  max-height: var(--stage-max-h);
+  max-height: calc(100vh - 300px);
   overflow: hidden;            /* the bound is hard; panels scroll, not the stage */
 }
 .pac-stage[data-cols="1"] { grid-template-columns: 1fr; }
@@ -150,11 +154,11 @@ body {
  * this still satisfies "the controls never move as steps advance". Design target
  * 1920x1080; the open-in-own-window link is the escape hatch on very short
  * viewports. See AUTHORING.md "Stable layout". */
-/* A multi-row stage is capped so a tall code column beside a short stack of
- * small panels scrolls the code (the legitimate scrolling case) rather than
- * stretching the small panels' rows apart. It still shrinks on a short viewport
- * (flex-shrink) so the note is never pushed off screen. */
-.pac-stage[data-multirow] { flex: 0 1 auto; max-height: min(560px, calc(100vh - 300px)); }
+/* A multi-row stage sizes to its content (flex:0 1 auto -- every panel's height
+ * is reserved, so the content height is constant and the stage never grows as
+ * steps advance). The cap only bounds it on a short viewport, where it shrinks
+ * (flex-shrink) and panels scroll so the note is never pushed off screen. */
+.pac-stage[data-multirow] { flex: 0 1 auto; max-height: calc(100vh - 300px); }
 
 /* A full-width panel spans every column -- a shared preamble above a two-column
  * comparison. It sits on its own grid row (the first `auto` row when the row
@@ -171,15 +175,14 @@ body {
  * See AUTHORING.md "Panels fill their grid cells; don't oversize a cell". */
 .pac-panel[data-compact] { align-self: start; max-height: 100%; }
 
-/* The CALLSTACK panel hugs its content the same way (top-aligned, no reserve
- * for the maximum depth), but its body is capped at ~2 frames: a shallow stack
- * (1-2 frames) shows with no void, and a deeper one (up to main -> ADD ->
- * INSERT) scrolls internally with the running frame kept in view. The cap keeps
- * the box from ever exceeding its (already short) grid row. See AUTHORING.md. */
-.pac-panel[data-type="callstack"] { align-self: start; max-height: 100%; }
-.pac-panel[data-type="callstack"] .pac-panel-body {
-  max-height: calc(var(--callstack-stack-h) + var(--body-pad));
-}
+/* The CALLSTACK panel top-aligns its frames. Its height is RESERVED to the
+ * deepest stack the animation reaches (engine reserveHeights, which pins the
+ * body's min-height to the tallest frame set across all steps) -- so every
+ * frame's contents are fully visible, and a shallow stack (just main) shows the
+ * frames at the top with the reserved space empty below, never a smaller panel.
+ * The reservation, not a per-type cap, sets the size. See AUTHORING.md
+ * "Stable layout". */
+.pac-panel[data-type="callstack"] { align-self: start; }
 
 /* ---- panel chrome ---- */
 .pac-panel {
@@ -338,12 +341,16 @@ body {
 .pac-code-num { color: var(--text-dim); width: 2.2em; text-align: right; margin-right: 12px; user-select: none; }
 
 /* ---- STREAM panel ---- */
-/* Stable layout: the STREAM panel accumulates output as steps advance. The
- * bounded stage gives it a fixed grid cell, so it scrolls internally (stream.js
- * auto-scrolls to the newest line at the bottom) rather than growing the page
- * and pushing the controls/narration/note down. The default panel body already
- * does flex:1 + overflow:auto; nothing extra is needed. See AUTHORING.md
- * "Stable layout". Any other accumulating panel type gets the same treatment. */
+/* Stable layout: the STREAM accumulates output as steps advance, so it has a
+ * FIXED height of --stream-lines (3) text lines, reserved from the first step
+ * whether or not anything has printed yet -- an empty STREAM is an empty box of
+ * the same size, not a collapsed strip. Lines beyond three scroll internally
+ * (stream.js auto-scrolls to the newest at the bottom). The height never changes
+ * as lines arrive, so nothing below it moves. See AUTHORING.md "Stable layout". */
+.pac-panel[data-type="stream"] .pac-panel-body {
+  height: calc(var(--stream-lines) * var(--stream-line-h) + var(--body-pad));
+  flex: none;
+}
 .pac-stream { font-family: var(--mono); font-size: 12.5px; line-height: 1.7; }
 .pac-stream-line { white-space: pre; }
 .pac-stream-line.dir-in   { color: var(--warn); }
