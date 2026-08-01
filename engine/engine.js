@@ -188,6 +188,9 @@ export class Engine {
       // A full-width panel spans every column (grid-column: 1 / -1) -- e.g. a
       // shared preamble sitting above a two-column comparison.
       if (p.full) el.dataset.full = '';
+      // A tall panel spans every row of the first column (grid-row: 1 / -1) --
+      // e.g. a code listing beside a stack of smaller panels in the other column.
+      if (p.tall) el.dataset.tall = '';
       el.innerHTML = `<div class="pac-panel-head"><span>${p.title ?? p.type}</span>
                         <span class="pac-panel-tools"></span></div>
                       <div class="pac-panel-body"></div>`;

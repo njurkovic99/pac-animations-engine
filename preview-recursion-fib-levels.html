@@ -154,12 +154,20 @@ body {
  * this still satisfies "the controls never move as steps advance". Design target
  * 1920x1080; the open-in-own-window link is the escape hatch on very short
  * viewports. See AUTHORING.md "Stable layout". */
-.pac-stage[data-multirow] { max-height: calc(100vh - 330px); }
+/* A multi-row stage is capped so a tall code column beside a short stack of
+ * small panels scrolls the code (the legitimate scrolling case) rather than
+ * stretching the small panels' rows apart. It still shrinks on a short viewport
+ * (flex-shrink) so the note is never pushed off screen. */
+.pac-stage[data-multirow] { flex: 1 1 auto; max-height: min(560px, calc(100vh - 300px)); }
 
 /* A full-width panel spans every column -- a shared preamble above a two-column
  * comparison. It sits on its own grid row (the first `auto` row when the row
  * template leads with one). */
 .pac-panel[data-full] { grid-column: 1 / -1; }
+
+/* A tall panel occupies the whole first column, spanning every row -- e.g. a
+ * code listing beside a stack of smaller panels stacked in the second column. */
+.pac-panel[data-tall] { grid-column: 1; grid-row: 1 / -1; }
 
 /* A panel that holds very little (e.g. a two-value count/capacity strip) opts
  * out of stretching to fill its tall grid cell: it top-aligns and sizes to its
@@ -373,8 +381,8 @@ body {
 /* Columns are wide enough that TWO labelled markers (front + rear on the same
  * cell) sit side by side without overlapping each other or the neighbouring
  * cells' labels. */
-.pac-cell-col { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 72px; }
-.pac-cell-col .pac-cell { min-width: 44px; }
+.pac-cell-col { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 72px; }
+.pac-cell-col .pac-cell { min-width: 44px; padding: 4px 9px; }
 /* The row's name (e.g. "contents"), once at the left, aligned with the cell
  * boxes so it reads as the array's label. */
 .pac-cells-name {
@@ -1291,6 +1299,9 @@ class Engine {
       // A full-width panel spans every column (grid-column: 1 / -1) -- e.g. a
       // shared preamble sitting above a two-column comparison.
       if (p.full) el.dataset.full = '';
+      // A tall panel spans every row of the first column (grid-row: 1 / -1) --
+      // e.g. a code listing beside a stack of smaller panels in the other column.
+      if (p.tall) el.dataset.tall = '';
       el.innerHTML = `<div class="pac-panel-head"><span>${p.title ?? p.type}</span>
                         <span class="pac-panel-tools"></span></div>
                       <div class="pac-panel-body"></div>`;
