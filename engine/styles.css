@@ -143,6 +143,20 @@ body {
 .pac-stage[data-cols="1"] { grid-template-columns: 1fr; }
 .pac-stage[data-cols="2"] { grid-template-columns: 1fr 1fr; }
 
+/* A multi-row layout (spec.stageRows) supplies its own grid-template-rows inline
+ * and opts out of the two-row bound: the stage instead fills the space above the
+ * pinned footer and shrinks on a short viewport, so the note is never pushed off
+ * screen. The footer (controls + narration + note) stays a constant height, so
+ * this still satisfies "the controls never move as steps advance". Design target
+ * 1920x1080; the open-in-own-window link is the escape hatch on very short
+ * viewports. See AUTHORING.md "Stable layout". */
+.pac-stage[data-multirow] { max-height: calc(100vh - 330px); }
+
+/* A full-width panel spans every column -- a shared preamble above a two-column
+ * comparison. It sits on its own grid row (the first `auto` row when the row
+ * template leads with one). */
+.pac-panel[data-full] { grid-column: 1 / -1; }
+
 /* A panel that holds very little (e.g. a two-value count/capacity strip) opts
  * out of stretching to fill its tall grid cell: it top-aligns and sizes to its
  * content, so it reads as a compact strip rather than a tall box with a void.
@@ -330,11 +344,40 @@ body {
 .pac-cell[data-role="ok"]       { border-color: var(--ok); }
 .pac-cell[data-role="error"]    { border-color: var(--error); color: var(--error); }
 .pac-cell[data-role="empty"]    { opacity: .35; }
+/* stale: a cell whose value is no longer a queue member. The value is STILL
+ * shown, greyed (~40%), with NO member outline -- distinct from `empty` (a cell
+ * that never held anything). Blanking it would wrongly imply the program can see
+ * emptiness by looking at the array; the character is still in memory, only the
+ * index moved. See AUTHORING.md / panel-inventory §2 and queues-count-vs-rear. */
+.pac-cell[data-role="stale"]    { opacity: .4; border-color: transparent; }
 
 .pac-cells[data-render="row"] .pac-cell {
   display: flex; justify-content: space-between; text-align: left; min-width: 0;
 }
 .pac-cells[data-render="row"] .pac-cell-label { display: inline; }
+
+/* ---- index-pointer markers (AUTHORING.md "Planned primitive — the index
+ * pointer") ----
+ * A labeled caret that points at an array cell and moves as its index changes --
+ * the array-world analog of the linked-list pointer arrow. When a `box` CELLS
+ * panel carries `markers`, each cell is rendered as a COLUMN: the box, an index
+ * label beneath it, then a marker track. A marker's caret sits under the cell at
+ * its index, its label below the caret; two markers on the SAME cell render side
+ * by side (flex row) rather than overlapping. All markers are solid/stored --
+ * there is no "derived" marker style. */
+.pac-cells[data-marked] { align-items: start; gap: 8px; }
+.pac-cell-col { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.pac-cell-col .pac-cell { min-width: 42px; }
+.pac-cell-index { font-size: 10px; color: var(--text-dim); font-family: var(--mono); }
+.pac-cell-markers {
+  display: flex; justify-content: center; gap: 4px;
+  min-height: 30px; margin-top: 1px;
+}
+.pac-marker { display: flex; flex-direction: column; align-items: center; line-height: 1.1; }
+.pac-marker-caret { color: var(--accent); font-size: 11px; }
+.pac-marker-label {
+  font-family: var(--mono); font-size: 10.5px; color: var(--accent); font-weight: 600;
+}
 
 /* ---- CALLSTACK panel ----
  * A debugger's locals/stack pane. Frames push on call / pop on return; the top

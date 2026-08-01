@@ -147,6 +147,20 @@ body {
 .pac-stage[data-cols="1"] { grid-template-columns: 1fr; }
 .pac-stage[data-cols="2"] { grid-template-columns: 1fr 1fr; }
 
+/* A multi-row layout (spec.stageRows) supplies its own grid-template-rows inline
+ * and opts out of the two-row bound: the stage instead fills the space above the
+ * pinned footer and shrinks on a short viewport, so the note is never pushed off
+ * screen. The footer (controls + narration + note) stays a constant height, so
+ * this still satisfies "the controls never move as steps advance". Design target
+ * 1920x1080; the open-in-own-window link is the escape hatch on very short
+ * viewports. See AUTHORING.md "Stable layout". */
+.pac-stage[data-multirow] { max-height: calc(100vh - 330px); }
+
+/* A full-width panel spans every column -- a shared preamble above a two-column
+ * comparison. It sits on its own grid row (the first `auto` row when the row
+ * template leads with one). */
+.pac-panel[data-full] { grid-column: 1 / -1; }
+
 /* A panel that holds very little (e.g. a two-value count/capacity strip) opts
  * out of stretching to fill its tall grid cell: it top-aligns and sizes to its
  * content, so it reads as a compact strip rather than a tall box with a void.
@@ -334,11 +348,40 @@ body {
 .pac-cell[data-role="ok"]       { border-color: var(--ok); }
 .pac-cell[data-role="error"]    { border-color: var(--error); color: var(--error); }
 .pac-cell[data-role="empty"]    { opacity: .35; }
+/* stale: a cell whose value is no longer a queue member. The value is STILL
+ * shown, greyed (~40%), with NO member outline -- distinct from `empty` (a cell
+ * that never held anything). Blanking it would wrongly imply the program can see
+ * emptiness by looking at the array; the character is still in memory, only the
+ * index moved. See AUTHORING.md / panel-inventory §2 and queues-count-vs-rear. */
+.pac-cell[data-role="stale"]    { opacity: .4; border-color: transparent; }
 
 .pac-cells[data-render="row"] .pac-cell {
   display: flex; justify-content: space-between; text-align: left; min-width: 0;
 }
 .pac-cells[data-render="row"] .pac-cell-label { display: inline; }
+
+/* ---- index-pointer markers (AUTHORING.md "Planned primitive — the index
+ * pointer") ----
+ * A labeled caret that points at an array cell and moves as its index changes --
+ * the array-world analog of the linked-list pointer arrow. When a `box` CELLS
+ * panel carries `markers`, each cell is rendered as a COLUMN: the box, an index
+ * label beneath it, then a marker track. A marker's caret sits under the cell at
+ * its index, its label below the caret; two markers on the SAME cell render side
+ * by side (flex row) rather than overlapping. All markers are solid/stored --
+ * there is no "derived" marker style. */
+.pac-cells[data-marked] { align-items: start; gap: 8px; }
+.pac-cell-col { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.pac-cell-col .pac-cell { min-width: 42px; }
+.pac-cell-index { font-size: 10px; color: var(--text-dim); font-family: var(--mono); }
+.pac-cell-markers {
+  display: flex; justify-content: center; gap: 4px;
+  min-height: 30px; margin-top: 1px;
+}
+.pac-marker { display: flex; flex-direction: column; align-items: center; line-height: 1.1; }
+.pac-marker-caret { color: var(--accent); font-size: 11px; }
+.pac-marker-label {
+  font-family: var(--mono); font-size: 10.5px; color: var(--accent); font-weight: 600;
+}
 
 /* ---- CALLSTACK panel ----
  * A debugger's locals/stack pane. Frames push on call / pop on return; the top
@@ -518,7 +561,15 @@ const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', 
  return { mount, render }; })();
 const cellsPanel = (() => { /* CELLS panel — 1D/2D grid. Absorbs arrays, sorting bars, hash buckets,
  * matrices, memory blocks, variable tables, stack frames, vtables.
- * Step data: { render: 'box'|'bar'|'row', cells: [{value,label,role,anchor}] } */
+ * Step data: { render: 'box'|'bar'|'row', cells: [{value,label,role,anchor}] }
+ *
+ * A `box` grid may also carry index-pointer markers (AUTHORING.md "Planned
+ * primitive — the index pointer"):
+ *   { render: 'box', cells: [...], markers: [{label, index}] }
+ * When `markers` is present each cell is rendered as a column — the box, an
+ * index label beneath it (the cell's own `label`, or its position), then a
+ * marker track holding any carets whose `index` points at this cell. Two
+ * markers on the same cell sit side by side, never overlapping. */
 
 function mount(body) { body.innerHTML = '<div class="pac-cells"></div>'; }
 
@@ -527,21 +578,52 @@ function render(body, data, ctx) {
   const mode = data?.render ?? 'box';
   wrap.dataset.render = mode;
   wrap.innerHTML = '';
-  const max = Math.max(1, ...(data?.cells ?? []).map(c => +c.value || 0));
+  const cells = data?.cells ?? [];
+  const max = Math.max(1, ...cells.map(c => +c.value || 0));
 
-  for (const c of data?.cells ?? []) {
-    const el = document.createElement('div');
-    el.className = 'pac-cell';
-    if (c.role) el.dataset.role = c.role;
-    if (mode === 'bar') el.style.height = `${20 + 70 * (+c.value / max)}px`;
-    el.innerHTML = (c.label ? `<span class="pac-cell-label">${esc(c.label)}</span>` : '') +
-                   `<span class="pac-cell-value">${esc(c.value)}</span>`;
-    wrap.appendChild(el);
+  // Marked mode: a `box` grid with index-pointer markers below the cell row.
+  const markers = mode === 'box' && data?.markers ? data.markers : null;
+  if (markers) { wrap.dataset.marked = ''; } else { delete wrap.dataset.marked; }
+
+  cells.forEach((c, idx) => {
+    const cell = document.createElement('div');
+    cell.className = 'pac-cell';
+    if (c.role) cell.dataset.role = c.role;
+    if (mode === 'bar') cell.style.height = `${20 + 70 * (+c.value / max)}px`;
+    cell.innerHTML = (!markers && c.label ? `<span class="pac-cell-label">${esc(c.label)}</span>` : '') +
+                     `<span class="pac-cell-value">${esc(c.value)}</span>`;
     // Anchor the value glyph, not the whole cell: for a pointer variable that
     // value is the dot, so a cross-panel arrow starts from the dot itself --
     // matching the record-field pointers in the NODES panel.
-    if (c.anchor) ctx.anchor(`${ctx.spec.id}.${c.anchor}`, el.querySelector('.pac-cell-value'));
-  }
+    if (c.anchor) ctx.anchor(`${ctx.spec.id}.${c.anchor}`, cell.querySelector('.pac-cell-value'));
+
+    if (!markers) { wrap.appendChild(cell); return; }
+
+    // Marked mode: wrap the box in a column with an index label and a marker
+    // track. The index label sits BELOW the box; markers whose index equals this
+    // cell's position stack side by side beneath it.
+    const col = document.createElement('div');
+    col.className = 'pac-cell-col';
+    col.appendChild(cell);
+
+    const index = document.createElement('div');
+    index.className = 'pac-cell-index';
+    index.textContent = c.label != null ? c.label : idx;
+    col.appendChild(index);
+
+    const track = document.createElement('div');
+    track.className = 'pac-cell-markers';
+    for (const m of markers) {
+      if (m.index !== idx) continue;
+      const mk = document.createElement('span');
+      mk.className = 'pac-marker';
+      mk.innerHTML = `<span class="pac-marker-caret">&#9650;</span>` +
+                     `<span class="pac-marker-label">${esc(m.label)}</span>`;
+      track.appendChild(mk);
+    }
+    col.appendChild(track);
+    wrap.appendChild(col);
+  });
 }
 
 const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
@@ -1145,6 +1227,18 @@ class Engine {
 
     if (s.columns) this.stage.dataset.cols = s.columns;
 
+    // A multi-row layout (more than the default two grid rows -- e.g. the race
+    // comparison's code / queue / strip stack per column) declares its own row
+    // proportions via `spec.stageRows` (a CSS grid-template-rows value). The
+    // stage then relaxes its two-row bound and fills the viewport above the
+    // pinned footer instead, still shrinking on a short viewport so the note is
+    // never pushed off screen (see AUTHORING.md "Stable layout"). Absent, the
+    // default bounded two-row grid is unchanged.
+    if (s.stageRows) {
+      this.stage.dataset.multirow = '';
+      this.stage.style.gridTemplateRows = s.stageRows;
+    }
+
     // Beginner profile is enforced here, not left to authorial restraint.
     const panels = (s.panels ?? []).slice();
     if (s.profile === 'beginner' && panels.length > 3) {
@@ -1160,6 +1254,9 @@ class Engine {
       // opts out of stretching to fill its tall grid cell: `compact: true` makes
       // it top-align and size to content. See AUTHORING.md "Stable layout".
       if (p.compact) el.dataset.compact = '';
+      // A full-width panel spans every column (grid-column: 1 / -1) -- e.g. a
+      // shared preamble sitting above a two-column comparison.
+      if (p.full) el.dataset.full = '';
       el.innerHTML = `<div class="pac-panel-head"><span>${p.title ?? p.type}</span>
                         <span class="pac-panel-tools"></span></div>
                       <div class="pac-panel-body"></div>`;
@@ -1240,7 +1337,16 @@ class Engine {
       // on the stack, dimmed so the student keeps sight of where the call came
       // from (AUTHORING.md "Line highlight -- active line vs. parked caller
       // lines"). Bright = running now, dim = suspended.
-      if (p.spec.type === 'code') data = { ...data, line: step.line, dangerLine: step.dangerLine, parked: step.parked };
+      //
+      // Race mode has TWO code panels that highlight DIFFERENT lines on the same
+      // step (and one may highlight nothing while it idles). So a code panel
+      // prefers a `line` supplied inside its own panel data (`panels.<codeId>`)
+      // and only falls back to the single top-level `step.line` when it declares
+      // none -- keeping the single-listing animations unchanged.
+      if (p.spec.type === 'code') {
+        const pLine = (data && 'line' in data) ? data.line : step.line;
+        data = { ...data, line: pLine, dangerLine: step.dangerLine, parked: step.parked };
+      }
       p.ctx.anchors.clear();
       p.renderer.render(p.el.querySelector('.pac-panel-body'),
                         data, p.ctx, { lang: this.lang, step });

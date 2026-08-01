@@ -158,6 +158,18 @@ export class Engine {
 
     if (s.columns) this.stage.dataset.cols = s.columns;
 
+    // A multi-row layout (more than the default two grid rows -- e.g. the race
+    // comparison's code / queue / strip stack per column) declares its own row
+    // proportions via `spec.stageRows` (a CSS grid-template-rows value). The
+    // stage then relaxes its two-row bound and fills the viewport above the
+    // pinned footer instead, still shrinking on a short viewport so the note is
+    // never pushed off screen (see AUTHORING.md "Stable layout"). Absent, the
+    // default bounded two-row grid is unchanged.
+    if (s.stageRows) {
+      this.stage.dataset.multirow = '';
+      this.stage.style.gridTemplateRows = s.stageRows;
+    }
+
     // Beginner profile is enforced here, not left to authorial restraint.
     const panels = (s.panels ?? []).slice();
     if (s.profile === 'beginner' && panels.length > 3) {
@@ -173,6 +185,9 @@ export class Engine {
       // opts out of stretching to fill its tall grid cell: `compact: true` makes
       // it top-align and size to content. See AUTHORING.md "Stable layout".
       if (p.compact) el.dataset.compact = '';
+      // A full-width panel spans every column (grid-column: 1 / -1) -- e.g. a
+      // shared preamble sitting above a two-column comparison.
+      if (p.full) el.dataset.full = '';
       el.innerHTML = `<div class="pac-panel-head"><span>${p.title ?? p.type}</span>
                         <span class="pac-panel-tools"></span></div>
                       <div class="pac-panel-body"></div>`;
@@ -253,7 +268,16 @@ export class Engine {
       // on the stack, dimmed so the student keeps sight of where the call came
       // from (AUTHORING.md "Line highlight -- active line vs. parked caller
       // lines"). Bright = running now, dim = suspended.
-      if (p.spec.type === 'code') data = { ...data, line: step.line, dangerLine: step.dangerLine, parked: step.parked };
+      //
+      // Race mode has TWO code panels that highlight DIFFERENT lines on the same
+      // step (and one may highlight nothing while it idles). So a code panel
+      // prefers a `line` supplied inside its own panel data (`panels.<codeId>`)
+      // and only falls back to the single top-level `step.line` when it declares
+      // none -- keeping the single-listing animations unchanged.
+      if (p.spec.type === 'code') {
+        const pLine = (data && 'line' in data) ? data.line : step.line;
+        data = { ...data, line: pLine, dangerLine: step.dangerLine, parked: step.parked };
+      }
       p.ctx.anchors.clear();
       p.renderer.render(p.el.querySelector('.pac-panel-body'),
                         data, p.ctx, { lang: this.lang, step });
