@@ -46,13 +46,26 @@ export function render(body, data, ctx) {
   }
 
   // Parked markers (index < 0): they point at nothing yet, so they sit to the
-  // left of cell [0], dimmed, still labelled.
+  // left of cell [0], dimmed, still labelled. The parked zone is a full cell
+  // column with an INVISIBLE box and index band above its marker track, so those
+  // bands reserve the exact same heights as a real cell -- the marker lane then
+  // begins at the same y here as over any cell. A marker moving from -1 onto a
+  // cell therefore travels laterally only, never vertically.
   const parked = markers ? markers.filter(m => m.index == null || m.index < 0) : [];
   if (parked.length) {
-    const zone = document.createElement('div');
-    zone.className = 'pac-cell-parked';
-    for (const m of parked) zone.appendChild(marker(m));
-    wrap.appendChild(zone);
+    const col = document.createElement('div');
+    col.className = 'pac-cell-col pac-cell-parked';
+    const box = document.createElement('div');
+    box.className = 'pac-cell';
+    box.innerHTML = '<span class="pac-cell-value">—</span>';   // reserves the box band height
+    const index = document.createElement('div');
+    index.className = 'pac-cell-index';
+    index.textContent = '[0]';                                 // reserves the index band height
+    const track = document.createElement('div');
+    track.className = 'pac-cell-markers';
+    for (const m of parked) track.appendChild(marker(m));
+    col.append(box, index, track);
+    wrap.appendChild(col);
   }
 
   cells.forEach((c, idx) => {

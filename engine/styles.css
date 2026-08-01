@@ -417,15 +417,15 @@ body {
   font-family: var(--mono); font-size: 10.5px; color: var(--accent); font-weight: 600;
 }
 
-/* Parked markers (index < 0): to the left of cell [0], aligned with the marker
- * track, dimmed so they read as "pointing at nothing yet" rather than missing. */
-.pac-cell-parked {
-  align-self: stretch;
-  display: flex; align-items: flex-end; gap: 6px;
-  padding-right: 8px; margin-right: 2px;
-  border-right: 1px dashed var(--border);
-  opacity: .5;
-}
+/* Parked markers (index < 0): a cell column to the left of cell [0] whose box and
+ * index bands are INVISIBLE (they only reserve height), so its marker track lines
+ * up with every cell's marker track. The markers are dimmed so they read as
+ * "pointing at nothing yet" rather than missing. */
+.pac-cell-parked { min-width: auto; margin-right: 2px; }
+.pac-cell-parked .pac-cell { min-width: 0; }
+.pac-cell-parked .pac-cell,
+.pac-cell-parked .pac-cell-index { visibility: hidden; }
+.pac-cell-parked .pac-marker { opacity: .5; }
 
 /* Compact strip (e.g. "A stores"): a HORIZONTAL row of uniform-width labelled
  * boxes, all visible at once with no scrollbar. Two strips compared side by side
