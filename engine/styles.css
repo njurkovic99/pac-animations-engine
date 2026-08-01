@@ -355,12 +355,14 @@ body {
 .pac-cell[data-role="compared"] { border-color: var(--highlight); }
 .pac-cell[data-role="ok"]       { border-color: var(--ok); }
 .pac-cell[data-role="error"]    { border-color: var(--error); color: var(--error); }
-/* empty: a cell that never held a value. Same box and dimensions as a member,
- * but a DASHED dimmed border and a thin, low-opacity X drawn corner to corner
- * across the interior (an SVG stretched to the cell). The X means the cell holds
- * nothing -- it cannot be mistaken for a cell holding a space character or for a
- * rendering failure. It is a different SHAPE from `stale`'s greyed character, so
- * the two never read alike. */
+/* empty: indeterminate storage -- an unwritten array cell OR an unassigned
+ * standalone variable (one glyph for both). Same box and dimensions as a member,
+ * but a DASHED dimmed border, a dim em-dash "—" value (added by the renderer),
+ * and a thin, low-opacity X drawn corner to corner across the interior (an SVG
+ * stretched to the cell). Together they read as "holds no meaningful value" --
+ * impossible to mistake for a space character or a rendering failure, and a
+ * different SHAPE from `stale`'s greyed character. (A real stored value such as
+ * the -1 sentinel is NOT empty and renders normally.) */
 .pac-cell[data-role="empty"] {
   border-style: dashed;
   border-color: var(--border);

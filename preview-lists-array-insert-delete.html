@@ -359,12 +359,14 @@ body {
 .pac-cell[data-role="compared"] { border-color: var(--highlight); }
 .pac-cell[data-role="ok"]       { border-color: var(--ok); }
 .pac-cell[data-role="error"]    { border-color: var(--error); color: var(--error); }
-/* empty: a cell that never held a value. Same box and dimensions as a member,
- * but a DASHED dimmed border and a thin, low-opacity X drawn corner to corner
- * across the interior (an SVG stretched to the cell). The X means the cell holds
- * nothing -- it cannot be mistaken for a cell holding a space character or for a
- * rendering failure. It is a different SHAPE from `stale`'s greyed character, so
- * the two never read alike. */
+/* empty: indeterminate storage -- an unwritten array cell OR an unassigned
+ * standalone variable (one glyph for both). Same box and dimensions as a member,
+ * but a DASHED dimmed border, a dim em-dash "—" value (added by the renderer),
+ * and a thin, low-opacity X drawn corner to corner across the interior (an SVG
+ * stretched to the cell). Together they read as "holds no meaningful value" --
+ * impossible to mistake for a space character or a rendering failure, and a
+ * different SHAPE from `stale`'s greyed character. (A real stored value such as
+ * the -1 sentinel is NOT empty and renders normally.) */
 .pac-cell[data-role="empty"] {
   border-style: dashed;
   border-color: var(--border);
@@ -636,6 +638,8 @@ const cellsPanel = (() => { /* CELLS panel — 1D/2D grid. Absorbs arrays, sorti
  * index-vs-value confusion). An optional `rowLabel` names the row once, at the
  * left, so the array's name is present without repeating it under every cell. */
 
+const PLACEHOLDER = '—';   // em-dash: the value of indeterminate storage
+
 function mount(body) { body.innerHTML = '<div class="pac-cells"></div>'; }
 
 function render(body, data, ctx) {
@@ -673,8 +677,14 @@ function render(body, data, ctx) {
     cell.className = 'pac-cell';
     if (c.role) cell.dataset.role = c.role;
     if (mode === 'bar') cell.style.height = `${20 + 70 * (+c.value / max)}px`;
+    // ONE placeholder glyph for indeterminate storage — an unwritten array cell
+    // and an unassigned standalone variable are the same thing. An `empty` cell
+    // always shows the em-dash "—" (over the dashed box + faint X from CSS),
+    // never a real value. A real stored value (including a sentinel like -1) is
+    // NOT `empty` and renders normally.
+    const value = c.role === 'empty' ? PLACEHOLDER : c.value;
     cell.innerHTML = (!markers && c.label ? `<span class="pac-cell-label">${esc(c.label)}</span>` : '') +
-                     `<span class="pac-cell-value">${esc(c.value)}</span>`;
+                     `<span class="pac-cell-value">${esc(value)}</span>`;
     // Anchor the value glyph, not the whole cell: for a pointer variable that
     // value is the dot, so a cross-panel arrow starts from the dot itself --
     // matching the record-field pointers in the NODES panel.
@@ -1785,9 +1795,10 @@ function snap({ line, tag, narrate, note, arr, count, active = null, countActive
     const empty = val == null;
     let role;
     if (i === active) role = 'active';          // blue fill: modified this step
-    else if (empty)   role = 'empty';           // dashed box + faint X: free slot
-    // An empty cell carries no value: the renderer's `empty` role draws the
-    // dashed box and X. (Phantom invalid-index holes below keep the middot.)
+    else if (empty)   role = 'empty';           // free slot: dashed box + X + "—"
+    // An empty cell is indeterminate storage; the renderer's `empty` role draws
+    // the dashed box, the X, and the "—" placeholder glyph. (Phantom
+    // invalid-index holes below use the `error` role and keep the middot.)
     cells.push({ label: String(i), value: empty ? '' : val, role });
   }
   if (phantom) for (const p of phantom) cells.push(p);

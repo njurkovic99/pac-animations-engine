@@ -190,14 +190,18 @@ function contentsPanel(cellChar, members, front, rear, activeIdx, comparedIdx) {
 }
 
 /* The compact state strip: front, rear, ch, as a horizontal row of three
- * labelled boxes. `hot` gives the changing box the blue fill. No count box. */
+ * labelled boxes. `hot` gives the changing box the blue fill. No count box.
+ * front and rear always hold a real value the code tests against — including the
+ * -1 sentinel, which renders at normal weight, NOT as a placeholder. ch, before
+ * it is ever assigned, is indeterminate storage: the `empty` role gives it the
+ * same placeholder glyph as an unwritten array cell. */
 function statePanel(front, rear, ch, hot) {
   return {
     render: 'box',
     cells: [
-      { label: 'front', value: front,               role: hot === 'front' ? 'active' : undefined },
-      { label: 'rear',  value: rear,                role: hot === 'rear'  ? 'active' : undefined },
-      { label: 'ch',    value: ch == null ? '—' : ch, role: hot === 'ch'   ? 'active' : undefined },
+      { label: 'front', value: front, role: hot === 'front' ? 'active' : undefined },
+      { label: 'rear',  value: rear,  role: hot === 'rear'  ? 'active' : undefined },
+      { label: 'ch',    value: ch,    role: ch == null ? 'empty' : (hot === 'ch' ? 'active' : undefined) },
     ],
   };
 }

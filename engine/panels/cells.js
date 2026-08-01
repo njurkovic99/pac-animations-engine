@@ -21,6 +21,8 @@
  * index-vs-value confusion). An optional `rowLabel` names the row once, at the
  * left, so the array's name is present without repeating it under every cell. */
 
+const PLACEHOLDER = '—';   // em-dash: the value of indeterminate storage
+
 export function mount(body) { body.innerHTML = '<div class="pac-cells"></div>'; }
 
 export function render(body, data, ctx) {
@@ -58,8 +60,14 @@ export function render(body, data, ctx) {
     cell.className = 'pac-cell';
     if (c.role) cell.dataset.role = c.role;
     if (mode === 'bar') cell.style.height = `${20 + 70 * (+c.value / max)}px`;
+    // ONE placeholder glyph for indeterminate storage — an unwritten array cell
+    // and an unassigned standalone variable are the same thing. An `empty` cell
+    // always shows the em-dash "—" (over the dashed box + faint X from CSS),
+    // never a real value. A real stored value (including a sentinel like -1) is
+    // NOT `empty` and renders normally.
+    const value = c.role === 'empty' ? PLACEHOLDER : c.value;
     cell.innerHTML = (!markers && c.label ? `<span class="pac-cell-label">${esc(c.label)}</span>` : '') +
-                     `<span class="pac-cell-value">${esc(c.value)}</span>`;
+                     `<span class="pac-cell-value">${esc(value)}</span>`;
     // Anchor the value glyph, not the whole cell: for a pointer variable that
     // value is the dot, so a cross-panel arrow starts from the dot itself --
     // matching the record-field pointers in the NODES panel.
