@@ -305,19 +305,25 @@ body {
 .pac-danger { color: var(--error); font-weight: 600; }
 
 /* ---- CODE panel ----
- * FIXED VIEWPORT of exactly --code-lines (15) lines, at all times. The body is a
- * fixed height (15 lines + its own padding) and scrolls internally beyond that,
- * so a long listing scrolls while a short one pads to the same height. The height
- * never changes between steps or language tabs. `align-self: start` pins the panel
- * to the top of its grid area (rather than stretching to fill a taller cell), so
- * the viewport is genuinely 15 lines even where the code column is tall. This is
- * the project standard -- every animation inherits it. See AUTHORING.md
- * "Stable layout" and code.js for the follow-the-highlight scrolling. */
+ * The viewport is --code-lines (15) lines as a FLOOR, not a fixed value: the
+ * engine (fitCodePanels) grows it to as many WHOLE lines as fit the column,
+ * capped at the listing's length, resolved ONCE from the viewport on load and on
+ * window resize and then held constant -- it never changes with steps, frames, or
+ * the language tab. The height below is the 15-line floor used before the engine
+ * measures (and as the fallback). `align-self: start` pins the panel to the top
+ * of its grid area. See AUTHORING.md "Stable layout" and code.js for the
+ * follow-the-highlight scrolling. */
 .pac-panel[data-type="code"] { align-self: start; }
 .pac-panel[data-type="code"] .pac-panel-body {
   height: calc(var(--code-lines) * var(--code-line-h) + var(--body-pad));
   flex: none;
+  overflow: hidden;                      /* the listing scrolls, not the body */
 }
+/* The body fills the column (bottom lines up with the other column); the listing
+ * inside is clipped to a WHOLE number of lines (engine fitCodePanels sets its
+ * max-height), so the last visible line is never a sliver and any sub-line
+ * remainder is blank space below the listing rather than a gap below the panel. */
+.pac-panel[data-type="code"] .pac-code { overflow-y: auto; }
 
 .pac-lang-tabs { display: flex; gap: 4px; }
 .pac-lang-tab {

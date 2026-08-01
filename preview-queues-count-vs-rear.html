@@ -127,23 +127,25 @@ body {
 .pac-openwin[hidden] { display: none; }
 
 /* ---- layout: the bounded stage ----
- * A grid of panels, bounded to --stage-max-h so it never grows the page. It
- * flexes to fill the space above the pinned chrome but is capped at the bound.
- * The two rows are sized to their content (tall top for code, short bottom for
- * the shallow call stack + count/capacity strip) rather than split equally;
- * both are FIXED so panels scroll internally instead of reflowing. Any extra
- * rows (an animation with >4 panels) fall back to sharing leftover space.
- * See AUTHORING.md. */
+ * A grid of panels that sizes to its content and never grows the page. The top
+ * row holds the fixed 15-line code viewport; the bottom row is at least
+ * --stage-row-bottom (a shallow call stack + strip) but GROWS to fit a taller
+ * reserved panel (e.g. a call stack whose deepest state is main -> ADD -> INSERT
+ * -- three frames -- reserved fully visible by the engine). Because every panel's
+ * height is reserved to its per-run maximum (reserveHeights), the content height
+ * is constant, so the stage never changes height as steps advance. It shrinks on
+ * a short viewport (flex-shrink) so the note is never pushed off screen.
+ * See AUTHORING.md "Stable layout". */
 .pac-stage {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  grid-template-rows: var(--stage-row-top) var(--stage-row-bottom);
+  grid-template-rows: var(--stage-row-top) minmax(var(--stage-row-bottom), auto);
   grid-auto-rows: minmax(0, 1fr);
   gap: var(--gap);
   position: relative;          /* anchor origin for the arrow overlay */
-  flex: 1 1 auto;
+  flex: 0 1 auto;              /* hug content; never grow past it */
   min-height: 0;               /* allow the grid to shrink below content size */
-  max-height: var(--stage-max-h);
+  max-height: calc(100vh - 300px);
   overflow: hidden;            /* the bound is hard; panels scroll, not the stage */
 }
 .pac-stage[data-cols="1"] { grid-template-columns: 1fr; }
@@ -307,19 +309,25 @@ body {
 .pac-danger { color: var(--error); font-weight: 600; }
 
 /* ---- CODE panel ----
- * FIXED VIEWPORT of exactly --code-lines (15) lines, at all times. The body is a
- * fixed height (15 lines + its own padding) and scrolls internally beyond that,
- * so a long listing scrolls while a short one pads to the same height. The height
- * never changes between steps or language tabs. `align-self: start` pins the panel
- * to the top of its grid area (rather than stretching to fill a taller cell), so
- * the viewport is genuinely 15 lines even where the code column is tall. This is
- * the project standard -- every animation inherits it. See AUTHORING.md
- * "Stable layout" and code.js for the follow-the-highlight scrolling. */
+ * The viewport is --code-lines (15) lines as a FLOOR, not a fixed value: the
+ * engine (fitCodePanels) grows it to as many WHOLE lines as fit the column,
+ * capped at the listing's length, resolved ONCE from the viewport on load and on
+ * window resize and then held constant -- it never changes with steps, frames, or
+ * the language tab. The height below is the 15-line floor used before the engine
+ * measures (and as the fallback). `align-self: start` pins the panel to the top
+ * of its grid area. See AUTHORING.md "Stable layout" and code.js for the
+ * follow-the-highlight scrolling. */
 .pac-panel[data-type="code"] { align-self: start; }
 .pac-panel[data-type="code"] .pac-panel-body {
   height: calc(var(--code-lines) * var(--code-line-h) + var(--body-pad));
   flex: none;
+  overflow: hidden;                      /* the listing scrolls, not the body */
 }
+/* The body fills the column (bottom lines up with the other column); the listing
+ * inside is clipped to a WHOLE number of lines (engine fitCodePanels sets its
+ * max-height), so the last visible line is never a sliver and any sub-line
+ * remainder is blank space below the listing rather than a gap below the panel. */
+.pac-panel[data-type="code"] .pac-code { overflow-y: auto; }
 
 .pac-lang-tabs { display: flex; gap: 4px; }
 .pac-lang-tab {
@@ -627,18 +635,20 @@ function render(body, data, ctx, { lang }) {
   //   - do NOT scroll when it is already comfortably in view -- moving on every
   //     step is as disorienting as never moving. Only scroll when the line would
   //     otherwise sit within MARGIN lines of the top or bottom edge.
-  // Only body.scrollTop changes -- the panel's height and the rest of the page
-  // never move.
-  const activeEl = body.querySelector('.pac-code-line.is-active');
-  if (activeEl) {
-    const bodyRect = body.getBoundingClientRect();
+  // Only the listing's scrollTop changes -- the panel's height and the rest of
+  // the page never move. The scroll container is `.pac-code` (clipped to a whole
+  // number of lines by the engine), not the body.
+  const scroller = body.querySelector('.pac-code');
+  const activeEl = scroller?.querySelector('.pac-code-line.is-active');
+  if (scroller && activeEl) {
+    const viewRect = scroller.getBoundingClientRect();
     const lineRect = activeEl.getBoundingClientRect();
     const lineH  = lineRect.height || 1;
-    const offset = lineRect.top - bodyRect.top;      // active line's position in the viewport
-    const viewH  = body.clientHeight;
+    const offset = lineRect.top - viewRect.top;      // active line's position in the viewport
+    const viewH  = scroller.clientHeight;
     const MARGIN = 3 * lineH;                          // keep >= 3 lines of context each side
     if (offset < MARGIN || offset > viewH - MARGIN - lineH) {
-      body.scrollTop += offset - (viewH - lineH) / 2; // bring it to roughly the middle
+      scroller.scrollTop += offset - (viewH - lineH) / 2; // bring it to roughly the middle
     }
   }
 }
@@ -1292,7 +1302,57 @@ class Engine {
     this.steps = this.materialise(name);
     this.i = 0;
     this.reserveHeights();
+    this.fitCodePanels();
     this.render();
+  }
+
+  /**
+   * Size each CODE panel to as many WHOLE lines as fit in its column, floored at
+   * --code-lines (15 -- the Canvas-iframe minimum, never go below it) and capped
+   * at the listing's own length (never show a slot past the last line; a shorter
+   * listing pads to the floor). The last visible line is always whole.
+   *
+   * Resolved ONCE from the viewport -- on load and on a real window resize -- then
+   * held constant. It must NOT respond to content: not as the step advances, as
+   * frames push/pop, or as the language tab changes. A content-driven height is
+   * the reflow bug fixed in STREAM/CALLSTACK. Measured by letting the body fill
+   * its cell (it scrolls, so the listing's own length can't inflate the cell),
+   * reading the available height, then pinning a whole-line height.
+   */
+  fitCodePanels() {
+    const cs = getComputedStyle(this.root);
+    const lineH  = parseFloat(cs.getPropertyValue('--code-line-h')) || 20.6;
+    const floorL = parseFloat(cs.getPropertyValue('--code-lines'))  || 15;
+    const padV   = parseFloat(cs.getPropertyValue('--body-pad'))     || 22;
+    for (const [, p] of this.panels) {
+      if (p.spec.type !== 'code') continue;
+      const panel = p.el, body = panel.querySelector('.pac-panel-body');
+      if (!body) continue;
+      const maxLen = Math.max(1, ...Object.values(p.spec.listings ?? {}).map(l => l.length));
+      // Measure the column height available to this panel by letting the body
+      // fill its grid cell. The listing itself is HIDDEN during the measure, so
+      // its length cannot inflate the cell -- the cell is sized purely by the
+      // other column (the reserved panels), which is exactly the height the code
+      // should match. Then restore and pin a whole-line height.
+      const code = body.querySelector('.pac-code');
+      const savedAlign = panel.style.alignSelf, savedFlex = body.style.flex, savedDisp = code ? code.style.display : '';
+      if (code) code.style.display = 'none';
+      panel.style.alignSelf = 'stretch';
+      body.style.height = 'auto';
+      body.style.flex = '1';
+      void body.offsetHeight;                                  // force reflow
+      const avail = body.clientHeight;                         // cell inner height (content-box + padding)
+      const fit = Math.floor((avail - padV) / lineH);          // whole lines that fit
+      const lines = Math.max(floorL, Math.min(maxLen, fit));
+      if (code) code.style.display = savedDisp;
+      panel.style.alignSelf = savedAlign;
+      body.style.flex = savedFlex;
+      // The body FILLS the column (its bottom lines up with the other column);
+      // the listing is clipped to `lines` WHOLE lines, so the last line is never
+      // a sliver and the sub-line remainder is blank space below it, not a gap.
+      body.style.height = `${Math.round(avail)}px`;
+      if (code) code.style.maxHeight = `${Math.round(lines * lineH)}px`;
+    }
   }
 
   /**
@@ -1471,6 +1531,14 @@ class Engine {
     window.addEventListener('keydown', e => {
       if (e.key === 'ArrowRight') this.next();
       if (e.key === 'ArrowLeft')  this.prev();
+    });
+
+    // The CODE line count follows the VIEWPORT: recompute on a real window
+    // resize (debounced), never on a content change. This is the only thing that
+    // re-fits the panel; steps/frames/tabs leave it constant.
+    window.addEventListener('resize', () => {
+      clearTimeout(this._fitTimer);
+      this._fitTimer = setTimeout(() => { this.fitCodePanels(); this.render(); }, 120);
     });
   }
 
