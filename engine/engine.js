@@ -80,7 +80,86 @@ export class Engine {
     this.trace = name;
     this.steps = this.materialise(name);
     this.i = 0;
+    this.reserveHeights();
+    this.fitCodePanels();
     this.render();
+  }
+
+  /**
+   * Size each CODE panel to as many WHOLE lines as fit in its column, floored at
+   * --code-lines (15 -- the Canvas-iframe minimum, never go below it) and capped
+   * at the listing's own length (never show a slot past the last line; a shorter
+   * listing pads to the floor). The last visible line is always whole.
+   *
+   * Resolved ONCE from the viewport -- on load and on a real window resize -- then
+   * held constant. It must NOT respond to content: not as the step advances, as
+   * frames push/pop, or as the language tab changes. A content-driven height is
+   * the reflow bug fixed in STREAM/CALLSTACK. Measured by letting the body fill
+   * its cell (it scrolls, so the listing's own length can't inflate the cell),
+   * reading the available height, then pinning a whole-line height.
+   */
+  fitCodePanels() {
+    const cs = getComputedStyle(this.root);
+    const lineH  = parseFloat(cs.getPropertyValue('--code-line-h')) || 20.6;
+    const floorL = parseFloat(cs.getPropertyValue('--code-lines'))  || 15;
+    const padV   = parseFloat(cs.getPropertyValue('--body-pad'))     || 22;
+    for (const [, p] of this.panels) {
+      if (p.spec.type !== 'code') continue;
+      const panel = p.el, body = panel.querySelector('.pac-panel-body');
+      if (!body) continue;
+      const maxLen = Math.max(1, ...Object.values(p.spec.listings ?? {}).map(l => l.length));
+      // Measure the column height available to this panel by letting the body
+      // fill its grid cell. The listing itself is HIDDEN during the measure, so
+      // its length cannot inflate the cell -- the cell is sized purely by the
+      // other column (the reserved panels), which is exactly the height the code
+      // should match. Then restore and pin a whole-line height.
+      const code = body.querySelector('.pac-code');
+      const savedAlign = panel.style.alignSelf, savedFlex = body.style.flex, savedDisp = code ? code.style.display : '';
+      if (code) code.style.display = 'none';
+      panel.style.alignSelf = 'stretch';
+      body.style.height = 'auto';
+      body.style.flex = '1';
+      void body.offsetHeight;                                  // force reflow
+      const avail = body.clientHeight;                         // cell inner height (content-box + padding)
+      const fit = Math.floor((avail - padV) / lineH);          // whole lines that fit
+      const lines = Math.max(floorL, Math.min(maxLen, fit));
+      if (code) code.style.display = savedDisp;
+      panel.style.alignSelf = savedAlign;
+      body.style.flex = savedFlex;
+      // The body FILLS the column (its bottom lines up with the other column);
+      // the listing is clipped to `lines` WHOLE lines, so the last line is never
+      // a sliver and the sub-line remainder is blank space below it, not a gap.
+      body.style.height = `${Math.round(avail)}px`;
+      if (code) code.style.maxHeight = `${Math.round(lines * lineH)}px`;
+    }
+  }
+
+  /**
+   * Reserve every panel's height ONCE, from the maximum content it holds across
+   * the ENTIRE step sequence, so a step that is empty or shallow renders as
+   * reserved empty space rather than a smaller panel. Nothing below any panel
+   * moves as steps advance -- no reflow, ever. Measured up front by rendering
+   * each step's data for the panel and taking the tallest, then pinning the
+   * body's min-height. Panels that manage their own fixed viewport (CODE = 15
+   * lines, STREAM = 3 lines) are skipped -- their height is already constant.
+   * This is the general cure for the height-change bug class (collapsed empty
+   * cells, the parked-marker lane, an accumulating STREAM, a growing CALLSTACK).
+   * See AUTHORING.md "Stable layout".
+   */
+  reserveHeights() {
+    for (const [id, p] of this.panels) {
+      if (p.spec.type === 'code' || p.spec.type === 'stream') continue;
+      const bodyEl = p.el.querySelector('.pac-panel-body');
+      if (!bodyEl) continue;
+      bodyEl.style.minHeight = '';                 // reset before measuring
+      let maxH = 0;
+      for (const step of this.steps) {
+        p.ctx.anchors.clear();
+        p.renderer.render(bodyEl, step.panels?.[id], p.ctx, { lang: this.lang, step });
+        if (bodyEl.scrollHeight > maxH) maxH = bodyEl.scrollHeight;
+      }
+      bodyEl.style.minHeight = `${maxH}px`;
+    }
   }
 
   /* ---------- derived metrics ---------- */
@@ -231,6 +310,14 @@ export class Engine {
     window.addEventListener('keydown', e => {
       if (e.key === 'ArrowRight') this.next();
       if (e.key === 'ArrowLeft')  this.prev();
+    });
+
+    // The CODE line count follows the VIEWPORT: recompute on a real window
+    // resize (debounced), never on a content change. This is the only thing that
+    // re-fits the panel; steps/frames/tabs leave it constant.
+    window.addEventListener('resize', () => {
+      clearTimeout(this._fitTimer);
+      this._fitTimer = setTimeout(() => { this.fitCodePanels(); this.render(); }, 120);
     });
   }
 

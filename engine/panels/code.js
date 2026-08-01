@@ -59,18 +59,20 @@ export function render(body, data, ctx, { lang }) {
   //   - do NOT scroll when it is already comfortably in view -- moving on every
   //     step is as disorienting as never moving. Only scroll when the line would
   //     otherwise sit within MARGIN lines of the top or bottom edge.
-  // Only body.scrollTop changes -- the panel's height and the rest of the page
-  // never move.
-  const activeEl = body.querySelector('.pac-code-line.is-active');
-  if (activeEl) {
-    const bodyRect = body.getBoundingClientRect();
+  // Only the listing's scrollTop changes -- the panel's height and the rest of
+  // the page never move. The scroll container is `.pac-code` (clipped to a whole
+  // number of lines by the engine), not the body.
+  const scroller = body.querySelector('.pac-code');
+  const activeEl = scroller?.querySelector('.pac-code-line.is-active');
+  if (scroller && activeEl) {
+    const viewRect = scroller.getBoundingClientRect();
     const lineRect = activeEl.getBoundingClientRect();
     const lineH  = lineRect.height || 1;
-    const offset = lineRect.top - bodyRect.top;      // active line's position in the viewport
-    const viewH  = body.clientHeight;
+    const offset = lineRect.top - viewRect.top;      // active line's position in the viewport
+    const viewH  = scroller.clientHeight;
     const MARGIN = 3 * lineH;                          // keep >= 3 lines of context each side
     if (offset < MARGIN || offset > viewH - MARGIN - lineH) {
-      body.scrollTop += offset - (viewH - lineH) / 2; // bring it to roughly the middle
+      scroller.scrollTop += offset - (viewH - lineH) / 2; // bring it to roughly the middle
     }
   }
 }
