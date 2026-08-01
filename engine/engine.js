@@ -28,6 +28,11 @@ const RENDERERS = {
 const MAX_STEPS = 5000;
 const AUTOPLAY_MS = 900;
 
+// Default student-facing panel titles per renderer (used when a panel declares
+// no `title`). The CALLSTACK renderer displays as "Function calls" -- the
+// internal name stays CALLSTACK everywhere in code and docs.
+const DEFAULT_TITLES = { callstack: 'Function calls' };
+
 export class Engine {
   constructor(root, spec) {
     this.root = root;
@@ -158,6 +163,18 @@ export class Engine {
 
     if (s.columns) this.stage.dataset.cols = s.columns;
 
+    // A multi-row layout (more than the default two grid rows -- e.g. the race
+    // comparison's code / queue / strip stack per column) declares its own row
+    // proportions via `spec.stageRows` (a CSS grid-template-rows value). The
+    // stage then relaxes its two-row bound and fills the viewport above the
+    // pinned footer instead, still shrinking on a short viewport so the note is
+    // never pushed off screen (see AUTHORING.md "Stable layout"). Absent, the
+    // default bounded two-row grid is unchanged.
+    if (s.stageRows) {
+      this.stage.dataset.multirow = '';
+      this.stage.style.gridTemplateRows = s.stageRows;
+    }
+
     // Beginner profile is enforced here, not left to authorial restraint.
     const panels = (s.panels ?? []).slice();
     if (s.profile === 'beginner' && panels.length > 3) {
@@ -173,7 +190,18 @@ export class Engine {
       // opts out of stretching to fill its tall grid cell: `compact: true` makes
       // it top-align and size to content. See AUTHORING.md "Stable layout".
       if (p.compact) el.dataset.compact = '';
-      el.innerHTML = `<div class="pac-panel-head"><span>${p.title ?? p.type}</span>
+      // A full-width panel spans every column (grid-column: 1 / -1) -- e.g. a
+      // shared preamble sitting above a two-column comparison.
+      if (p.full) el.dataset.full = '';
+      // A tall panel spans every row of the first column (grid-row: 1 / -1) --
+      // e.g. a code listing beside a stack of smaller panels in the other column.
+      if (p.tall) el.dataset.tall = '';
+      // Default DISPLAY title per renderer when a panel gives none. The internal
+      // renderer name stays CALLSTACK; only the student-facing label reads
+      // "Function calls" (so it is not confused with an actual stack data
+      // structure in the stacks animations).
+      const title = p.title ?? DEFAULT_TITLES[p.type] ?? p.type;
+      el.innerHTML = `<div class="pac-panel-head"><span>${title}</span>
                         <span class="pac-panel-tools"></span></div>
                       <div class="pac-panel-body"></div>`;
       this.stage.appendChild(el);
@@ -253,7 +281,16 @@ export class Engine {
       // on the stack, dimmed so the student keeps sight of where the call came
       // from (AUTHORING.md "Line highlight -- active line vs. parked caller
       // lines"). Bright = running now, dim = suspended.
-      if (p.spec.type === 'code') data = { ...data, line: step.line, dangerLine: step.dangerLine, parked: step.parked };
+      //
+      // Race mode has TWO code panels that highlight DIFFERENT lines on the same
+      // step (and one may highlight nothing while it idles). So a code panel
+      // prefers a `line` supplied inside its own panel data (`panels.<codeId>`)
+      // and only falls back to the single top-level `step.line` when it declares
+      // none -- keeping the single-listing animations unchanged.
+      if (p.spec.type === 'code') {
+        const pLine = (data && 'line' in data) ? data.line : step.line;
+        data = { ...data, line: pLine, dangerLine: step.dangerLine, parked: step.parked };
+      }
       p.ctx.anchors.clear();
       p.renderer.render(p.el.querySelector('.pac-panel-body'),
                         data, p.ctx, { lang: this.lang, step });

@@ -229,8 +229,11 @@ function snap({ line, tag, narrate, note, arr, count, active = null, countActive
     const empty = val == null;
     let role;
     if (i === active) role = 'active';          // blue fill: modified this step
-    else if (empty)   role = 'empty';           // dimmed: free trailing slot
-    cells.push({ label: String(i), value: empty ? EMPTY : val, role });
+    else if (empty)   role = 'empty';           // free slot: dashed box + X + "—"
+    // An empty cell is indeterminate storage; the renderer's `empty` role draws
+    // the dashed box, the X, and the "—" placeholder glyph. (Phantom
+    // invalid-index holes below use the `error` role and keep the middot.)
+    cells.push({ label: String(i), value: empty ? '' : val, role });
   }
   if (phantom) for (const p of phantom) cells.push(p);
 
@@ -544,7 +547,7 @@ export default {
     { type: 'code',      id: 'code',  title: 'list operations',
       listings: LISTINGS, labels: { pseudo: 'pseudocode', java: 'Java', cpp: 'C++' } },
     { type: 'cells',     id: 'cells', title: 'The array' },
-    { type: 'callstack', id: 'stack', title: 'Call stack' },
+    { type: 'callstack', id: 'stack', title: 'Function calls' },
     { type: 'cells',     id: 'size',  title: 'count / capacity', compact: true },
   ],
 

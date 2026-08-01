@@ -8,6 +8,10 @@
         "animations": [
           { "file": "lists-array-insert-delete", "backs": "A1", "built": true }
         ] },
+      { "topic": "Queues — Two Representations",
+        "animations": [
+          { "file": "queues-count-vs-rear", "backs": "A2", "built": true }
+        ] },
       { "topic": "2.5 Recursion; 4.2.3 Implementing Recursion",
         "animations": [
           { "file": "recursion-factorial-stack",  "backs": null },

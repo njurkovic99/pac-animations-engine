@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>lists-array-insert-delete — preview</title>
+<title>queues-count-vs-rear — preview</title>
 <style>/* pac-animations — design system
    15 tokens replacing the 188 distinct color values found across the
    original 25 animation files. */
@@ -1577,562 +1577,441 @@ function mountAnimation(spec, el = document.getElementById('pac')) {
   return new Engine(el, spec);
 }
 
-/* ds — A1 "Array-based list operations"
+/* ds — A2 "A queue in an array" (front + rear, built from empty)
  *
- * The whole lesson is ONE invariant: contiguity. An array-based list packs its
- * elements from index 0 with no holes; `count` says how many are in use, and the
- * backing array has a fixed capacity MAX. Every operation must leave the list
- * contiguous, and that requirement is what makes the operations cost what they
- * cost.
+ * One array-based queue, stored with front + rear, traced by a main() driver —
+ * the same shape as A1 (lists-array-insert-delete): main calls the operations, a
+ * CALLSTACK panel (displayed as "Function calls") shows each call with its bound
+ * parameter, and the caller's line dims while the callee runs.
  *
- * A `main` driver calls the operations in sequence — ADD(40); INSERT(1, 25);
- * INSERT(7, 99) [the invalid one]; DELETE(1); badINSERT(1, 25) [the buggy one] —
- * so every call has a visible origin. The CALLSTACK panel is a debugger's
- * locals/stack pane: frames push on call (newest on top, showing their BOUND
- * parameter values) and pop on return (the caller below is greyed but present).
- * This makes the ADD-is-INSERT lesson visible: ADD(40) calls INSERT(count,
- * value), and INSERT's frame appears already showing index = 3 (count's value)
- * and value = 40 — the parameters you could previously only infer from narration.
+ * The queue starts EMPTY, with front = rear = -1. -1 means "this index points at
+ * nothing." It is the extra piece of information that lets front and rear
+ * distinguish an empty queue from a full one — which is the animation's payoff:
+ * the queue is filled to capacity (front 0, rear 3), drained back to empty, and
+ * on the last DELETE both indices reset to -1. Without that reset front would be
+ * 1 and rear 0 — one cell apart in exactly the way a FULL queue's indices are —
+ * and front + rear alone could not tell the two states apart. The sentinel
+ * breaks the tie, at the cost of a branch in ADD and a branch in DELETE. A queue
+ * that stored a count instead would need neither (empty is count = 0, full is
+ * count = MAX); the final note makes that trade explicit. There is deliberately
+ * NO count variable anywhere — code, state strip, or hidden state.
  *
- * Operations, in the instructor's framing:
- *   - ADD(value)          == INSERT(count, value)   -- append; no shift needed
- *   - INSERT(index, value) -- make room by shifting the tail RIGHT, then write
- *   - INSERT at a bad index -- range check fails; the write would leave holes
- *   - DELETE(index)        -- shift the tail LEFT to close the gap
- *   - badINSERT(index, value) -- the SAME insert, written with the shift going
- *     the WRONG way (front-first): it corrupts the data, and shows why the
- *     correct INSERT shifts from the far end first.
+ * next_ix is the wraparound helper, treated as ATOMIC — never stepped into, and
+ * it pushes no CALLSTACK frame. Note next_ix(-1) = 0 (since -1 is not MAX-1 and
+ * -1 + 1 = 0), narrated explicitly the first time it happens.
  *
- * A mid-run note bridges to linked lists: the shift cost -- up to n moves for a
- * middle insert/delete -- is the price paid for the array's simplicity, and it
- * is why linked lists exist.
+ * A marker whose index is -1 is PARKED to the left of cell [0], dimmed, still
+ * labelled — "pointing at nothing yet," not missing. Both markers start parked.
  *
- * The closing section is a confusion-first demonstration (AUTHORING.md
- * "Pedagogical pattern — name the student's confusion first"): a note first
- * NAMES the nagging question — "why move the outermost item first? it seems
- * backwards" — then badINSERT runs the intuitive-but-wrong inside-out shift and
- * the student watches one value smear across the tail (each A[i+1] = A[i] reads a
- * cell the previous iteration already clobbered). A payoff note answers the
- * opening question. Because that IS data corruption (overwrite), every smear
- * step carries the red memory-danger ⚠ (AUTHORING.md "Memory-danger marker").
+ * DELETE only moves an index; the removed character stays in memory as a `stale`
+ * cell (greyed, value still shown). The array is never blanked. Nothing here
+ * corrupts memory, so there is NO memory-danger marker anywhere.
  *
- * WATCH only: one trace, no gates, no predict steps. Common mistakes (writing
- * before making room; inserting out of range; shifting the wrong way) are taught
- * with NARRATION and NOTES on normal steps, never a question. No arrows, no
- * STREAM, no metrics.
- *
- * The correct INSERT/DELETE section has no memory-integrity violation (an
- * out-of-range index is a logic/contract error, not corruption); only the buggy
- * badINSERT corrupts data, and only its smear steps carry the ⚠. Argument→
- * parameter flow animation and pass-by-value/reference are deferred (AUTHORING.md
- * "CALLSTACK panel"); this only shows frames appearing with bound values. */
+ * WATCH only: one trace, no gates. The misconception is taught by narration and
+ * notes; the final DELETE's note is the post-watch payoff. Metrics hidden. */
 
-const MAX = 5;
+const MAX = 4;
+const nextIx = i => (i === MAX - 1 ? 0 : i + 1);   // next_ix; note nextIx(-1) === 0
 
-/* Listings are NOT line-aligned across languages (see AUTHORING.md "CODE"): the
- * `L` map below addresses each listing's own line numbers, so `line` is a
- * per-language object. `main` is included so each call has a highlightable
- * origin line and the CALLSTACK stays in sync with the code. */
+/* One listing, three ds languages, all line-aligned to a single 39-line grid, so
+ * `line` is a plain number that resolves the same in every language. Line 8 is
+ * the fullness test; line 17 the emptiness test. */
 const LISTINGS = {
   pseudo: [
-    'main():',                                       // 1
-    '    ADD(40)',                                   // 2
-    '    INSERT(1, 25)',                             // 3
-    '    INSERT(7, 99)',                             // 4
-    '    DELETE(1)',                                 // 5
-    '    badINSERT(1, 25)',                          // 6
-    '',                                              // 7
-    'ADD(value):',                                   // 8
-    '    INSERT(count, value)',                       // 9
-    '',                                              // 10
-    'INSERT(index, value):',                          // 11
-    '    if index < 0 or index > count:',             // 12
-    '        report "invalid index"; return',         // 13
-    '    for i = count down to index + 1:',           // 14
-    '        A[i] = A[i - 1]',                         // 15
-    '    A[index] = value',                            // 16
-    '    count = count + 1',                           // 17
-    '',                                              // 18
-    'DELETE(index):',                                 // 19
-    '    if index < 0 or index >= count:',            // 20
-    '        report "invalid index"; return',         // 21
-    '    for i = index to count - 2:',                // 22
-    '        A[i] = A[i + 1]',                         // 23
-    '    count = count - 1',                           // 24
-    '',                                              // 25
-    'badINSERT(index, value):',                       // 26
-    '    if index < 0 or index > count:',             // 27
-    '        report "invalid index"; return',         // 28
-    '    for i = index to count - 1:',                // 29
-    '        A[i + 1] = A[i]',                         // 30
-    '    A[index] = value',                            // 31
-    '    count = count + 1',                           // 32
+    'next_ix(i)',                          // 1
+    '    if i = MAX - 1',                  // 2
+    '        return 0',                    // 3
+    '    else',                            // 4
+    '        return i + 1',                // 5
+    '',                                    // 6
+    'ADD(value)',                          // 7
+    '    if next_ix(rear) = front',        // 8
+    '        print "queue is full"',       // 9
+    '    else',                            // 10
+    '        if front = -1',               // 11
+    '            front = 0',               // 12
+    '        rear = next_ix(rear)',        // 13
+    '        contents[rear] = value',      // 14
+    '',                                    // 15
+    'DELETE()',                            // 16
+    '    if front = -1',                   // 17
+    '        print "queue is empty"',      // 18
+    '    else',                            // 19
+    '        ch = contents[front]',        // 20
+    '        if front = rear',             // 21
+    '            front = -1',              // 22
+    '            rear = -1',               // 23
+    '        else',                        // 24
+    '            front = next_ix(front)',  // 25
+    '',                                    // 26
+    'main()',                              // 27
+    "    ADD('a')",                        // 28
+    "    ADD('b')",                        // 29
+    "    ADD('c')",                        // 30
+    "    ADD('d')",                        // 31
+    "    ADD('e')",                        // 32
+    '    DELETE()',                        // 33
+    "    ADD('e')",                        // 34
+    '    DELETE()',                        // 35
+    '    DELETE()',                        // 36
+    '    DELETE()',                        // 37
+    '    DELETE()',                        // 38
+    '    DELETE()',                        // 39
   ],
   java: [
-    'void main() {',                                 // 1
-    '    add(40);',                                   // 2
-    '    insert(1, 25);',                             // 3
-    '    insert(7, 99);',                             // 4
-    '    delete(1);',                                 // 5
-    '    badInsert(1, 25);',                          // 6
-    '}',                                             // 7
-    '',                                              // 8
-    'void add(int value) {',                          // 9
-    '    insert(count, value);',                      // 10
-    '}',                                             // 11
-    '',                                              // 12
-    'void insert(int index, int value) {',            // 13
-    '    if (index < 0 || index > count)',            // 14
-    '        throw new IndexOutOfBoundsException();',  // 15
-    '    for (int i = count; i > index; i--)',         // 16
-    '        A[i] = A[i - 1];',                        // 17
-    '    A[index] = value;',                           // 18
-    '    count++;',                                    // 19
-    '}',                                             // 20
-    '',                                              // 21
-    'void delete(int index) {',                       // 22
-    '    if (index < 0 || index >= count)',           // 23
-    '        throw new IndexOutOfBoundsException();',  // 24
-    '    for (int i = index; i < count - 1; i++)',     // 25
-    '        A[i] = A[i + 1];',                        // 26
-    '    count--;',                                    // 27
-    '}',                                             // 28
-    '',                                              // 29
-    'void badInsert(int index, int value) {',         // 30
-    '    if (index < 0 || index > count)',            // 31
-    '        throw new IndexOutOfBoundsException();',  // 32
-    '    for (int i = index; i < count; i++)',         // 33
-    '        A[i + 1] = A[i];',                        // 34
-    '    A[index] = value;',                           // 35
-    '    count++;',                                    // 36
-    '}',                                             // 37
+    'int next_ix(int i) {',                // 1
+    '    if (i == MAX - 1)',               // 2
+    '        return 0;',                   // 3
+    '    else',                            // 4
+    '        return i + 1; }',             // 5
+    '',                                    // 6
+    'void add(char value) {',              // 7
+    '    if (next_ix(rear) == front)',     // 8
+    '        out.println("queue is full");',// 9
+    '    else {',                          // 10
+    '        if (front == -1)',            // 11
+    '            front = 0;',              // 12
+    '        rear = next_ix(rear);',       // 13
+    '        contents[rear] = value; } }', // 14
+    '',                                    // 15
+    'void delete() {',                     // 16
+    '    if (front == -1)',                // 17
+    '        out.println("queue is empty");',// 18
+    '    else {',                          // 19
+    '        ch = contents[front];',       // 20
+    '        if (front == rear) {',        // 21
+    '            front = -1;',             // 22
+    '            rear = -1;',              // 23
+    '        } else',                      // 24
+    '            front = next_ix(front); } }',// 25
+    '',                                    // 26
+    'void main() {',                       // 27
+    "    add('a');",                       // 28
+    "    add('b');",                       // 29
+    "    add('c');",                       // 30
+    "    add('d');",                       // 31
+    "    add('e');",                       // 32
+    '    delete();',                       // 33
+    "    add('e');",                       // 34
+    '    delete();',                       // 35
+    '    delete();',                       // 36
+    '    delete();',                       // 37
+    '    delete();',                       // 38
+    '    delete(); }',                     // 39
   ],
   cpp: [
-    'int main() {',                                  // 1
-    '    add(40);',                                   // 2
-    '    insert(1, 25);',                             // 3
-    '    insert(7, 99);',                             // 4
-    '    remove(1);',                                 // 5
-    '    badInsert(1, 25);',                          // 6
-    '}',                                             // 7
-    '',                                              // 8
-    'void add(int value) {',                          // 9
-    '    insert(count, value);',                      // 10
-    '}',                                             // 11
-    '',                                              // 12
-    'void insert(int index, int value) {',            // 13
-    '    if (index < 0 || index > count) {',          // 14
-    '        cerr << "invalid index"; return;',       // 15
-    '    }',                                          // 16
-    '    for (int i = count; i > index; i--)',         // 17
-    '        A[i] = A[i - 1];',                        // 18
-    '    A[index] = value;',                           // 19
-    '    count++;',                                    // 20
-    '}',                                             // 21
-    '',                                              // 22
-    'void remove(int index) {',                       // 23
-    '    if (index < 0 || index >= count) {',         // 24
-    '        cerr << "invalid index"; return;',       // 25
-    '    }',                                          // 26
-    '    for (int i = index; i < count - 1; i++)',     // 27
-    '        A[i] = A[i + 1];',                        // 28
-    '    count--;',                                    // 29
-    '}',                                             // 30
-    '',                                              // 31
-    'void badInsert(int index, int value) {',         // 32
-    '    if (index < 0 || index > count) {',          // 33
-    '        cerr << "invalid index"; return;',       // 34
-    '    }',                                          // 35
-    '    for (int i = index; i < count; i++)',         // 36
-    '        A[i + 1] = A[i];',                        // 37
-    '    A[index] = value;',                           // 38
-    '    count++;',                                    // 39
-    '}',                                             // 40
+    'int next_ix(int i) {',                // 1
+    '    if (i == MAX - 1)',               // 2
+    '        return 0;',                   // 3
+    '    else',                            // 4
+    '        return i + 1; }',             // 5
+    '',                                    // 6
+    'void add(char value) {',              // 7
+    '    if (next_ix(rear) == front)',     // 8
+    '        cout << "queue is full";',    // 9
+    '    else {',                          // 10
+    '        if (front == -1)',            // 11
+    '            front = 0;',              // 12
+    '        rear = next_ix(rear);',       // 13
+    '        contents[rear] = value; } }', // 14
+    '',                                    // 15
+    'void dequeue() {',                    // 16
+    '    if (front == -1)',                // 17
+    '        cout << "queue is empty";',   // 18
+    '    else {',                          // 19
+    '        ch = contents[front];',       // 20
+    '        if (front == rear) {',        // 21
+    '            front = -1;',             // 22
+    '            rear = -1;',              // 23
+    '        } else',                      // 24
+    '            front = next_ix(front); } }',// 25
+    '',                                    // 26
+    'int main() {',                        // 27
+    "    add('a');",                       // 28
+    "    add('b');",                       // 29
+    "    add('c');",                       // 30
+    "    add('d');",                       // 31
+    "    add('e');",                       // 32
+    '    dequeue();',                      // 33
+    "    add('e');",                       // 34
+    '    dequeue();',                      // 35
+    '    dequeue();',                      // 36
+    '    dequeue();',                      // 37
+    '    dequeue();',                      // 38
+    '    dequeue(); }',                    // 39
   ],
 };
 
-/* Semantic line keys -> per-language line numbers. */
-const L = {
-  mainAdd:   { pseudo: 2,  java: 2,  cpp: 2  },
-  mainIns25: { pseudo: 3,  java: 3,  cpp: 3  },
-  mainIns99: { pseudo: 4,  java: 4,  cpp: 4  },
-  mainDel:   { pseudo: 5,  java: 5,  cpp: 5  },
-  mainBad:   { pseudo: 6,  java: 6,  cpp: 6  },
-  addCall:   { pseudo: 9,  java: 10, cpp: 10 },
-  insCheck:  { pseudo: 12, java: 14, cpp: 14 },
-  insErr:    { pseudo: 13, java: 15, cpp: 15 },
-  insFor:    { pseudo: 14, java: 16, cpp: 17 },
-  insShift:  { pseudo: 15, java: 17, cpp: 18 },
-  insWrite:  { pseudo: 16, java: 18, cpp: 19 },
-  insCount:  { pseudo: 17, java: 19, cpp: 20 },
-  delCheck:  { pseudo: 20, java: 23, cpp: 24 },
-  delFor:    { pseudo: 22, java: 25, cpp: 27 },
-  delShift:  { pseudo: 23, java: 26, cpp: 28 },
-  delCount:  { pseudo: 24, java: 27, cpp: 29 },
-  badCheck:  { pseudo: 27, java: 31, cpp: 33 },
-  badFor:    { pseudo: 29, java: 33, cpp: 36 },
-  badShift:  { pseudo: 30, java: 34, cpp: 37 },
-  badWrite:  { pseudo: 31, java: 35, cpp: 38 },
-  badCount:  { pseudo: 32, java: 36, cpp: 39 },
-};
+/* ---- call-frame builders. `call` is the parked caller line (dimmed while a
+ * callee runs). main has no params/locals; ADD binds value; DELETE has none
+ * (ch is global — it lives in the state strip). ---- */
+const mainF = call  => ({ fn: 'main',   vars: [],                         call });
+const addF  = value => ({ fn: 'ADD',    vars: [{ name: 'value', value }] });
+const delF  = ()    => ({ fn: 'DELETE', vars: [] });
 
-const EMPTY = '·';   // middot: a slot that exists but holds no element
-
-/* ---- call-frame builders (immutable: a fresh frame each step, never mutated
- * in place, so earlier snapshots stay intact) ----
- * `call` is the call-site line this frame is PARKED at while a callee runs — the
- * line the code panel dims (AUTHORING.md "Line highlight — active line vs. parked
- * caller lines"). It is set only on frames acting as callers; the running (top)
- * frame's `call` is ignored, since its executing line is the bright active one. */
-const vv    = (name, value, role) => (role ? { name, value, role } : { name, value });
-const iVar  = (value, role) => ({ name: 'i', value, role });   // role: 'active' | 'done'
-const mainF = (call)             => ({ fn: 'main',   vars: [], call });
-const addF  = (value, call)      => ({ fn: 'ADD',    vars: [vv('value', value)], call });
-const insF  = (index, value, i)  => ({ fn: 'INSERT', vars: [vv('index', index), vv('value', value), ...(i ? [i] : [])] });
-const delF  = (index, i)         => ({ fn: 'DELETE', vars: [vv('index', index), ...(i ? [i] : [])] });
-const badF  = (index, value, i)  => ({ fn: 'badINSERT', vars: [vv('index', index), vv('value', value), ...(i ? [i] : [])] });
-
-/* One snapshot. The array is a fixed row of MAX indexed boxes; occupied cells
- * show their value, trailing free cells are dimmed (role 'empty') so capacity vs
- * count stays visible. The single cell modified THIS step gets role 'active' --
- * the blue activity fill (cells are always members here, so blue fill is the only
- * per-step signal). `phantom` appends the would-be holes / attempted write for
- * the invalid-index step, drawn in the error role beyond the real array. `frames`
- * is the call stack, bottom-to-top; the top (last) frame is the running one, and
- * every frame below it is a caller — its `call` line is dimmed in the code panel
- * as a parked caller line, mirroring the greyed CALLSTACK frames exactly. */
-function snap({ line, tag, narrate, note, arr, count, active = null, countActive = false, phantom = null, frames }) {
-  const cells = [];
-  for (let i = 0; i < MAX; i++) {
-    const val = arr[i];
-    const empty = val == null;
-    let role;
-    if (i === active) role = 'active';          // blue fill: modified this step
-    else if (empty)   role = 'empty';           // free slot: dashed box + X + "—"
-    // An empty cell is indeterminate storage; the renderer's `empty` role draws
-    // the dashed box, the X, and the "—" placeholder glyph. (Phantom
-    // invalid-index holes below use the `error` role and keep the middot.)
-    cells.push({ label: String(i), value: empty ? '' : val, role });
-  }
-  if (phantom) for (const p of phantom) cells.push(p);
-
-  // Parked caller lines = the call site of every frame BELOW the running (top)
-  // one. Dimmed in the code panel; the whole caller chain at once.
-  const parked = frames.slice(0, -1).map(f => f.call).filter(Boolean);
-
+/* The contents array as a marked CELLS row. A cell is empty (never held
+ * anything), a member (a live queue element), stale (removed, still in memory —
+ * greyed), active (written this step, blue), or compared (read this step).
+ * Markers: front and rear; index -1 parks left of the array. */
+function contentsPanel(cellChar, members, front, rear, activeIdx, comparedIdx) {
   return {
-    tag, narrate, line, note, parked,
-    panels: {
-      cells: { render: 'box', cells },
-      size: {
-        render: 'row',
-        cells: [
-          { label: 'count', value: count, role: countActive ? 'active' : undefined },
-          { label: 'MAX',   value: MAX },
-        ],
-      },
-      stack: {
-        frames: frames.map((f, idx) => ({ fn: f.fn, vars: f.vars, active: idx === frames.length - 1 })),
-      },
-    },
+    render: 'box',
+    rowLabel: 'contents',
+    cells: cellChar.map((v, i) => {
+      if (i === activeIdx)   return { value: v == null ? '' : v, role: 'active' };
+      if (i === comparedIdx) return { value: v == null ? '' : v, role: 'compared' };
+      if (v == null)         return { value: '', role: 'empty' };
+      if (members.has(i))    return { value: v };
+      return { value: v, role: 'stale' };
+    }),
+    markers: [{ label: 'front', index: front }, { label: 'rear', index: rear }],
   };
 }
 
-/* ---- teaching notes (AUTHORING.md "Steps vs. notes"): each attaches to one
- * step and shows only there. None describe memory corruption, so none is a
- * danger segment. ---- */
-const SETUP =
-  'This is an array-based list. A fixed-capacity array (MAX = 5) holds the elements, and count ' +
-  'tracks how many are in use. The elements must stay contiguous — packed from index 0 with ' +
-  'no holes. main calls the four operations in turn; watch the call stack at right.';
+/* The compact state strip: front, rear, ch, as a horizontal row of three
+ * labelled boxes. `hot` gives the changing box the blue fill. No count box.
+ * front and rear always hold a real value the code tests against — including the
+ * -1 sentinel, which renders at normal weight, NOT as a placeholder. ch, before
+ * it is ever assigned, is indeterminate storage: the `empty` role gives it the
+ * same placeholder glyph as an unwritten array cell. */
+function statePanel(front, rear, ch, hot) {
+  return {
+    render: 'box',
+    cells: [
+      { label: 'front', value: front, role: hot === 'front' ? 'active' : undefined },
+      { label: 'rear',  value: rear,  role: hot === 'rear'  ? 'active' : undefined },
+      { label: 'ch',    value: ch,    role: ch == null ? 'empty' : (hot === 'ch' ? 'active' : undefined) },
+    ],
+  };
+}
 
-const ADD_NOTE =
-  'ADD is just INSERT at the end — nothing follows it, so no shifting is needed. Notice INSERT’s ' +
-  'frame binds index to count’s value (3), so ADD lands the new element at the first free slot.';
+/* ---- teaching notes ---- */
+const SETUP_NOTE =
+  'Elements join a queue at the rear and leave from the front, like a line at a bank. This queue is ' +
+  'an array called contents plus two indices. -1 is our way of saying an index points at nothing; ' +
+  'watch for where that turns out to matter.';
 
-const MAKE_ROOM_NOTE =
-  'Make room before writing, or you overwrite. And update the count.';
+const FIRST_NOTE =
+  'An empty queue needs a special case: there is no front to follow, so front has to be set directly. ' +
+  'A queue that tracked a count instead would not need this branch.';
 
-const INVALID_NOTE =
-  'A list must stay contiguous, so you may insert only at an index from 0 to count — here 0 to 5. ' +
-  'Index 7 is out of range: writing there would leave indices 5 and 6 empty, breaking contiguity.';
+const FULL_NOTE =
+  'front 0, rear 3. Remember that pair — it is what a full queue looks like.';
 
 const DELETE_NOTE =
-  'Delete leaves a hole — close it by shifting left so the list stays contiguous.';
+  'The front of the queue is no longer at array position 0. One solution would be to move all the ' +
+  'elements down one — but that is rejected as too expensive: every DELETE would touch every element. ' +
+  'Instead we keep the index of the front element and move only that index. The greying is ours, for ' +
+  'reading the picture. The program has no such marking — that character is still in the array.';
+
+const WRAP_NOTE =
+  'We use the array in a circular fashion: when we hit the end, we wrap around and use the beginning. ' +
+  'next_ix is the one place that wrap is written down — without it, every line that advances an index ' +
+  'would need its own test.';
+
+const ONE_ELEMENT_NOTE =
+  'front and rear on the same cell means exactly one element.';
 
 const PAYOFF_NOTE =
-  'Inserting or deleting in the middle of an array-based list costs shifting everything after it ' +
-  '— up to n moves. That shift cost is the price we pay for the array’s simplicity, and it ' +
-  'is exactly why linked lists — the next topic — exist.';
+  'Watch what that reset just prevented. Without it, front would be 1 and rear 0 — and click Back to ' +
+  'the step where e was refused: front 0, rear 3, one cell apart in exactly the same way, with the ' +
+  'queue completely full. front and rear alone cannot tell an empty queue from a full one. -1 is the ' +
+  'extra piece of information that breaks the tie, and it costs a branch in ADD and a branch in DELETE. ' +
+  'A queue that stores a count instead needs neither: empty is count = 0, full is count = MAX. Both ' +
+  'representations work — the count just hands you the answers for free. Use whichever seems easiest ' +
+  'for your own queue.';
 
-/* Confusion-first pattern (AUTHORING.md "Pedagogical pattern — name the
- * student's confusion first"): name the nagging question BEFORE showing the
- * intuitive-but-wrong version fail. */
-const CONFUSION_NOTE =
-  'Have you wondered why we make room by first moving the outermost item? It seems backwards. ' +
-  'Watch what happens if we start from the inside instead.';
+const SENTINEL_NOTE =
+  'The sentinel makes this test one comparison. What would you have had to check without it?';
 
-/* The payoff note that answers CONFUSION_NOTE using what the student just
- * watched smear across the tail. */
-const BAD_PAYOFF_NOTE =
-  'That is why we shift from the far end first — each value is copied before the next step ' +
-  'overwrites it. Shift from the outside in.';
+function* trace() {
+  const cellChar = [null, null, null, null];   // nothing stored yet
+  const members = new Set();                    // no live members
+  let front = -1, rear = -1, ch = null;
+  const stream = [];
 
-function makeTrace() {
-  return function* () {
-    // Mutable array model. null marks a free slot. `count` is the live count.
-    const arr = [10, 20, 30, null, null];
-    let count = 3;
+  const snap = ({ line, tag, narrate, note, active = null, compared = null, hot = null, frames, streamNew = false }) => ({
+    line, tag, narrate, note,
+    parked: frames.slice(0, -1).map(f => f.call).filter(Boolean),
+    panels: {
+      contents: contentsPanel(cellChar, members, front, rear, active, compared),
+      state:    statePanel(front, rear, ch, hot),
+      callstack: { frames: frames.map((f, i) => ({ fn: f.fn, vars: f.vars, active: i === frames.length - 1 })) },
+      out: { lines: stream.map((t, i) => ({ text: t, dir: 'out', isNew: streamNew && i === stream.length - 1 })) },
+    },
+  });
 
-    /* ---------- Step 0 (required): initial state, nothing executed ---------- */
-    yield snap({
-      line: null, tag: 'init',
-      narrate: 'The array-based list before any operation. Three elements occupy indices 0–2; indices 3 and 4 are free. Only main is on the call stack.',
-      note: SETUP,
-      arr, count, frames: [mainF()],
-    });
+  /* ADD of the FIRST element into an empty queue (6 steps). */
+  function* addFirst(value, mLine, n) {
+    yield snap({ line: mLine, tag: 'call', narrate: `main calls ADD with the value ${value}.`, frames: [mainF()] });
+    yield snap({ line: 8, tag: 'test', narrate: n.test, frames: [mainF(mLine), addF(value)] });
+    yield snap({ line: 11, tag: 'test', narrate: n.emptyTrue, frames: [mainF(mLine), addF(value)] });
+    front = 0;
+    yield snap({ line: 12, tag: 'assign', narrate: n.setFront, note: n.setFrontNote, hot: 'front', frames: [mainF(mLine), addF(value)] });
+    rear = nextIx(rear);   // -1 -> 0
+    yield snap({ line: 13, tag: 'assign', narrate: n.moveRear, hot: 'rear', frames: [mainF(mLine), addF(value)] });
+    cellChar[rear] = value; members.add(rear);
+    yield snap({ line: 14, tag: 'store', narrate: n.write, active: rear, frames: [mainF(mLine), addF(value)] });
+  }
 
-    /* ================= main calls ADD(40)  ==  INSERT(count, 40) ================= */
-    yield snap({
-      line: L.mainAdd, tag: 'call',
-      narrate: 'main calls ADD(40). Control enters ADD next.',
-      arr, count, frames: [mainF()],
-    });
-    yield snap({
-      line: L.addCall, tag: 'call',
-      narrate: 'Inside ADD: the parameter value is bound to 40. ADD’s whole job is to call INSERT(count, 40).',
-      note: ADD_NOTE,
-      arr, count, frames: [mainF(L.mainAdd), addF(40)],
-    });
-    // ADD calls INSERT: its frame appears with index bound to count's value (3).
-    yield snap({
-      line: L.insCheck, tag: 'check',
-      narrate: 'Inside INSERT: index is bound to count, which is 3, and value to 40 — both now visible in the frame. Range check: 0 ≤ 3 ≤ 3, valid.',
-      arr, count, frames: [mainF(L.mainAdd), addF(40, L.addCall), insF(3, 40)],
-    });
-    yield snap({
-      line: L.insFor, tag: 'loop',
-      narrate: 'The shift loop runs from count (3) down to index + 1 (4): an empty range, so it never executes and i is never set. Appending needs no room made.',
-      arr, count, frames: [mainF(L.mainAdd), addF(40, L.addCall), insF(3, 40)],
-    });
-    arr[3] = 40;
-    yield snap({
-      line: L.insWrite, tag: 'write',
-      narrate: 'A[3] = 40. The value is written into the first free slot, index 3.',
-      arr, count, active: 3, frames: [mainF(L.mainAdd), addF(40, L.addCall), insF(3, 40)],
-    });
-    count = 4;
-    yield snap({
-      line: L.insCount, tag: 'count',
-      narrate: 'count = 4. Update the count — the list now holds four elements, indices 0–3.',
-      arr, count, countActive: true, frames: [mainF(L.mainAdd), addF(40, L.addCall), insF(3, 40)],
-    });
+  /* ADD of a normal element (5 steps): the front special-case is skipped. */
+  function* addNormal(value, mLine, n) {
+    const r0 = rear, nx = nextIx(rear);
+    yield snap({ line: mLine, tag: 'call', narrate: `main calls ADD with the value ${value}.`, frames: [mainF()] });
+    yield snap({ line: 8, tag: 'test', narrate: n.test ?? `rear is ${r0}, so next_ix(${r0}) is ${nx}, and front is ${front}. They differ, so the queue is not full.`, frames: [mainF(mLine), addF(value)] });
+    yield snap({ line: 11, tag: 'test', narrate: n.notEmpty ?? `front is ${front}, not -1, so the queue already has a front — the special case is skipped.`, frames: [mainF(mLine), addF(value)] });
+    rear = nextIx(rear);
+    yield snap({ line: 13, tag: 'assign', narrate: n.moveRear ?? `rear = next_ix(${r0}) = ${rear}. The rear index moves to cell ${rear}.`, note: n.moveRearNote, hot: 'rear', frames: [mainF(mLine), addF(value)] });
+    cellChar[rear] = value; members.add(rear);
+    yield snap({ line: 14, tag: 'store', narrate: n.write ?? `${value} is stored in cell ${rear}.`, active: rear, frames: [mainF(mLine), addF(value)] });
+  }
 
-    /* ================= main calls INSERT(1, 25) (shift the tail RIGHT) ================= */
-    // INSERT returns to ADD, ADD returns to main: both frames pop, shown by the
-    // stack collapsing back to [main] on this next call step.
-    yield snap({
-      line: L.mainIns25, tag: 'call',
-      narrate: 'INSERT returns to ADD, and ADD — whose only job was that call — returns to main. Now main calls INSERT(1, 25).',
-      arr, count, frames: [mainF()],
-    });
-    yield snap({
-      line: L.insCheck, tag: 'check',
-      narrate: 'Inside INSERT: index = 1, value = 25. Range check: is index (1) outside 0..count (0..4)? No, so it is valid.',
-      arr, count, frames: [mainF(L.mainIns25), insF(1, 25)],
-    });
-    yield snap({
-      line: L.insFor, tag: 'loop',
-      narrate: 'Make room at index 1: the loop runs i from count (4) down to index + 1 (2), shifting the tail right.',
-      note: MAKE_ROOM_NOTE,
-      arr, count, frames: [mainF(L.mainIns25), insF(1, 25)],
-    });
-    arr[4] = arr[3];   // 40
-    yield snap({
-      line: L.insShift, tag: 'shift',
-      narrate: 'i = 4. A[4] = A[3] = 40 — copy the last element into the free slot to its right.',
-      arr, count, active: 4, frames: [mainF(L.mainIns25), insF(1, 25, iVar(4, 'active'))],
-    });
-    arr[3] = arr[2];   // 30
-    yield snap({
-      line: L.insShift, tag: 'shift',
-      narrate: 'i = 3. A[3] = A[2] = 30.',
-      arr, count, active: 3, frames: [mainF(L.mainIns25), insF(1, 25, iVar(3, 'active'))],
-    });
-    arr[2] = arr[1];   // 20
-    yield snap({
-      line: L.insShift, tag: 'shift',
-      narrate: 'i = 2. A[2] = A[1] = 20. Index 1 is now safe to overwrite — its old value is already copied to index 2.',
-      arr, count, active: 2, frames: [mainF(L.mainIns25), insF(1, 25, iVar(2, 'active'))],
-    });
-    arr[1] = 25;
-    yield snap({
-      line: L.insWrite, tag: 'write',
-      narrate: 'The loop is finished. A[1] = 25 — write the new value into the room just made.',
-      arr, count, active: 1, frames: [mainF(L.mainIns25), insF(1, 25, iVar(1, 'done'))],
-    });
-    count = 5;
-    yield snap({
-      line: L.insCount, tag: 'count',
-      narrate: 'count = 5. Update the count — the list is now full: count = MAX = 5.',
-      arr, count, countActive: true, frames: [mainF(L.mainIns25), insF(1, 25, iVar(1, 'done'))],
-    });
+  /* ADD refused, correctly (3 steps). */
+  function* addRefused(value, mLine, n) {
+    yield snap({ line: mLine, tag: 'call', narrate: `main calls ADD with the value ${value}.`, frames: [mainF()] });
+    yield snap({ line: 8, tag: 'test', narrate: n.test, frames: [mainF(mLine), addF(value)] });
+    stream.push('queue is full');
+    yield snap({ line: 9, tag: 'refuse', narrate: n.refuse ?? `ADD refuses. ${value} is not added.`, note: n.note, streamNew: true, frames: [mainF(mLine), addF(value)] });
+  }
 
-    /* ================= main calls INSERT(7, 99) (INVALID; the key step) ================= */
-    const holes = [
-      { label: '5', value: EMPTY, role: 'error' },
-      { label: '6', value: EMPTY, role: 'error' },
-      { label: '7', value: 99,    role: 'error' },
-    ];
-    yield snap({
-      line: L.mainIns99, tag: 'call',
-      narrate: 'INSERT returns to main. Now main calls INSERT(7, 99) — an attempt to insert 99 at index 7.',
-      arr, count, frames: [mainF()],
-    });
-    yield snap({
-      line: L.insCheck, tag: 'check',
-      narrate: 'Inside INSERT: index = 7, value = 99 — the arguments are now visible in the frame. Range check: is index (7) > count (5)? Yes. Index 7 is outside the valid range 0..5.',
-      note: INVALID_NOTE,
-      arr, count, phantom: holes, frames: [mainF(L.mainIns99), insF(7, 99)],
-    });
-    yield snap({
-      line: L.insErr, tag: 'error',
-      narrate: 'The index is invalid, so INSERT reports an error and returns without writing. The array is unchanged.',
-      arr, count, phantom: holes, frames: [mainF(L.mainIns99), insF(7, 99)],
-    });
+  /* DELETE of a normal (not last) element (5 steps). */
+  function* delNormal(mLine, n) {
+    yield snap({ line: mLine, tag: 'call', narrate: 'main calls DELETE.', frames: [mainF()] });
+    yield snap({ line: 17, tag: 'test', narrate: n.emptyTest ?? `front is ${front}, not -1, so the queue is not empty.`, frames: [mainF(mLine), delF()] });
+    ch = cellChar[front]; const f0 = front;
+    yield snap({ line: 20, tag: 'assign', narrate: n.read ?? `ch takes contents[front] = ${ch}.`, compared: f0, hot: 'ch', frames: [mainF(mLine), delF()] });
+    yield snap({ line: 21, tag: 'test', narrate: n.lastTest ?? `front (${front}) and rear (${rear}) differ, so more than one element remains.`, frames: [mainF(mLine), delF()] });
+    members.delete(f0); front = nextIx(f0);
+    yield snap({ line: 25, tag: 'assign', narrate: n.advance ?? `front advances to cell ${front}. ${ch} is no longer part of the queue, though it remains in cell ${f0}.`, note: n.note, hot: 'front', frames: [mainF(mLine), delF()] });
+  }
 
-    /* ================= main calls DELETE(1) (shift the tail LEFT) ================= */
-    yield snap({
-      line: L.mainDel, tag: 'call',
-      narrate: 'INSERT returns to main without changing the array. Now main calls DELETE(1) — remove the element at index 1.',
-      arr, count, frames: [mainF()],
-    });
-    yield snap({
-      line: L.delCheck, tag: 'check',
-      narrate: 'Inside DELETE: index = 1. Range check: is index (1) within 0..count − 1 (0..4)? Yes, so it is valid.',
-      arr, count, frames: [mainF(L.mainDel), delF(1)],
-    });
-    yield snap({
-      line: L.delFor, tag: 'loop',
-      narrate: 'Removing index 1 would leave a hole there. To keep the list contiguous, the loop runs i from index (1) to count − 2 (3), shifting each later element one slot left.',
-      note: DELETE_NOTE,
-      arr, count, frames: [mainF(L.mainDel), delF(1)],
-    });
-    arr[1] = arr[2];   // 20 overwrites 25 -- the delete happens here
-    yield snap({
-      line: L.delShift, tag: 'shift',
-      narrate: 'i = 1. A[1] = A[2] = 20. The element 25 at index 1 is overwritten — the delete happens here.',
-      arr, count, active: 1, frames: [mainF(L.mainDel), delF(1, iVar(1, 'active'))],
-    });
-    arr[2] = arr[3];   // 30
-    yield snap({
-      line: L.delShift, tag: 'shift',
-      narrate: 'i = 2. A[2] = A[3] = 30.',
-      arr, count, active: 2, frames: [mainF(L.mainDel), delF(1, iVar(2, 'active'))],
-    });
-    arr[3] = arr[4];   // 40
-    yield snap({
-      line: L.delShift, tag: 'shift',
-      narrate: 'i = 3. A[3] = A[4] = 40. The elements are packed contiguously again.',
-      arr, count, active: 3, frames: [mainF(L.mainDel), delF(1, iVar(3, 'active'))],
-    });
-    count = 4;
-    arr[4] = null;     // the trailing duplicate falls outside the list
-    yield snap({
-      line: L.delCount, tag: 'count',
-      narrate: 'count = 4. Update the count — the duplicate left at index 4 now falls outside the list, which is contiguous again at indices 0–3.',
-      note: PAYOFF_NOTE,
-      arr, count, countActive: true, frames: [mainF(L.mainDel), delF(1, iVar(4, 'done'))],
-    });
+  /* DELETE of the LAST element (6 steps): both indices reset to -1. */
+  function* delLast(mLine, n) {
+    yield snap({ line: mLine, tag: 'call', narrate: 'main calls DELETE.', frames: [mainF()] });
+    yield snap({ line: 17, tag: 'test', narrate: n.emptyTest ?? `front is ${front}, not -1, so the queue is not empty.`, frames: [mainF(mLine), delF()] });
+    ch = cellChar[front]; const f0 = front;
+    yield snap({ line: 20, tag: 'assign', narrate: n.read ?? `ch takes contents[front] = ${ch}.`, compared: f0, hot: 'ch', frames: [mainF(mLine), delF()] });
+    yield snap({ line: 21, tag: 'test', narrate: n.lastTest, frames: [mainF(mLine), delF()] });
+    members.delete(f0); front = -1;
+    yield snap({ line: 22, tag: 'assign', narrate: n.resetFront ?? 'front is reset to -1.', hot: 'front', frames: [mainF(mLine), delF()] });
+    rear = -1;
+    yield snap({ line: 23, tag: 'assign', narrate: n.resetRear ?? 'rear is reset to -1. The queue is empty again.', note: n.note, hot: 'rear', frames: [mainF(mLine), delF()] });
+  }
 
-    /* ================= main calls badINSERT(1, 25) (WRONG shift direction) =================
-     * The array is back to [10, 20, 30, 40], count 4 — the same shape the correct
-     * INSERT(1, 25) faced. badINSERT is that insert with ONE thing changed: the
-     * loop shifts front-first (A[i+1] = A[i], i from index up), so each iteration
-     * reads a cell the previous one already overwrote. One value smears down the
-     * tail. This is overwrite corruption, so every smear step carries the red ⚠
-     * (AUTHORING.md "Memory-danger marker"). The confusion-first note runs first;
-     * the payoff note answers it after the smear. */
-    yield snap({
-      line: L.mainBad, tag: 'call',
-      narrate: 'main calls badINSERT(1, 25). It inserts the same way — range check, shift, write — but shifts in the opposite direction. Control enters badINSERT next.',
-      note: CONFUSION_NOTE,
-      arr, count, frames: [mainF()],
-    });
-    yield snap({
-      line: L.badCheck, tag: 'check',
-      narrate: 'Inside badINSERT: index = 1, value = 25. Range check: 0 ≤ 1 ≤ 4, valid — exactly as the correct INSERT checked.',
-      arr, count, frames: [mainF(L.mainBad), badF(1, 25)],
-    });
-    yield snap({
-      line: L.badFor, tag: 'loop',
-      narrate: 'This loop shifts front-first: i runs from index (1) up to count − 1 (3), each iteration copying a cell into the one to its right — A[i + 1] = A[i]. Watch the tail.',
-      arr, count, frames: [mainF(L.mainBad), badF(1, 25)],
-    });
-    arr[2] = arr[1];   // 20 overwrites 30 -- the first cell clobbered
-    yield snap({
-      line: L.badShift, tag: 'shift',
-      narrate: [
-        'i = 1. A[2] = A[1] copies 20 up into index 2. ',
-        { danger: true, text: 'Index 2 held 30, but we overwrite it before it was ever copied — the 30 is destroyed.' },
-      ],
-      arr, count, active: 2, frames: [mainF(L.mainBad), badF(1, 25, iVar(1, 'active'))],
-    });
-    arr[3] = arr[2];   // 20 again -- reads the cell just clobbered
-    yield snap({
-      line: L.badShift, tag: 'shift',
-      narrate: [
-        'i = 2. A[3] = A[2], but A[2] was just overwritten with 20, so 20 copies again — index 3 becomes 20 and the 40 there is destroyed. ',
-        { danger: true, text: 'Each step reads a cell we already clobbered, so one value smears down the tail.' },
-      ],
-      arr, count, active: 3, frames: [mainF(L.mainBad), badF(1, 25, iVar(2, 'active'))],
-    });
-    arr[4] = arr[3];   // 20 propagates once more
-    yield snap({
-      line: L.badShift, tag: 'shift',
-      narrate: [
-        'i = 3. A[4] = A[3] = 20 — the same 20 propagates once more, into index 4. ',
-        { danger: true, text: 'The whole tail is now the single value 20; every element after index 1 has been clobbered.' },
-      ],
-      arr, count, active: 4, frames: [mainF(L.mainBad), badF(1, 25, iVar(3, 'active'))],
-    });
-    arr[1] = 25;
-    yield snap({
-      line: L.badWrite, tag: 'write',
-      narrate: [
-        'The loop is finished. A[1] = 25 writes the new value. ',
-        { danger: true, text: 'But 30 and 40 are already gone — the list is [10, 25, 20, 20, 20], not [10, 25, 20, 30, 40]. The data is corrupted.' },
-      ],
-      arr, count, active: 1, frames: [mainF(L.mainBad), badF(1, 25, iVar(3, 'done'))],
-    });
-    count = 5;
-    yield snap({
-      line: L.badCount, tag: 'count',
-      narrate: 'count = 5. The count claims five elements, but three of them are the smeared 20 — the shift direction, not the count, is what corrupted the data.',
-      note: BAD_PAYOFF_NOTE,
-      arr, count, countActive: true, frames: [mainF(L.mainBad), badF(1, 25, iVar(3, 'done'))],
-    });
-  };
+  /* DELETE refused, correctly (3 steps). */
+  function* delRefused(mLine, n) {
+    yield snap({ line: mLine, tag: 'call', narrate: 'main calls DELETE.', frames: [mainF()] });
+    yield snap({ line: 17, tag: 'test', narrate: n.emptyTest ?? 'front is -1, so the queue is empty.', frames: [mainF(mLine), delF()] });
+    stream.push('queue is empty');
+    yield snap({ line: 18, tag: 'refuse', narrate: n.refuse ?? 'DELETE refuses. The queue is empty.', note: n.note, streamNew: true, frames: [mainF(mLine), delF()] });
+  }
+
+  /* ---------- Step 0 (required): the empty queue, nothing executed ---------- */
+  yield snap({
+    line: null, tag: 'init',
+    narrate: 'An empty queue. Neither index points at a cell yet — both hold -1.',
+    note: SETUP_NOTE,
+    frames: [mainF()],
+  });
+
+  // OP 1 — ADD 'a' (first element; front -1->0, rear -1->0)
+  yield* addFirst('a', 28, {
+    test:      'rear is -1, so next_ix(rear) is 0, and front is -1. They differ, so the queue is not full.',
+    emptyTrue: 'front is -1 — the queue is empty, so this is the first element and front must start at cell 0.',
+    setFront:  'front is set to cell 0.',
+    setFrontNote: FIRST_NOTE,
+    moveRear:  'next_ix(-1) is 0, so rear moves to cell 0 as well.',
+    write:     'a is stored in cell 0. The queue now holds one element.',
+  });
+
+  // OP 2 — ADD 'b' (normal; front is no longer -1, so the special case is skipped)
+  yield* addNormal('b', 29, {
+    notEmpty: 'front is 0, not -1, so the queue already has a front — the special case is skipped.',
+  });
+
+  // OP 3 — ADD 'c' (normal; kept brief)
+  yield* addNormal('c', 30, {});
+
+  // OP 4 — ADD 'd' (normal; queue becomes full)
+  yield* addNormal('d', 31, {
+    write: 'd is stored in cell 3. All four cells are in use.',
+  });
+
+  // OP 5 — ADD 'e' (refused, correctly)
+  yield* addRefused('e', 32, {
+    test:  'rear is 3, so next_ix(3) wraps to 0 — and front is 0. The cell after the rear is the front, so there is nowhere to put anything.',
+    note:  FULL_NOTE,
+  });
+
+  // OP 6 — DELETE (removes 'a'; front 0->1)
+  yield* delNormal(33, {
+    advance: 'front advances to cell 1. a is no longer part of the queue, though it is still sitting in cell 0.',
+    note:    DELETE_NOTE,
+  });
+
+  // OP 7 — ADD 'e' (wraparound; rear 3->0, over the stale a)
+  yield* addNormal('e', 34, {
+    moveRear:     'rear is at the last cell, so next_ix(3) wraps to 0.',
+    moveRearNote: WRAP_NOTE,
+    write:        'e is stored in cell 0, over the a that was removed earlier.',
+  });
+
+  // OP 8 — DELETE (removes 'b'; front 1->2)
+  yield* delNormal(35, {
+    advance: 'front advances to cell 2. b is no longer part of the queue, though it remains in cell 1.',
+  });
+
+  // OP 9 — DELETE (removes 'c'; front 2->3)
+  yield* delNormal(36, {
+    advance: 'front advances to cell 3. c is no longer part of the queue, though it remains in cell 2.',
+  });
+
+  // OP 10 — DELETE (removes 'd'; front wraps 3->0, meeting rear; one element left)
+  yield* delNormal(37, {
+    advance: 'front wraps to cell 0. One element is left, and front and rear are both 0.',
+    note:    ONE_ELEMENT_NOTE,
+  });
+
+  // OP 11 — DELETE (removes 'e'; last element; both indices reset to -1) — THE PAYOFF
+  yield* delLast(38, {
+    lastTest: 'front and rear are the same cell, so this is the last element. Both indices go back to -1.',
+    resetRear: 'rear is reset to -1. The queue is empty again.',
+    note:     PAYOFF_NOTE,
+  });
+
+  // OP 12 — DELETE (refused, correctly)
+  yield* delRefused(39, {
+    emptyTest: 'front is -1, so the queue is empty.',
+    note:      SENTINEL_NOTE,
+  });
 }
 
 const SPEC = {
-  title: 'Array-based list: keeping it contiguous through insert and delete',
-  subtitle: 'Adding, inserting, and deleting in a fixed-capacity array.',
+  title: 'A queue in an array',
+  subtitle: 'Adding at the rear, removing from the front.',
   profile: 'standard',
   columns: 2,
   languages: ['pseudo', 'java', 'cpp'],
 
+  // A fixed 160px call-stack ("Function calls") row (fits its two frames, and,
+  // being fixed, keeps the panels below it from shifting as frames push/pop). The
+  // trailing 1fr absorbs slack below the output. Design target 1920x1080, where
+  // every panel is fully visible; a short embedded viewport degrades to
+  // cramped-but-complete with the open-in-own-window escape hatch.
+  stageRows: 'auto auto 160px 1fr',
+
   panels: [
-    { type: 'code',      id: 'code',  title: 'list operations',
+    { type: 'code',      id: 'code',      title: 'a queue, front + rear', tall: true,
       listings: LISTINGS, labels: { pseudo: 'pseudocode', java: 'Java', cpp: 'C++' } },
-    { type: 'cells',     id: 'cells', title: 'The array' },
-    { type: 'callstack', id: 'stack', title: 'Function calls' },
-    { type: 'cells',     id: 'size',  title: 'count / capacity', compact: true },
+    { type: 'cells',     id: 'contents',  title: 'the array' },
+    { type: 'cells',     id: 'state',     title: 'what we store', compact: true },
+    { type: 'callstack', id: 'callstack', title: 'Function calls' },
+    { type: 'stream',    id: 'out',       title: 'output', compact: true },
   ],
 
-  initialTrace: 'correct',
+  initialTrace: 'run',
   traces: {
-    correct: makeTrace(),
+    run: trace,
   },
 };
 
