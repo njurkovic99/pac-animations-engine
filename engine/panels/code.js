@@ -49,17 +49,29 @@ export function render(body, data, ctx, { lang }) {
            `<span class="pac-code-num">${n}</span><span>${esc(src)}</span></div>`;
   }).join('');
 
-  // Stable layout: the CODE panel shows ~12–15 lines and scrolls internally, so
-  // the active line must be scrolled into view as it moves (a jump into a
-  // function body far down the listing would otherwise sit off-screen). Scroll
-  // only THIS panel body (the overflow:auto container), never the page — centre
-  // the active line in the visible area. See AUTHORING.md "Stable layout".
+  // Follow the highlight, with context. The CODE panel is a fixed 15-line
+  // viewport (see styles.css) that scrolls internally, and this listing's main()
+  // is far from ADD/DELETE, so every call and return jumps the highlight across a
+  // wide gap. Rules:
+  //   - the highlighted line is ALWAYS visible (never let it scroll off);
+  //   - keep context around it -- when we do scroll, centre it so the student
+  //     sees what comes before and after, not pinned to an edge;
+  //   - do NOT scroll when it is already comfortably in view -- moving on every
+  //     step is as disorienting as never moving. Only scroll when the line would
+  //     otherwise sit within MARGIN lines of the top or bottom edge.
+  // Only body.scrollTop changes -- the panel's height and the rest of the page
+  // never move.
   const activeEl = body.querySelector('.pac-code-line.is-active');
   if (activeEl) {
     const bodyRect = body.getBoundingClientRect();
     const lineRect = activeEl.getBoundingClientRect();
-    const delta = (lineRect.top - bodyRect.top) - (body.clientHeight - lineRect.height) / 2;
-    body.scrollTop += delta;
+    const lineH  = lineRect.height || 1;
+    const offset = lineRect.top - bodyRect.top;      // active line's position in the viewport
+    const viewH  = body.clientHeight;
+    const MARGIN = 3 * lineH;                          // keep >= 3 lines of context each side
+    if (offset < MARGIN || offset > viewH - MARGIN - lineH) {
+      body.scrollTop += offset - (viewH - lineH) / 2; // bring it to roughly the middle
+    }
   }
 }
 

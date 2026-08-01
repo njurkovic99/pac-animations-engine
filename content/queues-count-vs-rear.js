@@ -416,10 +416,12 @@ export default {
 
   // A fixed 160px call-stack ("Function calls") row (fits its two frames, and,
   // being fixed, keeps the panels below it from shifting as frames push/pop). The
-  // trailing 1fr absorbs slack below the output. Design target 1920x1080, where
-  // every panel is fully visible; a short embedded viewport degrades to
-  // cramped-but-complete with the open-in-own-window escape hatch.
-  stageRows: 'auto auto 160px 1fr',
+  // other rows size to their content and the stage hugs the taller (right)
+  // column, so the fixed 15-line code panel sits at the top of the left column
+  // with no stray bottom slack. Design target 1920x1080, where every panel is
+  // fully visible; a short embedded viewport degrades to cramped-but-complete
+  // with the open-in-own-window escape hatch.
+  stageRows: 'auto auto 160px auto',
 
   panels: [
     { type: 'code',      id: 'code',      title: 'a queue, front + rear', tall: true,
