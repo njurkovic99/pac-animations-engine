@@ -401,6 +401,16 @@ body {
   font-family: var(--mono); font-size: 10.5px; color: var(--accent); font-weight: 600;
 }
 
+/* Parked markers (index < 0): to the left of cell [0], aligned with the marker
+ * track, dimmed so they read as "pointing at nothing yet" rather than missing. */
+.pac-cell-parked {
+  align-self: stretch;
+  display: flex; align-items: flex-end; gap: 6px;
+  padding-right: 8px; margin-right: 2px;
+  border-right: 1px dashed var(--border);
+  opacity: .5;
+}
+
 /* Compact strip (e.g. "A stores"): a HORIZONTAL row of uniform-width labelled
  * boxes, all visible at once with no scrollbar. Two strips compared side by side
  * stay identical in width and styling; only the differing box's value changes. */
@@ -599,6 +609,10 @@ const cellsPanel = (() => { /* CELLS panel — 1D/2D grid. Absorbs arrays, sorti
  * it. Two markers on the same cell sit side by side, neither overlapping the
  * other nor the neighbouring cells' labels.
  *
+ * A marker whose `index` is negative (e.g. -1, "points at nothing yet") is
+ * PARKED to the left of cell [0], dimmed, still showing its label — so it reads
+ * as "not pointing at anything," not as missing. This is a general rule.
+ *
  * The bracketed index labels are a project-wide rule: `[0]` marks a cell's
  * position as an INDEX, not a value (a naked `1` under a cell holding `b` is the
  * index-vs-value confusion). An optional `rowLabel` names the row once, at the
@@ -624,6 +638,16 @@ function render(body, data, ctx) {
     name.className = 'pac-cells-name';
     name.textContent = data.rowLabel;
     wrap.appendChild(name);
+  }
+
+  // Parked markers (index < 0): they point at nothing yet, so they sit to the
+  // left of cell [0], dimmed, still labelled.
+  const parked = markers ? markers.filter(m => m.index == null || m.index < 0) : [];
+  if (parked.length) {
+    const zone = document.createElement('div');
+    zone.className = 'pac-cell-parked';
+    for (const m of parked) zone.appendChild(marker(m));
+    wrap.appendChild(zone);
   }
 
   cells.forEach((c, idx) => {
@@ -656,16 +680,20 @@ function render(body, data, ctx) {
     const track = document.createElement('div');
     track.className = 'pac-cell-markers';
     for (const m of markers) {
-      if (m.index !== idx) continue;
-      const mk = document.createElement('span');
-      mk.className = 'pac-marker';
-      mk.innerHTML = `<span class="pac-marker-caret">&#9650;</span>` +
-                     `<span class="pac-marker-label">${esc(m.label)}</span>`;
-      track.appendChild(mk);
+      if (m.index === idx) track.appendChild(marker(m));
     }
     col.appendChild(track);
     wrap.appendChild(col);
   });
+}
+
+/* One index-pointer marker: a caret with its variable name labelled beneath. */
+function marker(m) {
+  const mk = document.createElement('span');
+  mk.className = 'pac-marker';
+  mk.innerHTML = `<span class="pac-marker-caret">&#9650;</span>` +
+                 `<span class="pac-marker-label">${esc(m.label)}</span>`;
+  return mk;
 }
 
 const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
@@ -1139,6 +1167,11 @@ const RENDERERS = {
 const MAX_STEPS = 5000;
 const AUTOPLAY_MS = 900;
 
+// Default student-facing panel titles per renderer (used when a panel declares
+// no `title`). The CALLSTACK renderer displays as "Function calls" -- the
+// internal name stays CALLSTACK everywhere in code and docs.
+const DEFAULT_TITLES = { callstack: 'Function calls' };
+
 class Engine {
   constructor(root, spec) {
     this.root = root;
@@ -1302,7 +1335,12 @@ class Engine {
       // A tall panel spans every row of the first column (grid-row: 1 / -1) --
       // e.g. a code listing beside a stack of smaller panels in the other column.
       if (p.tall) el.dataset.tall = '';
-      el.innerHTML = `<div class="pac-panel-head"><span>${p.title ?? p.type}</span>
+      // Default DISPLAY title per renderer when a panel gives none. The internal
+      // renderer name stays CALLSTACK; only the student-facing label reads
+      // "Function calls" (so it is not confused with an actual stack data
+      // structure in the stacks animations).
+      const title = p.title ?? DEFAULT_TITLES[p.type] ?? p.type;
+      el.innerHTML = `<div class="pac-panel-head"><span>${title}</span>
                         <span class="pac-panel-tools"></span></div>
                       <div class="pac-panel-body"></div>`;
       this.stage.appendChild(el);

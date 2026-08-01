@@ -12,6 +12,10 @@
  * it. Two markers on the same cell sit side by side, neither overlapping the
  * other nor the neighbouring cells' labels.
  *
+ * A marker whose `index` is negative (e.g. -1, "points at nothing yet") is
+ * PARKED to the left of cell [0], dimmed, still showing its label — so it reads
+ * as "not pointing at anything," not as missing. This is a general rule.
+ *
  * The bracketed index labels are a project-wide rule: `[0]` marks a cell's
  * position as an INDEX, not a value (a naked `1` under a cell holding `b` is the
  * index-vs-value confusion). An optional `rowLabel` names the row once, at the
@@ -37,6 +41,16 @@ export function render(body, data, ctx) {
     name.className = 'pac-cells-name';
     name.textContent = data.rowLabel;
     wrap.appendChild(name);
+  }
+
+  // Parked markers (index < 0): they point at nothing yet, so they sit to the
+  // left of cell [0], dimmed, still labelled.
+  const parked = markers ? markers.filter(m => m.index == null || m.index < 0) : [];
+  if (parked.length) {
+    const zone = document.createElement('div');
+    zone.className = 'pac-cell-parked';
+    for (const m of parked) zone.appendChild(marker(m));
+    wrap.appendChild(zone);
   }
 
   cells.forEach((c, idx) => {
@@ -69,16 +83,20 @@ export function render(body, data, ctx) {
     const track = document.createElement('div');
     track.className = 'pac-cell-markers';
     for (const m of markers) {
-      if (m.index !== idx) continue;
-      const mk = document.createElement('span');
-      mk.className = 'pac-marker';
-      mk.innerHTML = `<span class="pac-marker-caret">&#9650;</span>` +
-                     `<span class="pac-marker-label">${esc(m.label)}</span>`;
-      track.appendChild(mk);
+      if (m.index === idx) track.appendChild(marker(m));
     }
     col.appendChild(track);
     wrap.appendChild(col);
   });
+}
+
+/* One index-pointer marker: a caret with its variable name labelled beneath. */
+function marker(m) {
+  const mk = document.createElement('span');
+  mk.className = 'pac-marker';
+  mk.innerHTML = `<span class="pac-marker-caret">&#9650;</span>` +
+                 `<span class="pac-marker-label">${esc(m.label)}</span>`;
+  return mk;
 }
 
 const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));

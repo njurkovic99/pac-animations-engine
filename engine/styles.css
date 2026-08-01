@@ -397,6 +397,16 @@ body {
   font-family: var(--mono); font-size: 10.5px; color: var(--accent); font-weight: 600;
 }
 
+/* Parked markers (index < 0): to the left of cell [0], aligned with the marker
+ * track, dimmed so they read as "pointing at nothing yet" rather than missing. */
+.pac-cell-parked {
+  align-self: stretch;
+  display: flex; align-items: flex-end; gap: 6px;
+  padding-right: 8px; margin-right: 2px;
+  border-right: 1px dashed var(--border);
+  opacity: .5;
+}
+
 /* Compact strip (e.g. "A stores"): a HORIZONTAL row of uniform-width labelled
  * boxes, all visible at once with no scrollbar. Two strips compared side by side
  * stay identical in width and styling; only the differing box's value changes. */

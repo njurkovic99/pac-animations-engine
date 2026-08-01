@@ -28,6 +28,11 @@ const RENDERERS = {
 const MAX_STEPS = 5000;
 const AUTOPLAY_MS = 900;
 
+// Default student-facing panel titles per renderer (used when a panel declares
+// no `title`). The CALLSTACK renderer displays as "Function calls" -- the
+// internal name stays CALLSTACK everywhere in code and docs.
+const DEFAULT_TITLES = { callstack: 'Function calls' };
+
 export class Engine {
   constructor(root, spec) {
     this.root = root;
@@ -191,7 +196,12 @@ export class Engine {
       // A tall panel spans every row of the first column (grid-row: 1 / -1) --
       // e.g. a code listing beside a stack of smaller panels in the other column.
       if (p.tall) el.dataset.tall = '';
-      el.innerHTML = `<div class="pac-panel-head"><span>${p.title ?? p.type}</span>
+      // Default DISPLAY title per renderer when a panel gives none. The internal
+      // renderer name stays CALLSTACK; only the student-facing label reads
+      // "Function calls" (so it is not confused with an actual stack data
+      // structure in the stacks animations).
+      const title = p.title ?? DEFAULT_TITLES[p.type] ?? p.type;
+      el.innerHTML = `<div class="pac-panel-head"><span>${title}</span>
                         <span class="pac-panel-tools"></span></div>
                       <div class="pac-panel-body"></div>`;
       this.stage.appendChild(el);

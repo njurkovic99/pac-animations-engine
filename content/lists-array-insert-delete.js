@@ -544,7 +544,7 @@ export default {
     { type: 'code',      id: 'code',  title: 'list operations',
       listings: LISTINGS, labels: { pseudo: 'pseudocode', java: 'Java', cpp: 'C++' } },
     { type: 'cells',     id: 'cells', title: 'The array' },
-    { type: 'callstack', id: 'stack', title: 'Call stack' },
+    { type: 'callstack', id: 'stack', title: 'Function calls' },
     { type: 'cells',     id: 'size',  title: 'count / capacity', compact: true },
   ],
 
