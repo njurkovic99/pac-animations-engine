@@ -182,6 +182,7 @@ const LISTING_B = {
 function queue(cellChar, members, markers, activeIdx) {
   return {
     render: 'box',
+    rowLabel: 'contents',
     cells: cellChar.map((v, i) => {
       // A non-breaking space keeps an empty cell the same height as a filled one
       // (so the index label and marker track stay aligned across the row) while
@@ -195,13 +196,14 @@ function queue(cellChar, members, markers, activeIdx) {
   };
 }
 
-/* The compact strip: what each rep stores alongside the array. A and B differ in
- * exactly one box (count vs rear); everything else — order, styling, the front
- * and ch boxes — is identical. `hot` gives the box changing this step the blue
- * activity fill. */
+/* The compact strip: what each rep stores alongside the array. A HORIZONTAL row
+ * of three labelled boxes — [front][count/rear][ch] — all visible at once, no
+ * scrolling. A and B differ in exactly one box (count vs rear); everything else —
+ * order, widths, styling, the front and ch boxes — is identical. `hot` gives the
+ * box changing this step the blue activity fill. */
 function strip(a, b, c, hot) {
   return {
-    render: 'row',
+    render: 'box',
     cells: [
       { label: a.label, value: a.value, role: hot === a.label ? 'active' : undefined },
       { label: b.label, value: b.value, role: hot === b.label ? 'active' : undefined },
@@ -491,9 +493,11 @@ export default {
   columns: 2,
   languages: ['pseudo', 'java', 'cpp'],
 
-  // Four rows: a shared preamble (auto height), then the two code panels, the
-  // two arrays, and the two compact strips. See engine "spec.stageRows".
-  stageRows: 'auto 1.6fr 1.2fr 0.9fr',
+  // Four rows: a shared preamble and the two arrays and strips all size to their
+  // content (never scroll — a 4-cell array and a 3-box strip don't need the
+  // bounded-stage treatment); only the code panels (`1fr`) absorb the remaining
+  // height and scroll internally when the viewport is short. See "spec.stageRows".
+  stageRows: 'auto 1fr auto auto',
 
   panels: [
     { type: 'code',  id: 'pre',    title: 'next_ix — the wraparound helper · MAX = 4',

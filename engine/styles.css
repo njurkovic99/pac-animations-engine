@@ -366,17 +366,35 @@ body {
  * by side (flex row) rather than overlapping. All markers are solid/stored --
  * there is no "derived" marker style. */
 .pac-cells[data-marked] { align-items: start; gap: 8px; }
-.pac-cell-col { display: flex; flex-direction: column; align-items: center; gap: 3px; }
-.pac-cell-col .pac-cell { min-width: 42px; }
-.pac-cell-index { font-size: 10px; color: var(--text-dim); font-family: var(--mono); }
-.pac-cell-markers {
-  display: flex; justify-content: center; gap: 4px;
-  min-height: 30px; margin-top: 1px;
+/* Columns are wide enough that TWO labelled markers (front + rear on the same
+ * cell) sit side by side without overlapping each other or the neighbouring
+ * cells' labels. */
+.pac-cell-col { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 72px; }
+.pac-cell-col .pac-cell { min-width: 44px; }
+/* The row's name (e.g. "contents"), once at the left, aligned with the cell
+ * boxes so it reads as the array's label. */
+.pac-cells-name {
+  align-self: start; margin-top: 6px; margin-right: 2px;
+  font-family: var(--mono); font-size: 11px; color: var(--text-dim);
 }
-.pac-marker { display: flex; flex-direction: column; align-items: center; line-height: 1.1; }
+/* Bracketed index labels: [0] [1] … mark position as an INDEX, not a value. */
+.pac-cell-index { font-size: 10.5px; color: var(--text-dim); font-family: var(--mono); }
+.pac-cell-markers {
+  display: flex; justify-content: center; gap: 6px;
+  margin-top: 2px; white-space: nowrap;
+}
+.pac-marker { display: flex; flex-direction: column; align-items: center; line-height: 1.15; }
 .pac-marker-caret { color: var(--accent); font-size: 11px; }
 .pac-marker-label {
   font-family: var(--mono); font-size: 10.5px; color: var(--accent); font-weight: 600;
+}
+
+/* Compact strip (e.g. "A stores"): a HORIZONTAL row of uniform-width labelled
+ * boxes, all visible at once with no scrollbar. Two strips compared side by side
+ * stay identical in width and styling; only the differing box's value changes. */
+.pac-panel[data-compact] .pac-cells[data-render="box"] { gap: 8px; }
+.pac-panel[data-compact] .pac-cells[data-render="box"] .pac-cell {
+  min-width: 62px; padding: 6px 10px;
 }
 
 /* ---- CALLSTACK panel ----

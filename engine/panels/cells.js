@@ -4,11 +4,18 @@
  *
  * A `box` grid may also carry index-pointer markers (AUTHORING.md "Planned
  * primitive — the index pointer"):
- *   { render: 'box', cells: [...], markers: [{label, index}] }
- * When `markers` is present each cell is rendered as a column — the box, an
- * index label beneath it (the cell's own `label`, or its position), then a
- * marker track holding any carets whose `index` points at this cell. Two
- * markers on the same cell sit side by side, never overlapping. */
+ *   { render: 'box', cells: [...], markers: [{label, index}], rowLabel? }
+ * When `markers` is present each cell is rendered as a column — the box, its
+ * bracketed index label beneath it ([0], [1], …; the cell's own `label`, or its
+ * position), then a marker track holding any carets whose `index` points at this
+ * cell. Each marker is a caret with its variable name LABELLED directly beneath
+ * it. Two markers on the same cell sit side by side, neither overlapping the
+ * other nor the neighbouring cells' labels.
+ *
+ * The bracketed index labels are a project-wide rule: `[0]` marks a cell's
+ * position as an INDEX, not a value (a naked `1` under a cell holding `b` is the
+ * index-vs-value confusion). An optional `rowLabel` names the row once, at the
+ * left, so the array's name is present without repeating it under every cell. */
 
 export function mount(body) { body.innerHTML = '<div class="pac-cells"></div>'; }
 
@@ -24,6 +31,14 @@ export function render(body, data, ctx) {
   const markers = mode === 'box' && data?.markers ? data.markers : null;
   if (markers) { wrap.dataset.marked = ''; } else { delete wrap.dataset.marked; }
 
+  // A row label names the whole row once, to the LEFT of the cells (marked mode).
+  if (markers && data.rowLabel) {
+    const name = document.createElement('div');
+    name.className = 'pac-cells-name';
+    name.textContent = data.rowLabel;
+    wrap.appendChild(name);
+  }
+
   cells.forEach((c, idx) => {
     const cell = document.createElement('div');
     cell.className = 'pac-cell';
@@ -38,16 +53,17 @@ export function render(body, data, ctx) {
 
     if (!markers) { wrap.appendChild(cell); return; }
 
-    // Marked mode: wrap the box in a column with an index label and a marker
-    // track. The index label sits BELOW the box; markers whose index equals this
-    // cell's position stack side by side beneath it.
+    // Marked mode: wrap the box in a column with a bracketed index label and a
+    // marker track. The index label sits BELOW the box; markers whose index
+    // equals this cell's position sit side by side beneath it, each caret over
+    // its own labelled variable name.
     const col = document.createElement('div');
     col.className = 'pac-cell-col';
     col.appendChild(cell);
 
     const index = document.createElement('div');
     index.className = 'pac-cell-index';
-    index.textContent = c.label != null ? c.label : idx;
+    index.textContent = `[${c.label != null ? c.label : idx}]`;
     col.appendChild(index);
 
     const track = document.createElement('div');
