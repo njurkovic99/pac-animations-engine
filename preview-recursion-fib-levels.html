@@ -158,7 +158,7 @@ body {
  * small panels scrolls the code (the legitimate scrolling case) rather than
  * stretching the small panels' rows apart. It still shrinks on a short viewport
  * (flex-shrink) so the note is never pushed off screen. */
-.pac-stage[data-multirow] { flex: 1 1 auto; max-height: min(560px, calc(100vh - 300px)); }
+.pac-stage[data-multirow] { flex: 0 1 auto; max-height: min(560px, calc(100vh - 300px)); }
 
 /* A full-width panel spans every column -- a shared preamble above a two-column
  * comparison. It sits on its own grid row (the first `auto` row when the row
@@ -305,7 +305,21 @@ body {
  * See AUTHORING.md "Memory-danger marker". */
 .pac-danger { color: var(--error); font-weight: 600; }
 
-/* ---- CODE panel ---- */
+/* ---- CODE panel ----
+ * FIXED VIEWPORT of exactly --code-lines (15) lines, at all times. The body is a
+ * fixed height (15 lines + its own padding) and scrolls internally beyond that,
+ * so a long listing scrolls while a short one pads to the same height. The height
+ * never changes between steps or language tabs. `align-self: start` pins the panel
+ * to the top of its grid area (rather than stretching to fill a taller cell), so
+ * the viewport is genuinely 15 lines even where the code column is tall. This is
+ * the project standard -- every animation inherits it. See AUTHORING.md
+ * "Stable layout" and code.js for the follow-the-highlight scrolling. */
+.pac-panel[data-type="code"] { align-self: start; }
+.pac-panel[data-type="code"] .pac-panel-body {
+  height: calc(var(--code-lines) * var(--code-line-h) + var(--body-pad));
+  flex: none;
+}
+
 .pac-lang-tabs { display: flex; gap: 4px; }
 .pac-lang-tab {
   background: none; border: 1px solid transparent; color: var(--text-dim);
@@ -598,17 +612,29 @@ function render(body, data, ctx, { lang }) {
            `<span class="pac-code-num">${n}</span><span>${esc(src)}</span></div>`;
   }).join('');
 
-  // Stable layout: the CODE panel shows ~12–15 lines and scrolls internally, so
-  // the active line must be scrolled into view as it moves (a jump into a
-  // function body far down the listing would otherwise sit off-screen). Scroll
-  // only THIS panel body (the overflow:auto container), never the page — centre
-  // the active line in the visible area. See AUTHORING.md "Stable layout".
+  // Follow the highlight, with context. The CODE panel is a fixed 15-line
+  // viewport (see styles.css) that scrolls internally, and this listing's main()
+  // is far from ADD/DELETE, so every call and return jumps the highlight across a
+  // wide gap. Rules:
+  //   - the highlighted line is ALWAYS visible (never let it scroll off);
+  //   - keep context around it -- when we do scroll, centre it so the student
+  //     sees what comes before and after, not pinned to an edge;
+  //   - do NOT scroll when it is already comfortably in view -- moving on every
+  //     step is as disorienting as never moving. Only scroll when the line would
+  //     otherwise sit within MARGIN lines of the top or bottom edge.
+  // Only body.scrollTop changes -- the panel's height and the rest of the page
+  // never move.
   const activeEl = body.querySelector('.pac-code-line.is-active');
   if (activeEl) {
     const bodyRect = body.getBoundingClientRect();
     const lineRect = activeEl.getBoundingClientRect();
-    const delta = (lineRect.top - bodyRect.top) - (body.clientHeight - lineRect.height) / 2;
-    body.scrollTop += delta;
+    const lineH  = lineRect.height || 1;
+    const offset = lineRect.top - bodyRect.top;      // active line's position in the viewport
+    const viewH  = body.clientHeight;
+    const MARGIN = 3 * lineH;                          // keep >= 3 lines of context each side
+    if (offset < MARGIN || offset > viewH - MARGIN - lineH) {
+      body.scrollTop += offset - (viewH - lineH) / 2; // bring it to roughly the middle
+    }
   }
 }
 

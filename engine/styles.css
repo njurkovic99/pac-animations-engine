@@ -154,7 +154,7 @@ body {
  * small panels scrolls the code (the legitimate scrolling case) rather than
  * stretching the small panels' rows apart. It still shrinks on a short viewport
  * (flex-shrink) so the note is never pushed off screen. */
-.pac-stage[data-multirow] { flex: 1 1 auto; max-height: min(560px, calc(100vh - 300px)); }
+.pac-stage[data-multirow] { flex: 0 1 auto; max-height: min(560px, calc(100vh - 300px)); }
 
 /* A full-width panel spans every column -- a shared preamble above a two-column
  * comparison. It sits on its own grid row (the first `auto` row when the row
@@ -301,7 +301,21 @@ body {
  * See AUTHORING.md "Memory-danger marker". */
 .pac-danger { color: var(--error); font-weight: 600; }
 
-/* ---- CODE panel ---- */
+/* ---- CODE panel ----
+ * FIXED VIEWPORT of exactly --code-lines (15) lines, at all times. The body is a
+ * fixed height (15 lines + its own padding) and scrolls internally beyond that,
+ * so a long listing scrolls while a short one pads to the same height. The height
+ * never changes between steps or language tabs. `align-self: start` pins the panel
+ * to the top of its grid area (rather than stretching to fill a taller cell), so
+ * the viewport is genuinely 15 lines even where the code column is tall. This is
+ * the project standard -- every animation inherits it. See AUTHORING.md
+ * "Stable layout" and code.js for the follow-the-highlight scrolling. */
+.pac-panel[data-type="code"] { align-self: start; }
+.pac-panel[data-type="code"] .pac-panel-body {
+  height: calc(var(--code-lines) * var(--code-line-h) + var(--body-pad));
+  flex: none;
+}
+
 .pac-lang-tabs { display: flex; gap: 4px; }
 .pac-lang-tab {
   background: none; border: 1px solid transparent; color: var(--text-dim);
