@@ -428,8 +428,8 @@ body {
 /* Columns are wide enough that TWO labelled markers (front + rear on the same
  * cell) sit side by side without overlapping each other or the neighbouring
  * cells' labels. */
-.pac-cell-col { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 72px; }
-.pac-cell-col .pac-cell { min-width: 44px; padding: 4px 9px; }
+.pac-cell-col { display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 72px; }
+.pac-cell-col .pac-cell { min-width: 44px; padding: 3px 9px; }
 /* The row's name (e.g. "contents"), once at the left, aligned with the cell
  * boxes so it reads as the array's label. */
 .pac-cells-name {
@@ -458,6 +458,49 @@ body {
 .pac-cell-parked .pac-cell-index { visibility: hidden; }
 .pac-cell-parked .pac-marker { opacity: .5; }
 
+/* ---- vertical stack column (render: 'column') ----
+ * The vertical analogue of the marked box row, for a stack (AUTHORING.md "The
+ * one new capability"). Cell [0] is at the BOTTOM; the column grows UPWARD. Each
+ * cell is a row of three fixed-width bands: a LEFT marker lane, the box, and a
+ * RIGHT bracketed index label. Every band keeps a constant width, so the box
+ * column and both label bands never shift as cells fill/empty/go stale or as the
+ * marker moves -- and a marker leaving the parked lane travels purely vertically
+ * (the left lane holds the same x on every row, including the parked one). */
+.pac-cells[data-render="column"] {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: center;      /* centre the fixed-width rows in the panel */
+  gap: 3px;
+}
+.pac-col-row { display: flex; flex-direction: row; align-items: center; gap: 8px; }
+/* LEFT marker lane: fixed width, markers right-aligned so the caret hugs the box.
+ * Wide enough for the longest label ("stack_ix ▶") without touching the box. */
+.pac-col-markers {
+  min-width: 92px;
+  display: flex; flex-direction: row; justify-content: flex-end; align-items: center;
+  gap: 8px; white-space: nowrap;
+}
+.pac-col-row .pac-cell { min-width: 46px; padding: 2px 10px; }
+/* RIGHT index band: fixed width, bracketed [0].. labels mark position as an
+ * INDEX, not a value -- the vertical analogue of the fixed-height index band. */
+.pac-col-index {
+  min-width: 34px; text-align: left;
+  font-family: var(--mono); font-size: 10.5px; color: var(--text-dim);
+}
+/* A column marker: label left, right-pointing caret (▶) hugging the box. */
+.pac-col-marker { display: flex; flex-direction: row; align-items: center; gap: 4px; }
+.pac-col-marker .pac-marker-caret { color: var(--accent); font-size: 12px; line-height: 1; }
+.pac-col-marker .pac-marker-label {
+  font-family: var(--mono); font-size: 10.5px; color: var(--accent); font-weight: 600;
+}
+/* Parked lane (a negative-index sentinel): the row BELOW cell [0]. Its box and
+ * index label are INVISIBLE -- they only reserve the row's height so the cells
+ * above never shift -- and the marker is dimmed so it reads as "pointing at
+ * nothing yet" rather than missing. */
+.pac-col-parked .pac-cell,
+.pac-col-parked .pac-col-index { visibility: hidden; }
+.pac-col-parked .pac-col-marker { opacity: .5; }
+
 /* Compact strip (e.g. "A stores"): a HORIZONTAL row of uniform-width labelled
  * boxes, all visible at once with no scrollbar. Two strips compared side by side
  * stay identical in width and styling; only the differing box's value changes. */
@@ -478,13 +521,13 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;    /* frames top-align; no empty void above them */
-  gap: 6px;
+  gap: 5px;
 }
 .pac-frame {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg);
-  padding: 6px 9px;
+  padding: 4px 9px;
   opacity: .5;                    /* caller frames are greyed but present */
   transition: opacity .15s, border-color .15s;
 }
@@ -496,14 +539,14 @@ body {
   box-shadow: inset 0 0 0 1px var(--accent-soft);
 }
 .pac-frame-fn {
-  font-family: var(--mono); font-size: 12.5px; font-weight: 600;
-  color: var(--text); margin-bottom: 5px;
+  font-family: var(--mono); font-size: 12px; font-weight: 600;
+  color: var(--text); margin-bottom: 2px; line-height: 1.3;
 }
-.pac-frame-vars { display: flex; flex-direction: column; gap: 3px; }
+.pac-frame-vars { display: flex; flex-direction: column; gap: 2px; }
 .pac-frame-var {
   display: flex; justify-content: space-between; gap: 14px;
   font-family: var(--mono); font-size: 12px;
-  padding: 2px 6px; border-radius: 3px;
+  padding: 1px 6px; border-radius: 3px;
   border: 1px solid transparent;
 }
 .pac-frame-var-name { color: var(--text-dim); }
@@ -658,7 +701,7 @@ const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', 
  return { mount, render }; })();
 const cellsPanel = (() => { /* CELLS panel — 1D/2D grid. Absorbs arrays, sorting bars, hash buckets,
  * matrices, memory blocks, variable tables, stack frames, vtables.
- * Step data: { render: 'box'|'bar'|'row', cells: [{value,label,role,anchor}] }
+ * Step data: { render: 'box'|'bar'|'row'|'column', cells: [{value,label,role,anchor}] }
  *
  * A `box` grid may also carry index-pointer markers (AUTHORING.md "Planned
  * primitive — the index pointer"):
@@ -674,10 +717,26 @@ const cellsPanel = (() => { /* CELLS panel — 1D/2D grid. Absorbs arrays, sorti
  * PARKED to the left of cell [0], dimmed, still showing its label — so it reads
  * as "not pointing at anything," not as missing. This is a general rule.
  *
+ * `render: 'column'` is the VERTICAL analogue, for a stack (AUTHORING.md "The
+ * one new capability"). Cell [0] is at the BOTTOM and the column grows UPWARD
+ * (the pile-of-plates metaphor that makes LIFO intuitive). Bracketed index
+ * labels sit to the RIGHT of the column in a fixed-WIDTH band; index-pointer
+ * markers sit to the LEFT, each a right-pointing caret (▶) with its variable
+ * name to the LEFT of the caret ("stack_ix ▶"). A marker at a negative sentinel
+ * parks BELOW cell [0] (the vertical analogue of parking left of it), dimmed,
+ * label still visible; leaving the sentinel is a purely VERTICAL move. The
+ * parked lane is ALWAYS rendered so nothing shifts as the marker enters or
+ * leaves it. Column width and row heights are fixed for every role — a member,
+ * a stale cell, and an empty cell are the same size (master invariant).
+ *
  * The bracketed index labels are a project-wide rule: `[0]` marks a cell's
  * position as an INDEX, not a value (a naked `1` under a cell holding `b` is the
  * index-vs-value confusion). An optional `rowLabel` names the row once, at the
- * left, so the array's name is present without repeating it under every cell. */
+ * left, so the array's name is present without repeating it under every cell.
+ *
+ * An optional per-cell `minCh` reserves a fixed minimum width (in `ch`), so a
+ * cell whose value varies in length (e.g. an error name) never resizes the strip
+ * as the value changes — the width analogue of the engine's reserved heights. */
 
 const PLACEHOLDER = '—';   // em-dash: the value of indeterminate storage
 
@@ -688,6 +747,9 @@ function render(body, data, ctx) {
   const mode = data?.render ?? 'box';
   wrap.dataset.render = mode;
   wrap.innerHTML = '';
+  // Vertical stack column — a distinct layout from the horizontal box/bar/row
+  // modes, so it is rendered by its own path (see renderColumn below).
+  if (mode === 'column') { renderColumn(wrap, data, ctx); return; }
   const cells = data?.cells ?? [];
   const max = Math.max(1, ...cells.map(c => +c.value || 0));
 
@@ -730,6 +792,10 @@ function render(body, data, ctx) {
     const cell = document.createElement('div');
     cell.className = 'pac-cell';
     if (c.role) cell.dataset.role = c.role;
+    // Reserve a fixed width for a cell whose value changes length across steps
+    // (e.g. the error name), so the strip never resizes -- the width analogue of
+    // the engine's reserved heights (master invariant).
+    if (c.minCh) cell.style.minWidth = `${c.minCh}ch`;
     if (mode === 'bar') cell.style.height = `${20 + 70 * (+c.value / max)}px`;
     // ONE placeholder glyph for indeterminate storage — an unwritten array cell
     // and an unassigned standalone variable are the same thing. An `empty` cell
@@ -775,6 +841,73 @@ function marker(m) {
   mk.className = 'pac-marker';
   mk.innerHTML = `<span class="pac-marker-caret">&#9650;</span>` +
                  `<span class="pac-marker-label">${esc(m.label)}</span>`;
+  return mk;
+}
+
+/* VERTICAL stack column (render: 'column'). Cell [0] is at the BOTTOM and the
+ * column grows UPWARD, so the cells are emitted top-to-bottom in REVERSE index
+ * order ([3] first … [0] last). Each cell is a row of three fixed-width bands:
+ *   [ marker lane (left) | box | index label (right) ]
+ * so index labels sit to the RIGHT and index-pointer markers to the LEFT, each
+ * lane keeping the same width and x across every row. A negative-index marker
+ * parks in a lane BELOW cell [0] (always rendered, so the cells never shift as
+ * the marker enters or leaves it); moving off the sentinel is therefore a purely
+ * vertical step up onto cell [0]. See AUTHORING.md "The one new capability". */
+function renderColumn(wrap, data, ctx) {
+  delete wrap.dataset.marked;
+  const cells = data?.cells ?? [];
+  const markers = data?.markers ?? [];
+
+  // Optional row name, once, above the column (the array's name).
+  if (data?.rowLabel) {
+    const name = document.createElement('div');
+    name.className = 'pac-cells-name';
+    name.textContent = data.rowLabel;
+    wrap.appendChild(name);
+  }
+
+  const row = (idx, c, rowMarkers, parked = false) => {
+    const r = document.createElement('div');
+    r.className = 'pac-col-row' + (parked ? ' pac-col-parked' : '');
+
+    const left = document.createElement('div');
+    left.className = 'pac-col-markers';
+    for (const m of rowMarkers) left.appendChild(colMarker(m));
+
+    const cell = document.createElement('div');
+    cell.className = 'pac-cell';
+    if (c?.role) cell.dataset.role = c.role;
+    const value = c == null ? '' : (c.role === 'empty' ? PLACEHOLDER : c.value);
+    cell.innerHTML = `<span class="pac-cell-value">${esc(value)}</span>`;
+    if (c?.anchor) ctx.anchor(`${ctx.spec.id}.${c.anchor}`, cell.querySelector('.pac-cell-value'));
+
+    const index = document.createElement('div');
+    index.className = 'pac-col-index';
+    index.textContent = `[${c && c.label != null ? c.label : idx}]`;
+
+    r.append(left, cell, index);
+    return r;
+  };
+
+  // Cells top-to-bottom = highest index first, so [0] lands at the bottom.
+  for (let idx = cells.length - 1; idx >= 0; idx--) {
+    wrap.appendChild(row(idx, cells[idx], markers.filter(m => m.index === idx)));
+  }
+
+  // The parked lane, ALWAYS present (its box + index are invisible, reserving
+  // the exact row height), sits below cell [0]. It holds any marker whose index
+  // is a negative sentinel; empty otherwise.
+  const parked = markers.filter(m => m.index == null || m.index < 0);
+  wrap.appendChild(row(0, { value: '', role: 'empty' }, parked, true));
+}
+
+/* One column marker: the variable name to the LEFT of a right-pointing caret
+ * (▶), so it reads "stack_ix ▶" pointing at the cell to its right. */
+function colMarker(m) {
+  const mk = document.createElement('span');
+  mk.className = 'pac-marker pac-col-marker';
+  mk.innerHTML = `<span class="pac-marker-label">${esc(m.label)}</span>` +
+                 `<span class="pac-marker-caret">&#9654;</span>`;
   return mk;
 }
 

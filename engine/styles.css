@@ -424,8 +424,8 @@ body {
 /* Columns are wide enough that TWO labelled markers (front + rear on the same
  * cell) sit side by side without overlapping each other or the neighbouring
  * cells' labels. */
-.pac-cell-col { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 72px; }
-.pac-cell-col .pac-cell { min-width: 44px; padding: 4px 9px; }
+.pac-cell-col { display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 72px; }
+.pac-cell-col .pac-cell { min-width: 44px; padding: 3px 9px; }
 /* The row's name (e.g. "contents"), once at the left, aligned with the cell
  * boxes so it reads as the array's label. */
 .pac-cells-name {
@@ -454,6 +454,49 @@ body {
 .pac-cell-parked .pac-cell-index { visibility: hidden; }
 .pac-cell-parked .pac-marker { opacity: .5; }
 
+/* ---- vertical stack column (render: 'column') ----
+ * The vertical analogue of the marked box row, for a stack (AUTHORING.md "The
+ * one new capability"). Cell [0] is at the BOTTOM; the column grows UPWARD. Each
+ * cell is a row of three fixed-width bands: a LEFT marker lane, the box, and a
+ * RIGHT bracketed index label. Every band keeps a constant width, so the box
+ * column and both label bands never shift as cells fill/empty/go stale or as the
+ * marker moves -- and a marker leaving the parked lane travels purely vertically
+ * (the left lane holds the same x on every row, including the parked one). */
+.pac-cells[data-render="column"] {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: center;      /* centre the fixed-width rows in the panel */
+  gap: 3px;
+}
+.pac-col-row { display: flex; flex-direction: row; align-items: center; gap: 8px; }
+/* LEFT marker lane: fixed width, markers right-aligned so the caret hugs the box.
+ * Wide enough for the longest label ("stack_ix ▶") without touching the box. */
+.pac-col-markers {
+  min-width: 92px;
+  display: flex; flex-direction: row; justify-content: flex-end; align-items: center;
+  gap: 8px; white-space: nowrap;
+}
+.pac-col-row .pac-cell { min-width: 46px; padding: 2px 10px; }
+/* RIGHT index band: fixed width, bracketed [0].. labels mark position as an
+ * INDEX, not a value -- the vertical analogue of the fixed-height index band. */
+.pac-col-index {
+  min-width: 34px; text-align: left;
+  font-family: var(--mono); font-size: 10.5px; color: var(--text-dim);
+}
+/* A column marker: label left, right-pointing caret (▶) hugging the box. */
+.pac-col-marker { display: flex; flex-direction: row; align-items: center; gap: 4px; }
+.pac-col-marker .pac-marker-caret { color: var(--accent); font-size: 12px; line-height: 1; }
+.pac-col-marker .pac-marker-label {
+  font-family: var(--mono); font-size: 10.5px; color: var(--accent); font-weight: 600;
+}
+/* Parked lane (a negative-index sentinel): the row BELOW cell [0]. Its box and
+ * index label are INVISIBLE -- they only reserve the row's height so the cells
+ * above never shift -- and the marker is dimmed so it reads as "pointing at
+ * nothing yet" rather than missing. */
+.pac-col-parked .pac-cell,
+.pac-col-parked .pac-col-index { visibility: hidden; }
+.pac-col-parked .pac-col-marker { opacity: .5; }
+
 /* Compact strip (e.g. "A stores"): a HORIZONTAL row of uniform-width labelled
  * boxes, all visible at once with no scrollbar. Two strips compared side by side
  * stay identical in width and styling; only the differing box's value changes. */
@@ -474,13 +517,13 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;    /* frames top-align; no empty void above them */
-  gap: 6px;
+  gap: 5px;
 }
 .pac-frame {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg);
-  padding: 6px 9px;
+  padding: 4px 9px;
   opacity: .5;                    /* caller frames are greyed but present */
   transition: opacity .15s, border-color .15s;
 }
@@ -492,14 +535,14 @@ body {
   box-shadow: inset 0 0 0 1px var(--accent-soft);
 }
 .pac-frame-fn {
-  font-family: var(--mono); font-size: 12.5px; font-weight: 600;
-  color: var(--text); margin-bottom: 5px;
+  font-family: var(--mono); font-size: 12px; font-weight: 600;
+  color: var(--text); margin-bottom: 2px; line-height: 1.3;
 }
-.pac-frame-vars { display: flex; flex-direction: column; gap: 3px; }
+.pac-frame-vars { display: flex; flex-direction: column; gap: 2px; }
 .pac-frame-var {
   display: flex; justify-content: space-between; gap: 14px;
   font-family: var(--mono); font-size: 12px;
-  padding: 2px 6px; border-radius: 3px;
+  padding: 1px 6px; border-radius: 3px;
   border: 1px solid transparent;
 }
 .pac-frame-var-name { color: var(--text-dim); }
