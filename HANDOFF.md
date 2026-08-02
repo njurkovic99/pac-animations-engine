@@ -1,9 +1,10 @@
 # HANDOFF — pac-animations
 
-Brief for Claude Code sessions working in this repo. The engine and two
-animations exist. Read `panel-inventory.md` (why the engine is shaped this way),
-`slates.md` (what to build), and `AUTHORING.md` (how to author one content file)
-first. This document is the delta on top of them and the source of truth for
+Brief for Claude Code sessions working in this repo. Read `panel-inventory.md`
+(why the engine is shaped this way), `slates.md` (what to build), and
+`AUTHORING.md` (how to author one content file) first. `AUTHORING.md` holds only
+rules **in force now**; deferred capabilities live in `PLANNED.md` and must not be
+built or authored against. This document is the delta on top of them and the source of truth for
 build order and project-wide conventions.
 
 **This revision supersedes earlier plans:**
@@ -300,6 +301,53 @@ When THINK is eventually built, known problems to solve:
   Canvas page can offer "Watch" and an interactive variant side by side.
 
 None of this is in scope for the current build. Every animation ships WATCH-only.
+
+## Deferred — a Python listing tab (decided: revisit after Phase 1)
+
+Occasionally a student arrives with a Python background. Neven's standing advice
+is that Python is not well suited to classic data structures and that they should
+switch to C++; that advice stands, and a Python tab would be a **reading aid for
+someone whose mental model is Python, never a licence to submit Python.**
+
+**Decision: not now.** Finish Phase 1 in pseudo / C++ / Java. Revisit only if
+Python students keep appearing, and then add tabs retroactively to the subset of
+animations where a Python listing is honest.
+
+**It can be done correctly**, using the standard library's real fixed-size array:
+
+```python
+from array import array
+contents = array('u', '\0' * MAX)   # contiguous, typed, fixed capacity
+```
+
+`array.array` is a genuine typed buffer, not a list in costume. Preallocate once
+and never append.
+
+Two rules if it is ever built:
+- **Never use a Python `list`.** A structure that grows on `append` teaches the
+  opposite of what a fixed-size array teaches, and wraparound arithmetic becomes
+  theatre.
+- **Answer the `deque` objection on the tab itself.** A Python student can
+  reasonably ask why any of this matters when `collections.deque` exists. One
+  paragraph — "`deque` does this for you; here is the machinery it hides, and why
+  a fixed capacity forces a design choice" — converts the objection into the
+  lesson. Unanswered, it is fatal to the animation.
+
+**It must be per-animation and optional, not a global fourth tab.** Python has no
+honest translation for `pointers-address-model`, `pointers-new-delete-dangling`,
+`strings-shared-memory`, or anything with explicit `new`/`delete`; faking one with
+`id()` would actively misteach. Roughly: the array-based, sorting, and searching
+animations yes; the memory-model animations no.
+
+**Cost when it happens: low.** CODE resolves `step.line` against whichever listing
+is displayed, and all listings are line-aligned, so a Python tab is *only* a new
+listing string — no step data, trace, or engine changes. Python's lack of braces
+helps: where C++ has a bare `}`, Python has a blank line and the numbering holds.
+Verified against `queues-count-vs-rear`'s ADD block, lines 7-14, which aligns
+line-for-line. The only wrinkle is `global front, rear` for module-level state,
+which sits on an unnumbered line or folds into the preamble.
+
+---
 
 ## Still open for Neven (cheap, not blocking)
 

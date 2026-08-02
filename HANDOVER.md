@@ -70,6 +70,14 @@ aJava** (advanced C++/Java), and **ds** (data structures). ~91 animations planne
 ### Formatting he wants from me (learned preferences)
 - **Prompts for Claude Code → in a copy-box (code block)** so he can one-click copy.
 - **GitHub URLs and PowerShell → in code blocks** (copiable).
+- **Every git block is SELF-CONTAINED and begins with fetch + checkout**, branch
+  name included, so it works whether he is on `main` or already on the branch
+  (`checkout` on the current branch is a harmless no-op). This cost three separate
+  rounds during A2: after a merge he correctly returns to `main`, then Claude Code
+  pushes again and he pulls without switching back, sees "Already up to date," and
+  concludes nothing was built. Do not hand him a bare `git pull`. Same principle as
+  "checkout FIRST, download SECOND" — the copy-box carries the whole operation and
+  never assumes where he is standing.
 - **Steps numbered, first-thing-first ordering.** Critically:
   **checkout/branch FIRST, download/place file SECOND** — never lead with
   "download" because he'll drop the file in before switching branches (this caused
@@ -87,6 +95,17 @@ aJava** (advanced C++/Java), and **ds** (data structures). ~91 animations planne
   every merge — he repeatedly forgot this; it leaves him stranded on a branch)
 - **"push doc changes":** `git status` (READ the "On branch" line!) → `git add .` →
   `git commit -m "..."` → `git push`
+- **"move downloaded files into the repo" (PowerShell, replaces drag-and-drop):**
+  one `move` with `-Force` overwrites silently — no Windows "Replace" prompt, and
+  no risk of dropping a file into `anim\` or `content\` by mistake. Always
+  followed by `git status` as the did-it-land check:
+  ```
+  cd ~\projects\pac-animations-engine
+  move ~\Downloads\FILE1.md,~\Downloads\FILE2.md . -Force
+  git status
+  ```
+  "nothing to commit, working tree clean" after this means the files did NOT
+  land. Give him this form, not "drag the files in."
 
 ### Recurring friction (and the fix)
 - The one persistent blind spot: **which branch he's on.** After reviewing a Claude
@@ -118,11 +137,16 @@ with per-field anchors), STREAM (console I/O), CHART (series over n), **CALLSTAC
 
 ---
 
-## WHAT'S DONE (3 animations, all merged to main + live)
+## WHAT'S DONE (4 animations, all merged to main + live)
 
 1. **recursion-fib-levels** (ds A5) — recursion trace, `level`/`depth` node meta.
 2. **lists-doubly-insert-order** (ds A10) — 4-line doubly-linked insertion; the
    pointer-arrow / record-node / `unlinked`-amber reference.
+4. **queues-count-vs-rear** (ds A2) — array queue, `front` + `rear`, `-1` sentinel,
+   built from empty. Debuts the **index-pointer primitive**; established the
+   **CELLS rendering contract** and the **master layout invariant**. Renamed the
+   CALLSTACK panel to **"Function calls"** (student-visible only) so it can't be
+   confused with the actual stack in A3/A4.
 3. **lists-array-insert-delete** (ds A1) — THE big one. Array-based list menu
    (ADD/INSERT/DELETE, invalid-insert-at-7, badINSERT smear). It BUILT and proved,
    as reusable capabilities the whole project now inherits:
@@ -149,126 +173,76 @@ deferred): append `?a=ds-a1` to the src.
 
 ---
 
-## WHERE WE STOPPED — `queues-count-vs-rear` (ds A2) DESIGNED, ready to build
+## WHERE WE STOPPED — A2 SHIPPED. NEXT UP: stacks (ds A3/A4)
 
-Design is settled (see "THE A2 DESIGN" below). The build prompt has been written.
+`queues-count-vs-rear` is built, reviewed, merged and live. That makes **4
+animations** done. The four reference docs are current as of this handover.
 
-**This is NOT the cheap throughput test the previous handover claimed.** That
-claim said A2 "introduces only ONE new capability." Wrong — it introduces **two**,
-and the second one was missed because it is buried in `slates.md` and `HANDOFF.md`
-rather than in the animation's own notes:
-
-1. **The index-pointer primitive** — labeled `front`/`rear` markers over array
-   cells (designed in AUTHORING.md, never built).
-2. **The race driver** — two generators stepped in lockstep and merged into one
-   view (documented in AUTHORING.md's execution-model table and panel-inventory
-   §4, **never built**). `slates.md` gives A2 Mode **R**, the only R in the ds
-   slate, and HANDOFF Phase 1 annotates it *"race driver used for a non-race
-   compare."*
-
-So A2 is the race driver's debut as much as the index pointer's. **Do not read a
-slow or nitty first draft as a throughput failure** — it is a two-capability
-build. The genuine throughput test is the animation AFTER this one (stacks, A3),
-which inherits both and adds nothing.
-
-Pattern worth noticing: **CALLSTACK, the index pointer, and the race driver were
-all designed early and built late.** When picking the next animation, check
-`slates.md`'s Mode column and HANDOFF's parenthetical notes before estimating —
-the capability cost is recorded there, not in AUTHORING.md.
-
-**Source docs (in this handover folder): `ds2.html` (A2 assignment) and
-`queues.html` (the lecture).** A2 asks for a menu queue: ADD (to rear), DELETE
-(from front), SHOW, COUNT, CLEAR — array-based, fixed size.
+**Next: `stacks-paren-scanner` (ds A3), then `stacks-postfix-eval` (A4).**
+These are the honest throughput test — A2 turned out to be a two-capability build
+(see below), so nothing before now has measured what a pure-inherit animation
+costs. A3 inherits everything and should add nothing new.
 
 ---
 
-## THE A2 DESIGN (settled)
+## WHAT A2 COST, AND WHY (read before estimating A3)
 
-**The lecture is the gold and it IS the structure.** `queues.html` walks two
-competing representations and their trade-offs — literally what `count-vs-rear`
-means:
-- **Rep A:** array + `front` index + **`count`**
-- **Rep B:** array + `front` index + **`rear`** index
-- Neven tells students: use whichever is easiest. The animation is about the
-  CHOICE, and must not portray either as broken.
+The previous handover called A2 "the throughput test — inherits everything, adds
+ONE new capability." That was wrong twice over, and both errors are worth keeping.
 
-**Resolved design decisions** (the previous handover left four pending; the
-`slates.md`/`HANDOFF.md` Mode-R instruction settled the first one, and the rest
-followed):
+**Error 1: it was two capabilities, not one.** The index pointer AND the race
+driver, the latter buried in `slates.md`'s Mode column (A2 is the only **R** in the
+ds slate) and a HANDOFF parenthetical. Neither doc said "unbuilt" — AUTHORING
+describes unbuilt capabilities in the present tense, which is what made the build
+look cheap. **HANDOFF.md now carries a designed-vs-built capability table**; check
+it before estimating anything.
 
-1. **Side by side, as a race** — two generators, two code panels, two arrays, two
-   state strips. This deliberately REVERSES the "no side-by-side" preference from
-   A1: there the second panel showed one thing twice, here the comparison *is* the
-   subject. Rep A stores no rear and displays none anywhere; Rep B stores a real
-   one. Nothing is derived or faked.
-2. **Full-vs-empty is the climax** — YES.
-3. **Wraparound shown explicitly** — YES, twice (ADD wraps `rear`/`pos`; a later
-   DELETE wraps `front`).
-4. **Animate ADD + DELETE only**; SHOW/COUNT/CLEAR are trivial context, as in A1.
+**Error 2: the race was designed, built, and then thrown away.** Two
+representations side by side left no room for a `main()` driver or the call-frames
+panel, so the student could see state changing but not what was changing it. Neven
+caught it on first render. The fix was to drop to ONE representation (front + rear)
+with a `main()` driver, exactly like A1 — and the single version teaches the
+trade-off better than the race did. The race driver is merged and working but has
+**no user in the repo**; its first will be `sorting-race-statements` (Phase 2).
 
-**The listings are line-aligned across BOTH reps**, so the differences read as
-horizontal gaps: Rep B has blank lines where Rep A updates `count`. Rep B's
-fullness test (line 2) and emptiness test (line 10) are the **identical
-expression** — `next_ix(rear) = front` — which is the whole lesson sitting in the
-code panel from step 0.
+**Then ~7 rounds of layout defects**, every one caught by Neven in review, every
+one the same underlying bug: *something sized itself to the current step's content*.
+Anonymous markers, collapsed empty cells, a jumping marker lane, panels that grew
+when output appeared, a code panel pinned so rigidly it left a dead gap. These are
+now **one rule** in AUTHORING (the "master invariant" — every dimension resolves
+once, then never changes) plus a **CELLS rendering contract**. All renderer-level,
+so A3 inherits the lot.
 
-**Trace** = the lecture verbatim (`a b c`, MAX 4, ADD d, DELETE, ADD e), extended
-to empty, then one final ADD:
+**The lesson for planning:** the expensive part was never the pedagogy or the
+trace design — those went in one pass each. It was layout invariants that no doc
+had stated, so Claude Code had to guess, and guessed differently each time. If A3
+also takes 7 rounds of layout nits, the rules did not take and the docs need
+another pass, not the process.
 
-| op | contents | A: front,count | B: front,rear |
-|---|---|---|---|
-| — | `a b c ·` | 0, 3 | 0, 2 |
-| ADD d | `a b c d` | 0, 4 | 0, 3 |
-| DELETE→a | `a̶ b c d` | 1, 3 | 1, 3 |
-| ADD e | `e b c d` | 1, 4 | 1, **0** ← wrap |
-| ADD f | *both refuse* | 1, 4 | 1, 0 |
-| DELETE ×4 | all stale | 1, **0** | **1, 0** |
-| ADD g | **A accepts** | 1, 1 | **B refuses** |
+---
 
-30 steps of perfect agreement, then `ADD g` hits an empty queue: A checks
-`count = 0` and proceeds; B evaluates `next_ix(0) = 1 = front` and reports **"queue
-is full."** The two arrays diverge on the final step — which is what justifies
-having drawn two of them all along.
+## WHAT A2 ENDED UP BEING (for reference)
 
-**Corrections to the previous handover's pedagogical notes:**
+Single representation: array + `front` + `rear`, no count. MAX 4, characters,
+`ch` for the removed element, `next_ix()` as the wrap helper — all the lecture's
+own names. Builds from an **empty queue with `-1` as the empty sentinel**;
+`main()` drives ADD/DELETE calls with the "Function calls" panel showing frames and
+parameter binding. 59 steps.
+
+**The payoff:** on the last DELETE, `front` and `rear` reset to `-1`. Without that
+reset they would read `1` and `0` — which is what they read when the queue was
+FULL. The note asks the student to click Back and compare. `front` and `rear` alone
+cannot distinguish empty from full; the sentinel is the extra bit of information,
+and it costs a branch in ADD and a branch in DELETE. A `count` needs neither. That
+resolves the open question the lecture leaves hanging, in his own framing, without
+portraying either representation as wrong.
+
+Two pedagogical corrections made along the way, both worth not re-deriving:
 - The ambiguous condition is **`front == next_ix(rear)`, NOT `front == rear`.**
-  `front == rear` means exactly ONE element, and it occurs mid-trace where B reads
-  it correctly. Getting this wrong would have taught a false rule.
+  `front == rear` means exactly ONE element and occurs mid-trace, read correctly.
 - **The rejected "shift everything down" is a NOTE, not steps.** The lecture shows
-  it as a diagram and rejects it; the code never executes it, so animating it
-  would be a phantom step. It attaches to the DELETE where front leaves index 0,
-  in his words ("too expensive").
-
-**Two conventions the build introduces:**
-- **Idle racer** — Rep B yields `{idle: true}` on the 4th phase of every operation
-  (it has no bookkeeping line), keeping its state with no line highlighted. Every
-  operation is 4 aligned phases in both reps so the merge stays frame-for-frame.
-- **`stale` cells keep their characters, greyed.** The lecture blanks a deleted
-  cell; the program cannot. Blanking would imply the program can see emptiness by
-  looking at the array — the exact misconception the animation exists to kill. A
-  note says the greying is ours, not the program's.
-
-**Panels (6):** codeA/queueA/stripA | codeB/queueB/stripB. **No CALLSTACK** (the
-lesson is representation choice, not call structure; two stacks would be noise)
-and **no STREAM** (the refusals are narrated). `next_ix` is shown but never
-stepped into — stepping in would desynchronise the racers. The strips
-(`[front][count][ch]` vs `[front][rear][ch]`) differ in exactly one box; that
-contrast is the thesis at a glance.
-
-**Six panels is the main layout risk** — verify at 1920×1080 and in a short
-viewport.
-
----
-
-## DOC CONFLICT FOUND, NOT YET RESOLVED
-
-`AUTHORING.md` lists CELLS roles as `active, compared, ok, error, empty`.
-`panel-inventory.md` §2 lists `active, compared, swapped, sorted, probe, empty,
-stale`. **Neither is a superset**; one is stale documentation and which one can
-only be settled by reading `engine/`. The A2 build prompt asks Claude Code to use
-the real set and report which doc is wrong; the doc fix itself is a chat decision
-(pending). Note this also means **`stale` was already a designed role** — it is
-not new work.
+  it as a diagram and rejects it; the code never executes it, so animating it would
+  be a phantom step.
 
 ---
 
@@ -289,13 +263,18 @@ There is no "derived" marker style: a marker means a stored variable.
 
 ## BANKED / SCHEDULED (don't do now)
 
-- **AUTHORING.md consolidation pass — DO AFTER animation #2.** The doc is ~970
-  lines, grown chronologically. Reorganize topically (Layout / Panels / Narration /
-  Color & state / Course-specific / Pedagogical patterns), add a short "principles"
-  preamble, split deferred items (THINK, loop controls, index pointer) into a
-  separate "planned" doc so the active doc holds only rules in force now. Purpose:
-  keep it absorbable so Claude Code applies rules faithfully (dilution is a real
-  risk at this size — some rule-slips have already happened).
+- **AUTHORING.md consolidation pass — DONE.** Reorganised topically into 8 parts
+  (content file / panels / steps & notes / narration / layout, color & state /
+  pedagogical patterns / course-specific / bugs-fixed-once), with a nine-line
+  principles preamble at the top. 1137 → 863 lines. Deferred material split into a
+  new **`PLANNED.md`** (THINK, loop controls, go-to-line's rejection, CALLSTACK
+  extensions, the Python tab, `?a=` emit machinery, the root index), so the active
+  doc contains only rules in force. Three real contradictions were resolved in the
+  process: a "Predict gates" section that flatly contradicted "WATCH only"; a code
+  panel documented as both "12–15 lines" and "15 is a floor"; and an index-pointer
+  section that ended with "deferred — do not build it" after being marked BUILT.
+  One conflict is flagged but NOT resolved: the CELLS role list differs between
+  AUTHORING and panel-inventory, and only `engine/` can settle it.
 - **Root 404 / instructor-index page** — cosmetic, parked. A simple index.html at
   repo root listing all animations would fix it and give an instructor directory.
 - **THINK mode** — fully deferred (rationale + known bug in HANDOFF.md).
