@@ -253,16 +253,24 @@ frame's) so their edges are not ragged. A value genuinely too long for a reasona
 width **truncates with an ellipsis** rather than wrapping or dragging the whole panel
 wide.
 
-**Height is CAPPED at a ceiling of 3 frames — the CALLSTACK scrolls; it does not
+**Height is CAPPED at a ceiling of 2 frames — the CALLSTACK scrolls; it does not
 size to its maximum.** A call stack's depth has no natural upper bound (a deep
-recursion is ten frames), so reserving the trace's deepest would waste space or
-explode. The panel is fixed (master invariant) at `min(deepest reached, 3 frames)`:
-below the ceiling it is the actual depth (never empty frame slots — a 2-frame trace
-is 2 frames tall); past it, it **scrolls to keep the running (top) frame visible**,
-the same follow-the-highlight the structure region has. This generalises: **any panel
-whose content has no natural upper bound gets a ceiling plus internal scrolling**
-(structure region, CALLSTACK); panels with a genuinely known maximum (a 4-cell array,
-a 4-box strip) size to that maximum. CALLSTACK was long misfiled as the second kind.
+recursion is ten frames), and even a shallow trace's *typical* depth is usually 2
+(`main → f`), reaching a third only briefly inside a nested call — reserving for that
+exception wastes the space for most of the animation. The panel is fixed (master
+invariant) at `min(deepest reached, 2 frames)`: below the ceiling it is the actual
+depth (never empty frame slots); at or past it, it **scrolls to keep the running
+(top) frame visible**, the same follow-the-highlight the structure region has. This
+generalises: **any panel whose content has no natural upper bound gets a ceiling plus
+internal scrolling** (structure region, CALLSTACK); panels with a genuinely known
+maximum (a 4-cell array, a 4-box strip) size to that maximum. CALLSTACK was long
+misfiled as the second kind.
+
+Because the code panel receives *whatever the layout leaves it* (it has no height of
+its own — see "Panels flow across both columns"), capping the CALLSTACK actually
+shrinks the code panel and the stage: less height in the right column means the
+balancing gives the code panel less, down to its 15-line floor. That is the point —
+the CALLSTACK ceiling is one of the levers that keeps the whole screen compact.
 
 ## Arrows (cross-panel overlay)
 

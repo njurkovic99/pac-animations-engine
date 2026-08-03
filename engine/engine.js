@@ -27,7 +27,7 @@ const RENDERERS = {
 
 const MAX_STEPS = 5000;
 const AUTOPLAY_MS = 900;
-const CALLSTACK_CEILING = 3;   // frames visible before the CALLSTACK scrolls
+const CALLSTACK_CEILING = 2;   // frames visible before the CALLSTACK scrolls
 
 // Default student-facing panel titles per renderer (used when a panel declares
 // no `title`). The CALLSTACK renderer displays as "Function calls" -- the
