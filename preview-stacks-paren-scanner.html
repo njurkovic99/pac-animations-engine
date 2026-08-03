@@ -126,67 +126,48 @@ body {
 .pac-openwin:focus-visible { outline: 2px solid var(--warn); outline-offset: 2px; }
 .pac-openwin[hidden] { display: none; }
 
-/* ---- layout: the bounded stage ----
- * A grid of panels that sizes to its content and never grows the page. The top
- * row holds the fixed 15-line code viewport; the bottom row is at least
- * --stage-row-bottom (a shallow call stack + strip) but GROWS to fit a taller
- * reserved panel (e.g. a call stack whose deepest state is main -> ADD -> INSERT
- * -- three frames -- reserved fully visible by the engine). Because every panel's
- * height is reserved to its per-run maximum (reserveHeights), the content height
- * is constant, so the stage never changes height as steps advance. It shrinks on
- * a short viewport (flex-shrink) so the note is never pushed off screen.
- * See AUTHORING.md "Stable layout". */
+/* ---- layout: panels flow across two columns ----
+ * The stage is two side-by-side columns whose exact height is resolved ONCE by
+ * the engine (layoutStage) and then held -- the master invariant. The code panel
+ * anchors the top of the LEFT column at its 15-line floor; structure panels sit
+ * side by side in a height-capped region at the top of the RIGHT column; and
+ * bookkeeping panels flow down the right column, the balancing overflow
+ * continuing beneath the code panel in the left. The engine sets the stage
+ * height, the structure-region height, each bookkeeping body's min-height, and
+ * the code body height inline, so nothing changes as steps advance. See
+ * AUTHORING.md "Panels flow across both columns" / "structure region ceiling" /
+ * "bookkeeping 2-row floor". */
 .pac-stage {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  grid-template-rows: var(--stage-row-top) minmax(var(--stage-row-bottom), auto);
-  grid-auto-rows: minmax(0, 1fr);
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;        /* both columns take the resolved stage height */
   gap: var(--gap);
   position: relative;          /* anchor origin for the arrow overlay */
-  flex: 0 1 auto;              /* hug content; never grow past it */
-  min-height: 0;               /* allow the grid to shrink below content size */
-  max-height: calc(100vh - 300px);
+  flex: 0 0 auto;              /* height is set by the engine, not by flex */
+  min-height: 0;
   overflow: hidden;            /* the bound is hard; panels scroll, not the stage */
 }
-.pac-stage[data-cols="1"] { grid-template-columns: 1fr; }
-.pac-stage[data-cols="2"] { grid-template-columns: 1fr 1fr; }
+/* A column is a vertical stack of panels; both share the stage width equally. */
+.pac-col {
+  display: flex; flex-direction: column; gap: var(--gap);
+  flex: 1 1 0; min-width: 0; min-height: 0; overflow: hidden;
+}
+.pac-col > .pac-panel { flex: 0 0 auto; }   /* panels keep their resolved heights */
 
-/* A multi-row layout (spec.stageRows) supplies its own grid-template-rows inline
- * and opts out of the two-row bound: the stage instead fills the space above the
- * pinned footer and shrinks on a short viewport, so the note is never pushed off
- * screen. The footer (controls + narration + note) stays a constant height, so
- * this still satisfies "the controls never move as steps advance". Design target
- * 1920x1080; the open-in-own-window link is the escape hatch on very short
- * viewports. See AUTHORING.md "Stable layout". */
-/* A multi-row stage sizes to its content (flex:0 1 auto -- every panel's height
- * is reserved, so the content height is constant and the stage never grows as
- * steps advance). The cap only bounds it on a short viewport, where it shrinks
- * (flex-shrink) and panels scroll so the note is never pushed off screen. */
-.pac-stage[data-multirow] { flex: 0 1 auto; max-height: calc(100vh - 300px); }
-
-/* A full-width panel spans every column -- a shared preamble above a two-column
- * comparison. It sits on its own grid row (the first `auto` row when the row
- * template leads with one). */
-.pac-panel[data-full] { grid-column: 1 / -1; }
-
-/* A tall panel occupies the whole first column, spanning every row -- e.g. a
- * code listing beside a stack of smaller panels stacked in the second column. */
-.pac-panel[data-tall] { grid-column: 1; grid-row: 1 / -1; }
-
-/* A panel that holds very little (e.g. a two-value count/capacity strip) opts
- * out of stretching to fill its tall grid cell: it top-aligns and sizes to its
- * content, so it reads as a compact strip rather than a tall box with a void.
- * See AUTHORING.md "Panels fill their grid cells; don't oversize a cell". */
-.pac-panel[data-compact] { align-self: start; max-height: 100%; }
-
-/* The CALLSTACK panel top-aligns its frames. Its height is RESERVED to the
- * deepest stack the animation reaches (engine reserveHeights, which pins the
- * body's min-height to the tallest frame set across all steps) -- so every
- * frame's contents are fully visible, and a shallow stack (just main) shows the
- * frames at the top with the reserved space empty below, never a smaller panel.
- * The reservation, not a per-type cap, sets the size. See AUTHORING.md
- * "Stable layout". */
-.pac-panel[data-type="callstack"] { align-self: start; }
+/* The structure region: structure panes side by side, sharing the region height
+ * the engine pins (<= half the stage). Each pane fills the region and scrolls
+ * internally, following its active element, if its content overflows. */
+.pac-structure {
+  display: flex; flex-direction: row; gap: var(--gap);
+  min-width: 0; min-height: 0; flex: 0 0 auto;
+}
+.pac-structure:empty { display: none; }
+/* A single structure pane fills the region width. When several share the region,
+ * each is sized to its own CONTENT width (a wide horizontal array and a narrow
+ * vertical column each keep exactly the width they need, neither squeezed into
+ * wrapping) and they sit side by side from the left. */
+.pac-structure > .pac-panel { flex: 0 0 auto; }
+.pac-structure > .pac-panel:only-child { flex: 1 1 auto; }
 
 /* ---- panel chrome ---- */
 .pac-panel {
@@ -310,14 +291,13 @@ body {
 
 /* ---- CODE panel ----
  * The viewport is --code-lines (15) lines as a FLOOR, not a fixed value: the
- * engine (fitCodePanels) grows it to as many WHOLE lines as fit the column,
- * capped at the listing's length, resolved ONCE from the viewport on load and on
- * window resize and then held constant -- it never changes with steps, frames, or
- * the language tab. The height below is the 15-line floor used before the engine
- * measures (and as the fallback). `align-self: start` pins the panel to the top
- * of its grid area. See AUTHORING.md "Stable layout" and code.js for the
- * follow-the-highlight scrolling. */
-.pac-panel[data-type="code"] { align-self: start; }
+ * engine (layoutStage) grows it to as many WHOLE lines as fit the left column
+ * once every other panel is placed, capped at the listing's length, resolved
+ * ONCE on load and on window resize and then held constant -- it never changes
+ * with steps, frames, or the language tab. The engine sets the body height and
+ * the listing's whole-line max-height inline; the height below is the pre-measure
+ * fallback. See AUTHORING.md "Panels flow across both columns" and code.js for
+ * the follow-the-highlight scrolling. */
 .pac-panel[data-type="code"] .pac-panel-body {
   height: calc(var(--code-lines) * var(--code-line-h) + var(--body-pad));
   flex: none;
@@ -351,16 +331,11 @@ body {
 .pac-code-num { color: var(--text-dim); width: 2.2em; text-align: right; margin-right: 12px; user-select: none; }
 
 /* ---- STREAM panel ---- */
-/* Stable layout: the STREAM accumulates output as steps advance, so it has a
- * FIXED height of --stream-lines (3) text lines, reserved from the first step
- * whether or not anything has printed yet -- an empty STREAM is an empty box of
- * the same size, not a collapsed strip. Lines beyond three scroll internally
- * (stream.js auto-scrolls to the newest at the bottom). The height never changes
- * as lines arrive, so nothing below it moves. See AUTHORING.md "Stable layout". */
-.pac-panel[data-type="stream"] .pac-panel-body {
-  height: calc(var(--stream-lines) * var(--stream-line-h) + var(--body-pad));
-  flex: none;
-}
+/* The STREAM accumulates output as steps advance. As a bookkeeping panel it is
+ * reserved by the engine (layoutStage) to its per-run MAXIMUM number of lines
+ * (with a 2-row floor), so an empty STREAM at step 0 is already a box of that
+ * final size and nothing below it shifts as lines arrive. stream.js keeps the
+ * newest line scrolled into view. See AUTHORING.md "bookkeeping 2-row floor". */
 .pac-stream { font-family: var(--mono); font-size: 12.5px; line-height: 1.7; }
 .pac-stream-line { white-space: pre; }
 .pac-stream-line.dir-in   { color: var(--warn); }
@@ -424,12 +399,21 @@ body {
  * its index, its label below the caret; two markers on the SAME cell render side
  * by side (flex row) rather than overlapping. All markers are solid/stored --
  * there is no "derived" marker style. */
-.pac-cells[data-marked] { align-items: start; gap: 8px; }
+/* A marked index array never WRAPS: [0][1][2][3] is one row, always -- a wrapped
+ * index array is the index-vs-position confusion rendered as a layout. If the row
+ * is wider than its panel it scrolls horizontally rather than folding. This also
+ * gives the panel a natural single-row width, so a structure pane holding it is
+ * sized to fit all its cells side by side. */
+.pac-cells[data-marked] { align-items: start; gap: 8px; flex-wrap: nowrap; }
 /* Columns are wide enough that TWO labelled markers (front + rear on the same
  * cell) sit side by side without overlapping each other or the neighbouring
  * cells' labels. */
 .pac-cell-col { display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 72px; }
 .pac-cell-col .pac-cell { min-width: 44px; padding: 3px 9px; }
+/* A single-marker array needs no room for a second caret under a cell, so its
+ * columns are narrower -- letting a short array (e.g. the expression) sit beside
+ * another structure panel. */
+.pac-cells[data-marked][data-single] .pac-cell-col { min-width: 52px; }
 /* The row's name (e.g. "contents"), once at the left, aligned with the cell
  * boxes so it reads as the array's label. */
 .pac-cells-name {
@@ -756,6 +740,11 @@ function render(body, data, ctx) {
   // Marked mode: a `box` grid with index-pointer markers below the cell row.
   const markers = mode === 'box' && data?.markers ? data.markers : null;
   if (markers) { wrap.dataset.marked = ''; } else { delete wrap.dataset.marked; }
+  // A single-marker array uses narrower columns (there is never a pair of markers
+  // to sit side by side under one cell), so a short array fits more panels beside
+  // it. Two-or-more-marker arrays keep the wider column so front + rear on the
+  // same cell never overlap.
+  if (markers && markers.length <= 1) { wrap.dataset.single = ''; } else { delete wrap.dataset.single; }
 
   // A row label names the whole row once, to the LEFT of the cells (marked mode).
   if (markers && data.rowLabel) {
@@ -771,8 +760,13 @@ function render(body, data, ctx) {
   // bands reserve the exact same heights as a real cell -- the marker lane then
   // begins at the same y here as over any cell. A marker moving from -1 onto a
   // cell therefore travels laterally only, never vertically.
+  // The parked lane is ALWAYS present in marked mode (not only when a marker is
+  // currently parked), so the cells never shift left as a marker leaves the -1
+  // sentinel and the panel's width never changes across steps -- the width
+  // analogue of the master invariant. Its box and index bands are invisible (they
+  // only reserve height); the marker track holds any parked markers, or nothing.
   const parked = markers ? markers.filter(m => m.index == null || m.index < 0) : [];
-  if (parked.length) {
+  if (markers) {
     const col = document.createElement('div');
     col.className = 'pac-cell-col pac-cell-parked';
     const box = document.createElement('div');
@@ -1434,85 +1428,167 @@ class Engine {
     this.trace = name;
     this.steps = this.materialise(name);
     this.i = 0;
-    this.reserveHeights();
-    this.fitCodePanels();
+    this.layoutStage();
     this.render();
   }
 
   /**
-   * Size each CODE panel to as many WHOLE lines as fit in its column, floored at
-   * --code-lines (15 -- the Canvas-iframe minimum, never go below it) and capped
-   * at the listing's own length (never show a slot past the last line; a shorter
-   * listing pads to the floor). The last visible line is always whole.
+   * THE LAYOUT PASS. Resolves every panel's size AND its column ONCE -- on load
+   * and on a real window resize -- then holds. This is the master invariant:
+   * nothing on screen moves because a step advanced. See AUTHORING.md "Panels
+   * flow across both columns", "The structure region has a ceiling",
+   * "Bookkeeping panels get a 2-row floor".
    *
-   * Resolved ONCE from the viewport -- on load and on a real window resize -- then
-   * held constant. It must NOT respond to content: not as the step advances, as
-   * frames push/pop, or as the language tab changes. A content-driven height is
-   * the reflow bug fixed in STREAM/CALLSTACK. Measured by letting the body fill
-   * its cell (it scrolls, so the listing's own length can't inflate the cell),
-   * reading the available height, then pinning a whole-line height.
+   * Resolution order (this is what makes the ceiling bite):
+   *   1. Bookkeeping panels (callstack, stream, compact strips) size to content
+   *      with a 2-row FLOOR so none collapses to a sliver.
+   *   2. The structure region (the CELLS/NODES panels showing the data structure)
+   *      takes what it needs up to a CEILING of half the stage height, its panes
+   *      side by side; a pane that overflows scrolls and follows its active cell.
+   *   3. The code panel takes a 15-line FLOOR in the left column.
+   *   4. Any leftover slack goes to the CODE panel -- the only panel that always
+   *      has more listing it could usefully show.
+   *
+   * Placement: the code panel anchors the top of the LEFT column; the structure
+   * region sits at the top of the RIGHT column; bookkeeping panels flow down the
+   * right column and the balancing overflow continues beneath the code panel in
+   * the left, keeping declaration (reading) order within each column.
    */
-  fitCodePanels() {
+  layoutStage() {
     const cs = getComputedStyle(this.root);
-    const lineH  = parseFloat(cs.getPropertyValue('--code-line-h')) || 20.6;
-    const floorL = parseFloat(cs.getPropertyValue('--code-lines'))  || 15;
-    const padV   = parseFloat(cs.getPropertyValue('--body-pad'))     || 22;
-    for (const [, p] of this.panels) {
-      if (p.spec.type !== 'code') continue;
-      const panel = p.el, body = panel.querySelector('.pac-panel-body');
-      if (!body) continue;
-      const maxLen = Math.max(1, ...Object.values(p.spec.listings ?? {}).map(l => l.length));
-      // Measure the column height available to this panel by letting the body
-      // fill its grid cell. The listing itself is HIDDEN during the measure, so
-      // its length cannot inflate the cell -- the cell is sized purely by the
-      // other column (the reserved panels), which is exactly the height the code
-      // should match. Then restore and pin a whole-line height.
-      const code = body.querySelector('.pac-code');
-      const savedAlign = panel.style.alignSelf, savedFlex = body.style.flex, savedDisp = code ? code.style.display : '';
-      if (code) code.style.display = 'none';
-      panel.style.alignSelf = 'stretch';
-      body.style.height = 'auto';
-      body.style.flex = '1';
-      void body.offsetHeight;                                  // force reflow
-      const avail = body.clientHeight;                         // cell inner height (content-box + padding)
-      const fit = Math.floor((avail - padV) / lineH);          // whole lines that fit
-      const lines = Math.max(floorL, Math.min(maxLen, fit));
-      if (code) code.style.display = savedDisp;
-      panel.style.alignSelf = savedAlign;
-      body.style.flex = savedFlex;
-      // The body FILLS the column (its bottom lines up with the other column);
-      // the listing is clipped to `lines` WHOLE lines, so the last line is never
-      // a sliver and the sub-line remainder is blank space below it, not a gap.
-      body.style.height = `${Math.round(avail)}px`;
-      if (code) code.style.maxHeight = `${Math.round(lines * lineH)}px`;
+    const gap     = parseFloat(cs.getPropertyValue('--gap')) || 14;
+    const lineH   = parseFloat(cs.getPropertyValue('--code-line-h')) || 20.6;
+    const floorL  = parseFloat(cs.getPropertyValue('--code-lines')) || 15;
+    const bodyPad = parseFloat(cs.getPropertyValue('--body-pad')) || 22;
+    const BORDER  = 2;                          // a panel's 1px top + bottom border
+
+    const items     = [...this.panels.values()];
+    const code      = items.find(p => p.kind === 'code');
+    const structure = items.filter(p => p.kind === 'structure');
+    const book      = items.filter(p => p.kind === 'book');
+
+    const H = this._availableStageHeight();
+
+    // Reserve each panel's body to its per-step MAXIMUM content height, so it
+    // never changes size as steps advance (the cure for the height-change bug
+    // class: collapsed empty cells, a growing CALLSTACK, an accumulating STREAM).
+    const measure = p => {
+      const body = p.el.querySelector('.pac-panel-body');
+      body.style.minHeight = ''; body.style.height = '';
+      const codeEl = body.querySelector('.pac-code');
+      if (codeEl) codeEl.style.maxHeight = '';
+      const id = p.spec.id ?? p.spec.type;
+      let m = 0;
+      for (const step of this.steps) {
+        p.ctx.anchors.clear();
+        p.renderer.render(body, step.panels?.[id], p.ctx, { lang: this.lang, step });
+        m = Math.max(m, body.scrollHeight);
+      }
+      p.headerH  = p.el.querySelector('.pac-panel-head').offsetHeight;
+      p.contentH = m;
+    };
+    for (const p of [...structure, ...book]) measure(p);
+    if (code) code.headerH = code.el.querySelector('.pac-panel-head').offsetHeight;
+
+    const outer = (p, bodyH) => p.headerH + bodyH + BORDER;
+
+    // (2) structure region -- capped at half the stage; panes share its height.
+    const ceiling = Math.max(140, Math.floor(H / 2));
+    let regionH = 0;
+    for (const p of structure) regionH = Math.max(regionH, Math.min(outer(p, p.contentH), ceiling));
+
+    // (1) bookkeeping floors -- 2 content rows minimum.
+    const bookFloor = 2 * lineH + bodyPad;
+    for (const p of book) p.outerH = outer(p, Math.max(p.contentH, bookFloor));
+
+    // (3) code 15-line floor.
+    const codeFloor = code ? outer(code, floorL * lineH + bodyPad) : 0;
+
+    // Balance: right column = [region, book[0..k)], left = [code, book[k..)].
+    // Pick the split k (keeping declaration order) that minimises the taller
+    // column, so the stage is as short as the content allows.
+    const bh = book.map(p => p.outerH);
+    const sum = a => a.reduce((s, h) => s + h, 0);
+    const colH = (base, arr, hasBase) => {
+      const items = (hasBase ? 1 : 0) + arr.length;
+      return base + sum(arr) + gap * Math.max(0, items - 1);
+    };
+    let bestK = 0, bestStage = Infinity;
+    for (let k = 0; k <= book.length; k++) {
+      const right = colH(regionH, bh.slice(0, k), regionH > 0);
+      const left  = colH(codeFloor, bh.slice(k), !!code);
+      const stage = Math.max(right, left);
+      if (stage < bestStage) { bestStage = stage; bestK = k; }
+    }
+    const stageH = Math.min(bestStage, H);
+
+    // Place bookkeeping panels into their columns (structure stays in the region,
+    // code stays at the top of the left column).
+    for (const p of book.slice(0, bestK)) this.colRight.appendChild(p.el);
+    for (const p of book.slice(bestK))    this.colLeft.appendChild(p.el);
+
+    // Apply heights. Structure panes fill the fixed-height region (flex), so they
+    // stay constant and scroll internally; bookkeeping bodies pin a min-height.
+    this.stage.style.height = `${Math.round(stageH)}px`;
+    this.structureRegion.style.height = regionH > 0 ? `${Math.round(regionH)}px` : '';
+    for (const p of book) {
+      p.el.querySelector('.pac-panel-body').style.minHeight =
+        `${Math.round(p.outerH - p.headerH - BORDER)}px`;
+    }
+
+    // (4) code absorbs the left column's leftover slack -- but only up to the
+    // number of lines it actually HAS. It shows as many whole lines as fit the
+    // available height, floored at 15 (the Canvas minimum) and never more than the
+    // listing's length, so a short listing does not stretch into a tall panel of
+    // empty rows. Any slack beyond that stays as empty column space below it.
+    if (code) {
+      const leftBook = book.slice(bestK);
+      const leftUsed = sum(leftBook.map(p => p.outerH)) + gap * leftBook.length;
+      const avail   = Math.max(codeFloor, Math.round(stageH - leftUsed));
+      const maxLen  = Math.max(1, ...Object.values(code.spec.listings ?? {}).map(l => l.length));
+      const fit     = Math.floor((avail - code.headerH - BORDER - bodyPad) / lineH);
+      const lines   = Math.max(floorL, Math.min(maxLen, fit));
+      const body    = code.el.querySelector('.pac-panel-body');
+      body.style.height = `${Math.round(lines * lineH + bodyPad)}px`;
+      const codeEl = body.querySelector('.pac-code');
+      if (codeEl) codeEl.style.maxHeight = `${Math.round(lines * lineH)}px`;
     }
   }
 
-  /**
-   * Reserve every panel's height ONCE, from the maximum content it holds across
-   * the ENTIRE step sequence, so a step that is empty or shallow renders as
-   * reserved empty space rather than a smaller panel. Nothing below any panel
-   * moves as steps advance -- no reflow, ever. Measured up front by rendering
-   * each step's data for the panel and taking the tallest, then pinning the
-   * body's min-height. Panels that manage their own fixed viewport (CODE = 15
-   * lines, STREAM = 3 lines) are skipped -- their height is already constant.
-   * This is the general cure for the height-change bug class (collapsed empty
-   * cells, the parked-marker lane, an accumulating STREAM, a growing CALLSTACK).
-   * See AUTHORING.md "Stable layout".
-   */
-  reserveHeights() {
-    for (const [id, p] of this.panels) {
-      if (p.spec.type === 'code' || p.spec.type === 'stream') continue;
-      const bodyEl = p.el.querySelector('.pac-panel-body');
-      if (!bodyEl) continue;
-      bodyEl.style.minHeight = '';                 // reset before measuring
-      let maxH = 0;
-      for (const step of this.steps) {
-        p.ctx.anchors.clear();
-        p.renderer.render(bodyEl, step.panels?.[id], p.ctx, { lang: this.lang, step });
-        if (bodyEl.scrollHeight > maxH) maxH = bodyEl.scrollHeight;
+  /** Height the stage may occupy: the root's inner height minus the fixed footer
+   *  chrome (title, subtitle, open-window link, controls, narration, note) and
+   *  the stage's own margins. The ceiling for the layout; the stage usually hugs
+   *  a shorter balanced height and only reaches this on a short viewport. */
+  _availableStageHeight() {
+    const root = this.root, rp = getComputedStyle(root);
+    let avail = root.clientHeight - parseFloat(rp.paddingTop) - parseFloat(rp.paddingBottom);
+    for (const el of root.children) {
+      if (el === this.stage) continue;
+      const c = getComputedStyle(el);
+      if (c.display === 'none') continue;
+      avail -= el.offsetHeight + parseFloat(c.marginTop) + parseFloat(c.marginBottom);
+    }
+    const sm = getComputedStyle(this.stage);
+    avail -= parseFloat(sm.marginTop) + parseFloat(sm.marginBottom);
+    return Math.max(200, avail);
+  }
+
+  /** A structure pane that overflows its capped region scrolls to keep its active
+   *  element in view -- the same "follow the highlight" behaviour the CODE panel
+   *  has, so a student never hunts for the cell being modified (AUTHORING.md "The
+   *  structure region has a ceiling"). A pane that fits does nothing. */
+  _followActive() {
+    for (const [, p] of this.panels) {
+      if (p.kind !== 'structure') continue;
+      const body = p.el.querySelector('.pac-panel-body');
+      if (!body || body.scrollHeight <= body.clientHeight + 1) continue;
+      const target = body.querySelector('[data-role="active"], [data-role="compared"], [data-active="true"], .pac-marker');
+      if (!target) continue;
+      const br = body.getBoundingClientRect(), tr = target.getBoundingClientRect();
+      const offset = tr.top - br.top, margin = 24;
+      if (offset < margin || offset > body.clientHeight - margin - tr.height) {
+        body.scrollTop += offset - (body.clientHeight - tr.height) / 2;
       }
-      bodyEl.style.minHeight = `${maxH}px`;
     }
   }
 
@@ -1594,19 +1670,22 @@ class Engine {
     this.metricsEl= this.root.querySelector('.pac-metrics');
     this.progress = this.root.querySelector('.pac-progress');
 
-    if (s.columns) this.stage.dataset.cols = s.columns;
-
-    // A multi-row layout (more than the default two grid rows -- e.g. the race
-    // comparison's code / queue / strip stack per column) declares its own row
-    // proportions via `spec.stageRows` (a CSS grid-template-rows value). The
-    // stage then relaxes its two-row bound and fills the viewport above the
-    // pinned footer instead, still shrinking on a short viewport so the note is
-    // never pushed off screen (see AUTHORING.md "Stable layout"). Absent, the
-    // default bounded two-row grid is unchanged.
-    if (s.stageRows) {
-      this.stage.dataset.multirow = '';
-      this.stage.style.gridTemplateRows = s.stageRows;
-    }
+    // Two columns that panels FLOW across (AUTHORING.md "Panels flow across both
+    // columns"). The code panel anchors the top of the LEFT column at its 15-line
+    // floor; structure panels sit side by side in a height-capped region at the
+    // top of the RIGHT column; bookkeeping panels flow down the right column and
+    // the balancing overflow continues beneath the code panel in the left.
+    // layoutStage() measures and places everything ONCE (the master invariant).
+    // `columns`, `stageRows`, `tall`, and `full` are legacy grid hints, now
+    // ignored -- placement is derived from each panel's kind.
+    this.colLeft  = document.createElement('div');
+    this.colRight = document.createElement('div');
+    this.colLeft.className  = 'pac-col'; this.colLeft.dataset.side  = 'left';
+    this.colRight.className = 'pac-col'; this.colRight.dataset.side = 'right';
+    this.structureRegion = document.createElement('div');
+    this.structureRegion.className = 'pac-structure';
+    this.colRight.appendChild(this.structureRegion);
+    this.stage.append(this.colLeft, this.colRight);
 
     // Beginner profile is enforced here, not left to authorial restraint.
     const panels = (s.panels ?? []).slice();
@@ -1618,17 +1697,10 @@ class Engine {
     for (const p of panels) {
       const el = document.createElement('section');
       el.className = 'pac-panel';
-      el.dataset.type = p.type;          // lets CSS give accumulating panels (STREAM) a stable, scrolling cell
-      // A panel holding very little content (a two-value count/capacity strip)
-      // opts out of stretching to fill its tall grid cell: `compact: true` makes
-      // it top-align and size to content. See AUTHORING.md "Stable layout".
+      el.dataset.type = p.type;
       if (p.compact) el.dataset.compact = '';
-      // A full-width panel spans every column (grid-column: 1 / -1) -- e.g. a
-      // shared preamble sitting above a two-column comparison.
-      if (p.full) el.dataset.full = '';
-      // A tall panel spans every row of the first column (grid-row: 1 / -1) --
-      // e.g. a code listing beside a stack of smaller panels in the other column.
-      if (p.tall) el.dataset.tall = '';
+      const kind = panelKind(p);
+      el.dataset.kind = kind;
       // Default DISPLAY title per renderer when a panel gives none. The internal
       // renderer name stays CALLSTACK; only the student-facing label reads
       // "Function calls" (so it is not confused with an actual stack data
@@ -1637,7 +1709,11 @@ class Engine {
       el.innerHTML = `<div class="pac-panel-head"><span>${title}</span>
                         <span class="pac-panel-tools"></span></div>
                       <div class="pac-panel-body"></div>`;
-      this.stage.appendChild(el);
+      // Initial column by kind: code -> left, structure -> the shared region,
+      // book -> right. layoutStage() moves the balancing overflow to the left.
+      (kind === 'code' ? this.colLeft
+        : kind === 'structure' ? this.structureRegion
+        : this.colRight).appendChild(el);
       const r = RENDERERS[p.type];
       if (!r) throw new Error(`unknown panel type "${p.type}"`);
       const ctx = {
@@ -1648,7 +1724,7 @@ class Engine {
       };
       r.mount?.(el.querySelector('.pac-panel-body'), p, ctx,
                 el.querySelector('.pac-panel-tools'));
-      this.panels.set(p.id ?? p.type, { spec: p, el, renderer: r, ctx });
+      this.panels.set(p.id ?? p.type, { spec: p, el, renderer: r, ctx, kind });
     }
 
     this.overlay = new Overlay(this.stage);
@@ -1666,12 +1742,11 @@ class Engine {
       if (e.key === 'ArrowLeft')  this.prev();
     });
 
-    // The CODE line count follows the VIEWPORT: recompute on a real window
-    // resize (debounced), never on a content change. This is the only thing that
-    // re-fits the panel; steps/frames/tabs leave it constant.
+    // The layout follows the VIEWPORT: re-resolve on a real window resize
+    // (debounced), never on a content change. steps/frames/tabs leave it constant.
     window.addEventListener('resize', () => {
       clearTimeout(this._fitTimer);
-      this._fitTimer = setTimeout(() => { this.fitCodePanels(); this.render(); }, 120);
+      this._fitTimer = setTimeout(() => { this.layoutStage(); this.render(); }, 120);
     });
   }
 
@@ -1737,6 +1812,7 @@ class Engine {
                         data, p.ctx, { lang: this.lang, step });
     }
 
+    this._followActive();
     this.overlay.draw(step.arrows ?? [], this.panels);
 
     // Narration and notes are both SEGMENTED content: a plain string, or an
@@ -1787,6 +1863,30 @@ function take(gen, max) {
   const out = [];
   for (const v of gen) { out.push(v); if (out.length >= max) break; }
   return out;
+}
+
+/**
+ * How a panel is placed and sized by layoutStage (AUTHORING.md "Panels flow
+ * across both columns"):
+ *   - 'code'      -- the listing; anchors the top of the left column, 15-line floor.
+ *   - 'structure' -- a CELLS/NODES/CHART view of the data structure being watched;
+ *                    shares the height-capped region, side by side, follows active.
+ *   - 'book'      -- bookkeeping (callstack, stream, a compact strip): known-max
+ *                    content, 2-row floor, flows and balances across the columns.
+ * A panel may force its class with `structure: true|false`; otherwise a non-compact
+ * CELLS/NODES/CHART panel is structure and everything else is bookkeeping.
+ */
+function panelKind(p) {
+  if (p.type === 'code') return 'code';
+  if (p.structure === true)  return 'structure';
+  if (p.structure === false) return 'book';
+  if (p.type === 'callstack' || p.type === 'stream' || p.compact) return 'book';
+  // NODES/CHART draw the whole structure and default to structure; a CELLS panel
+  // is more often an auxiliary strip (pointer variables, an invariant readout)
+  // than the structure itself, so it defaults to bookkeeping and opts in with
+  // `structure: true` (the array/stack it IS the structure of).
+  if (p.type === 'nodes' || p.type === 'chart') return 'structure';
+  return 'book';
 }
 
 /** Restart a one-shot CSS pulse: drop the class, force reflow, re-add. */
@@ -1840,46 +1940,43 @@ function mountAnimation(spec, el = document.getElementById('pac')) {
 
 /* ds — A3 "Checking parentheses with a stack"
  *
- * Two parts, one continuous trace driven by main():
+ * A parenthesis scanner, built on a stack, in one continuous trace driven by
+ * main() over three short expressions -- each isolating one error:
  *
- *   PART 1 — the stack itself. A stack holding 5 1 3 4; pop the top, push a new
- *   value. push and pop are STEPPED INTO here, so the student sees their bodies
- *   once (their line 2-3 / 6-7 executions, each with a frame on the call stack
- *   and main's call line dimmed).
- *
- *   PART 2 — the application: a parenthesis scanner over three short
- *   expressions, each isolating one error. push and pop are now SUMMARIZED to a
- *   single step (the call line 19 / 24), because Part 1 already showed their
- *   insides. On a summarized call the frame STILL appears in Function calls with
- *   its parameter bound -- only the body is folded away, never the binding.
- *
- * The lesson is error DETECTION, not evaluation. Three errors:
  *   scan("a)(b")  -> TOO_MANY_RIGHT  (a stray ')' while the stack is empty)
  *   scan("[a)")   -> MISMATCH        (popped '[' is not the type ')' closes)
  *   scan("((a)")  -> TOO_MANY_LEFT   (a '(' left on the stack when the loop ends)
- * The payoff is the third: the loop ends with error still NONE, and the error is
- * only found by looking at the stack AFTER the loop -- the one error no in-loop
- * event can catch.
  *
- * The one NEW capability this animation adds is the vertical CELLS `column`:
- * cell [0] at the bottom, the stack growing upward, index labels [0]..[3] in a
- * fixed band on the RIGHT, and the stack_ix marker on the LEFT (▶), parking
- * BELOW cell [0] at the -1 sentinel. Everything else -- the index-pointer
- * contract, stale cells, the CALLSTACK, caller-line dimming, the bounded stage
- * -- is inherited unchanged from queues-count-vs-rear.
+ * The lesson is error DETECTION, not evaluation. The payoff is the third scan:
+ * the loop ends with error still NONE, and the error is found only by looking at
+ * the stack AFTER the loop -- the one error no in-loop event can catch.
  *
- * A stale cell here is HEALTHY: Part 1's 5 1 3 7 stay in the array, greyed,
- * through the scans until they are overwritten. Nothing corrupts memory; every
- * error is a syntax error in the student's input. NO memory-danger marker
- * anywhere. WATCH only: one trace, no gates; the insight is all narration/notes.
+ * The stack starts EMPTY: step 0 is four empty cells, stack_ix at -1 with its
+ * marker parked below cell [0]. push and pop are STEPPED INTO everywhere (never
+ * summarized) -- every call shows its body (the call line, then lines 2-3 for
+ * push or 6-7 for pop), with a push/pop frame on Function calls and BOTH callers
+ * (main and scan) dimmed while it runs. Five stepped-into calls in all.
+ *
+ * The NEW capability this animation introduced is the vertical CELLS `column`
+ * (the stack): cell [0] at the bottom, growing upward, index labels [0]..[3] in a
+ * fixed band on the RIGHT, and the stack_ix marker on the LEFT (caret ▶), parking
+ * BELOW cell [0] at the -1 sentinel. The expression and the stack are the two
+ * structure panels; the engine places them side by side (structure region).
+ *
+ * A stale cell is HEALTHY: after scan 2 pops the '[', it stays greyed in the
+ * array until scan 3 writes over it. Nothing corrupts memory; every error is a
+ * syntax error in the student's input. NO memory-danger marker anywhere. WATCH
+ * only: one trace, no gates; the insight is all narration and notes.
  *
  * matches() is NEVER stepped into -- its result is narrated. Line 13's three
  * initialisations run as ONE step. Lines 16 and 21 are isFull and isEmpty,
- * inlined; the narration names them as such (the lecture's vocabulary). */
+ * inlined; the narration names them as such (the lecture's vocabulary). Only two
+ * symbol types, ( ) and [ ]; the { } case and the TOO_DEEP error are left to the
+ * post-watch challenge. */
 
 const MAX = 4;
 
-/* One listing, three ds languages, line-aligned to a single 37-line grid, so
+/* One listing, three ds languages, line-aligned to a single 35-line grid, so
  * `line` is a plain number that resolves the same in every language. */
 const LISTINGS = {
   pseudo: [
@@ -1897,12 +1994,12 @@ const LISTINGS = {
     'scan(expr)',                                    // 12
     '    ix = 0,  stack_ix = -1,  error = NONE',     // 13
     '    while ix < length(expr) and error = NONE',  // 14
-    '        if expr[ix] is one of  (  [  {',        // 15
+    '        if expr[ix] is one of  (  [',           // 15
     '            if stack_ix = MAX - 1',             // 16
     '                error = TOO_DEEP',              // 17
     '            else',                              // 18
     '                push(expr[ix])',                // 19
-    '        else if expr[ix] is one of  )  ]  }',   // 20
+    '        else if expr[ix] is one of  )  ]',      // 20
     '            if stack_ix = -1',                  // 21
     '                error = TOO_MANY_RIGHT',        // 22
     '            else',                              // 23
@@ -1915,11 +2012,9 @@ const LISTINGS = {
     '    report(error)',                             // 30
     '',                                              // 31
     'main()',                                        // 32
-    '    pop()',                                     // 33
-    "    push('7')",                                 // 34
-    '    scan("a)(b")',                              // 35
-    '    scan("[a)")',                               // 36
-    '    scan("((a)")',                              // 37
+    '    scan("a)(b")',                              // 33
+    '    scan("[a)")',                               // 34
+    '    scan("((a)")',                              // 35
   ],
   java: [
     'void push(char c) {',                           //  1
@@ -1936,12 +2031,12 @@ const LISTINGS = {
     'void scan(String expr) {',                      // 12
     '    ix = 0;  stack_ix = -1;  error = NONE;',    // 13
     '    while (ix < expr.length() && error == NONE) {', // 14
-    '        if ("([{".indexOf(expr.charAt(ix)) >= 0) {', // 15
+    '        if ("([".indexOf(expr.charAt(ix)) >= 0) {',  // 15
     '            if (stack_ix == MAX - 1)',          // 16
     '                error = TOO_DEEP;',             // 17
     '            else',                              // 18
     '                push(expr.charAt(ix));',        // 19
-    '        } else if (")]}".indexOf(expr.charAt(ix)) >= 0) {', // 20
+    '        } else if (")]".indexOf(expr.charAt(ix)) >= 0) {', // 20
     '            if (stack_ix == -1)',               // 21
     '                error = TOO_MANY_RIGHT;',       // 22
     '            else {',                            // 23
@@ -1954,11 +2049,9 @@ const LISTINGS = {
     '    report(error); }',                          // 30
     '',                                              // 31
     'void main() {',                                 // 32
-    '    pop();',                                    // 33
-    "    push('7');",                                // 34
-    '    scan("a)(b");',                             // 35
-    '    scan("[a)");',                              // 36
-    '    scan("((a)"); }',                           // 37
+    '    scan("a)(b");',                             // 33
+    '    scan("[a)");',                              // 34
+    '    scan("((a)"); }',                           // 35
   ],
   cpp: [
     'void push(char c) {',                           //  1
@@ -1975,12 +2068,12 @@ const LISTINGS = {
     'void scan(string expr) {',                      // 12
     '    ix = 0;  stack_ix = -1;  error = NONE;',    // 13
     '    while (ix < expr.length() && error == NONE) {', // 14
-    '        if (strchr("([{", expr[ix])) {',        // 15
+    '        if (strchr("([", expr[ix])) {',         // 15
     '            if (stack_ix == MAX - 1)',          // 16
     '                error = TOO_DEEP;',             // 17
     '            else',                              // 18
     '                push(expr[ix]);',               // 19
-    '        } else if (strchr(")]}", expr[ix])) {', // 20
+    '        } else if (strchr(")]", expr[ix])) {',  // 20
     '            if (stack_ix == -1)',               // 21
     '                error = TOO_MANY_RIGHT;',       // 22
     '            else {',                            // 23
@@ -1993,43 +2086,37 @@ const LISTINGS = {
     '    report(error); }',                          // 30
     '',                                              // 31
     'int main() {',                                  // 32
-    '    pop();',                                    // 33
-    "    push('7');",                                // 34
-    '    scan("a)(b");',                             // 35
-    '    scan("[a)");',                              // 36
-    '    scan("((a)"); }',                           // 37
+    '    scan("a)(b");',                             // 33
+    '    scan("[a)");',                              // 34
+    '    scan("((a)"); }',                           // 35
   ],
 };
 
-/* ---- call-frame builders. `call` is the parked caller line (dimmed while a
- * callee runs). main has no locals; push binds c; pop and scan bind as shown. A
- * SUMMARIZED push/pop in Part 2 still pushes its frame (with c bound for push),
- * so the binding is never hidden -- only the body is folded to one step. ---- */
-const mainF = call    => ({ fn: 'main',  vars: [],                          call });
-const pushF = c       => ({ fn: 'push',  vars: [{ name: 'c', value: `'${c}'` }] });
-const popF  = ()      => ({ fn: 'pop',   vars: [] });
-const scanF = expr    => ({ fn: 'scan',  vars: [{ name: 'expr', value: `"${expr}"` }] });
+/* ---- call-frame builders. `call` is a parked caller line, dimmed while a
+ * callee runs. push and pop are stepped into inside scan, so their frame sits on
+ * top of main -> scan, and BOTH callers dim: main at its scan(...) line, scan at
+ * its push/pop line (19 or 24). ---- */
+const mainF = call        => ({ fn: 'main',  vars: [],                          call });
+const scanF = (expr, call) => ({ fn: 'scan',  vars: [{ name: 'expr', value: `"${expr}"` }], call });
+const pushF = c           => ({ fn: 'push',  vars: [{ name: 'c', value: `'${c}'` }] });
+const popF  = ()          => ({ fn: 'pop',   vars: [] });
 
 /* ---- teaching notes ---- */
 const SETUP_NOTE =
-  'A stack is a pile: you can only take the top item off, and you can only add to the top. That is ' +
-  'what LIFO means — last in, first out. stack_ix holds the index of the top element. The stack is ' +
-  'full right now: stack_ix is 3 and MAX is 4.';
-
-const POP_NOTE =
-  'Popping does not remove anything. It moves stack_ix down, and everything above it stops being part ' +
-  'of the stack. The greying is ours, for reading the picture; the program has only the array and ' +
-  'stack_ix.';
-
-const SCAN1_INIT_NOTE =
-  'The characters from the demo are still in the array. Setting stack_ix to -1 is what makes the stack ' +
-  'empty; nothing was erased. -1 means the index points at nothing.';
+  'A stack is a pile: you can only take the top item off, and you can only add to the top. That is what ' +
+  'LIFO means — last in, first out. stack_ix holds the index of the top element; -1 means the stack is ' +
+  'empty. MAX is 4, so it can hold at most four symbols.';
 
 const HOOK_NOTE =
   'Count the parentheses in a)(b: one left, one right. Balanced. A program that just counted them would ' +
   'accept this expression, and it is plainly wrong. The stack rejected it at the second character, ' +
   "because a stack asks a harder question than 'how many?' — it asks 'is there something open for this " +
   "to close?'";
+
+const POP_NOTE =
+  "Popping did not remove anything. stack_ix moved down, and the '[' stopped being part of the stack. " +
+  'The character is still sitting in the array — the greying is ours, for reading the picture. The ' +
+  'program has only the array and stack_ix.';
 
 const SILENT_NOTE =
   'Nothing was printed while the loop ran. The error was recorded in a variable and reported here, after ' +
@@ -2038,7 +2125,7 @@ const SILENT_NOTE =
 const MISMATCH_NOTE =
   'This is why the pop has to store what it removed. Counting symbols, or even matching them by position, ' +
   'is not enough — you have to compare the type of the closing symbol against the type of the opening ' +
-  'symbol it is closing. ([...]) and [{...}] are fine; [...) is not. You cannot mix and match.';
+  'symbol it is closing. ([...]) and [(...)] are fine; [...) is not. You cannot mix and match.';
 
 const SCAN3_ENDLOOP_NOTE =
   'The scanner is finished and it reported no error. Look at the stack before clicking on.';
@@ -2051,27 +2138,28 @@ const PAYOFF_NOTE =
   'loop has finished. A non-empty stack at the end means something was opened and never closed.';
 
 const CHALLENGE_NOTE =
-  "One error never fired in any of these three scans: TOO_DEEP, on line 17. MAX is 4 here, so this stack " +
-  'holds at most four unclosed symbols. What is the shortest expression that would trigger it — and what ' +
-  "does a 'too many levels' error mean for a real compiler, which has to pick some limit?";
+  'This scanner handles ( ) and [ ]. Your assignment also allows { }. What changes in the code — and what ' +
+  'does NOT change? Also: one error never fired in any of these three scans. MAX is 4 here, so this stack ' +
+  'holds at most four unclosed symbols. What is the shortest expression that would trigger TOO_DEEP on ' +
+  'line 17?';
 
 function* trace() {
-  const stack = ['5', '1', '3', '4'];   // the stack storage; never blanked
-  let stackIx = 3;                       // top of stack; -1 means empty
+  const stack = [null, null, null, null];   // the stack storage; starts empty
+  let stackIx = -1;                          // top of stack; -1 means empty
   let exprChars = [null, null, null, null];
-  let ix = -1;                           // scan's cursor; -1 = no scan (parked)
-  let popped = null;                     // last value pop() removed
+  let ix = -1;                               // scan's cursor; -1 = no scan (parked)
+  let popped = null;                         // last value pop() removed
   let error = 'NONE';
   const stream = [];
-  let curExpr = '';                      // the expression scan() is running now
-  let curMLine = 0;                      // main's call line for the running scan
+  let curExpr = '';                          // the expression scan() is running now
+  let curMLine = 0;                          // main's call line for the running scan
 
-  /* The expression as a marked CELLS row: one character per cell, [0]..[3]
-   * labels beneath, the ix marker (parked left of [0] when there is no scan).
-   * The character under examination this step is `compared`. */
+  /* The expression as a marked CELLS row: one character per cell, [0]..[3] labels
+   * beneath, the ix marker (parked left of [0] when there is no scan). The panel
+   * title names it, so the row carries no separate label. The character under
+   * examination this step is `compared`. */
   const exprPanel = compared => ({
     render: 'box',
-    rowLabel: 'expr',
     cells: exprChars.map((v, i) => {
       if (v == null)      return { value: '', role: 'empty' };
       if (i === compared) return { value: v, role: 'compared' };
@@ -2080,10 +2168,10 @@ function* trace() {
     markers: [{ label: 'ix', index: ix }],
   });
 
-  /* The stack as the NEW vertical column: cell [0] at the bottom, growing up.
-   * A cell above stack_ix that still holds a character is `stale` (greyed); a
-   * cell written THIS step is `active` (blue). The stack_ix marker sits on the
-   * left and parks below cell [0] at the -1 sentinel. */
+  /* The stack as the vertical column: cell [0] at the bottom, growing up. A cell
+   * above stack_ix that still holds a character is `stale` (greyed); a cell
+   * written THIS step is `active` (blue). The stack_ix marker sits on the left and
+   * parks below cell [0] at the -1 sentinel. */
   const stackPanel = active => ({
     render: 'column',
     cells: stack.map((v, i) => {
@@ -2095,47 +2183,67 @@ function* trace() {
     markers: [{ label: 'stack_ix', index: stackIx }],
   });
 
-  /* The compact state strip: ix, stack_ix, popped, error. `hot` gives the
+  /* The compact Variables strip: ix, stack_ix, popped, error. `hot` gives the
    * changing box the blue fill. stack_ix always shows its real value (the -1
    * sentinel included); ix and popped show the placeholder before they hold a
    * meaningful value. The error box reserves the width of the longest name
    * (TOO_MANY_RIGHT) so the strip never resizes. */
-  const statePanel = hot => ({
+  const varsPanel = hot => ({
     render: 'box',
     cells: [
-      { label: 'ix',       value: ix < 0 ? '' : ix,           role: ix < 0 ? 'empty' : (hot === 'ix' ? 'active' : undefined) },
-      { label: 'stack_ix', value: stackIx,                    role: hot === 'stack_ix' ? 'active' : undefined },
+      { label: 'ix',       value: ix < 0 ? '' : ix,             role: ix < 0 ? 'empty' : (hot === 'ix' ? 'active' : undefined) },
+      { label: 'stack_ix', value: stackIx,                      role: hot === 'stack_ix' ? 'active' : undefined },
       { label: 'popped',   value: popped == null ? '' : popped, role: popped == null ? 'empty' : (hot === 'popped' ? 'active' : undefined) },
-      { label: 'error',    value: error, minCh: 16,           role: hot === 'error' ? 'active' : undefined },
+      { label: 'error',    value: error, minCh: 16,             role: hot === 'error' ? 'active' : undefined },
     ],
   });
 
   const snap = ({ line, tag, narrate, note, frames, compared = null, active = null, hot = null, streamNew = false }) => ({
     line, tag, narrate, note,
-    parked: frames.slice(0, -1).map(f => f.call).filter(Boolean),
+    parked: frames.slice(0, -1).map(f => f.call).filter(v => v != null),
     panels: {
       expr:      exprPanel(compared),
       stack:     stackPanel(active),
-      state:     statePanel(hot),
+      vars:      varsPanel(hot),
       callstack: { frames: frames.map((f, i) => ({ fn: f.fn, vars: f.vars, active: i === frames.length - 1 })) },
       out:       { lines: stream.map((t, i) => ({ text: t, dir: 'out', isNew: streamNew && i === stream.length - 1 })) },
     },
   });
 
-  // Frames while the running scan's body executes: main (call line dimmed) then
-  // scan (active). scan carries no `call`, so its own line is the bright one.
+  // Frames while scan's OWN body runs (scan active, main's call line dimmed).
   const scanFrames = () => [mainF(curMLine), scanF(curExpr)];
+  // Frames while push/pop runs (that frame active; main AND scan both dimmed).
+  const pushFrames = (ch) => [mainF(curMLine), scanF(curExpr, 19), pushF(ch)];
+  const popFrames  = ()   => [mainF(curMLine), scanF(curExpr, 24), popF()];
 
-  /* ---------- Part 2 character patterns (push/pop SUMMARIZED) ---------- */
+  /* ---- stepped-into push and pop (shown in full, every time) ---- */
 
-  // Opening symbol with room: 14 / 15(true) / 16(false) / 19(push) / 27.
+  // push(expr[ix]) -- the call line 19, then the body lines 2 and 3.
+  function* doPush(p, ch, n) {
+    yield snap({ line: 19, tag: 'call', narrate: n.call, compared: p, frames: scanFrames() });
+    stackIx += 1;
+    yield snap({ line: 2, tag: 'assign', narrate: n.raise, hot: 'stack_ix', frames: pushFrames(ch) });
+    stack[stackIx] = ch;
+    yield snap({ line: 3, tag: 'store', narrate: n.write, active: stackIx, frames: pushFrames(ch) });
+  }
+
+  // pop() -- the call line 24, then the body lines 6 and 7.
+  function* doPop(p, n) {
+    yield snap({ line: 24, tag: 'call', narrate: n.call, compared: p, frames: scanFrames() });
+    popped = stack[stackIx];
+    yield snap({ line: 6, tag: 'assign', narrate: n.read, hot: 'popped', frames: popFrames() });
+    stackIx -= 1;                                            // the popped cell becomes stale
+    yield snap({ line: 7, tag: 'assign', narrate: n.drop, note: n.dropNote, hot: 'stack_ix', frames: popFrames() });
+  }
+
+  /* ---- character patterns ---- */
+
+  // Opening symbol with room: 14 / 15(true) / 16(false) / 19,2,3 (push) / 27.
   function* charOpen(p, ch, n) {
     yield snap({ line: 14, tag: 'test', narrate: n.loop, frames: scanFrames() });
     yield snap({ line: 15, tag: 'test', narrate: n.isOpen, compared: p, frames: scanFrames() });
     yield snap({ line: 16, tag: 'test', narrate: n.isFull, compared: p, frames: scanFrames() });
-    stackIx += 1; stack[stackIx] = ch;
-    yield snap({ line: 19, tag: 'push', narrate: n.push, compared: p, active: stackIx, hot: 'stack_ix',
-                 frames: [mainF(curMLine), scanF(curExpr), pushF(ch)] });
+    yield* doPush(p, ch, n);
     ix = p + 1;
     yield snap({ line: 27, tag: 'inc', narrate: n.inc, hot: 'ix', frames: scanFrames() });
   }
@@ -2162,15 +2270,13 @@ function* trace() {
   }
 
   // Closing symbol, stack non-empty: 14 / 15(false) / 20(true) / 21(false) /
-  // 24(pop) / 25 / [26 if mismatch] / 27.
+  // 24,6,7 (pop) / 25 / [26 if mismatch] / 27.
   function* charClosePop(p, n, mismatch) {
     yield snap({ line: 14, tag: 'test', narrate: n.loop, frames: scanFrames() });
     yield snap({ line: 15, tag: 'test', narrate: n.notOpen, compared: p, frames: scanFrames() });
     yield snap({ line: 20, tag: 'test', narrate: n.isClose, compared: p, frames: scanFrames() });
     yield snap({ line: 21, tag: 'test', narrate: n.notEmpty, compared: p, frames: scanFrames() });
-    popped = stack[stackIx]; stackIx -= 1;    // the popped cell becomes stale
-    yield snap({ line: 24, tag: 'pop', narrate: n.pop, compared: p, hot: 'popped',
-                 frames: [mainF(curMLine), scanF(curExpr), popF()] });
+    yield* doPop(p, n);
     yield snap({ line: 25, tag: 'test', narrate: n.matches, compared: p, frames: scanFrames() });
     if (mismatch) {
       error = 'MISMATCH';
@@ -2180,16 +2286,16 @@ function* trace() {
     yield snap({ line: 27, tag: 'inc', narrate: n.inc, hot: 'ix', frames: scanFrames() });
   }
 
-  // scan() call: previous scan's locals are gone, so expr blanks, ix parks, and
-  // error resets. The frame is not pushed yet (main only), like Part 1's calls.
+  // scan() call: a fresh scan, so expr blanks, ix parks, error resets. The frame
+  // is not pushed yet (main only), and stack_ix keeps whatever the last scan left.
   function* scanCall(mLine, expr) {
-    curMLine = mLine; curExpr = expr;       // `expr` is the RAW expression, no quotes
+    curMLine = mLine; curExpr = expr;
     exprChars = [null, null, null, null]; ix = -1; error = 'NONE';
     yield snap({ line: mLine, tag: 'call', narrate: `main calls scan with the expression "${expr}".`, frames: [mainF()] });
   }
 
   // scan() line 13: the three initialisations as ONE step. expr loads, ix -> 0,
-  // stack_ix -> -1 (every stack cell goes stale, the marker parks below [0]).
+  // stack_ix -> -1 (the marker parks below cell [0]).
   function* scanInit(narrate, note) {
     exprChars = curExpr.split('').concat([null, null, null, null]).slice(0, 4);
     ix = 0; stackIx = -1; error = 'NONE';
@@ -2204,39 +2310,18 @@ function* trace() {
     yield snap({ line: 30, tag: 'report', narrate: 'report prints the error that was recorded.', note: reportNote, streamNew: true, frames: scanFrames() });
   }
 
-  /* ================= STEP 0 — the initial stack, nothing executed ========= */
+  /* ================= STEP 0 — the empty stack, nothing executed ========= */
   yield snap({
     line: null, tag: 'init',
-    narrate: 'A stack holding four characters. Only the top one, 4, can be reached — stack_ix points at it.',
+    narrate: 'An empty stack. stack_ix is -1 — it points at nothing yet — so the stack holds no symbols.',
     note: SETUP_NOTE,
     frames: [mainF()],
   });
 
-  /* ================= PART 1 — pop, then push (stepped into) =============== */
-
-  // OP A — main line 33: pop()  (removes the top, 4)
-  yield snap({ line: 33, tag: 'call', narrate: 'main calls pop to take the top element off the stack.', frames: [mainF()] });
-  popped = stack[stackIx];   // '4'
-  yield snap({ line: 6, tag: 'assign', narrate: 'popped is assigned the top element, 4.', hot: 'popped', frames: [mainF(33), popF()] });
-  stackIx -= 1;              // 3 -> 2; cell [3] becomes stale
-  yield snap({ line: 7, tag: 'assign',
-    narrate: 'stack_ix drops to 2. 3 is the top element now. The 4 is still sitting in the array — nothing erased it.',
-    note: POP_NOTE, hot: 'stack_ix', frames: [mainF(33), popF()] });
-
-  // OP B — main line 34: push('7')  (over the stale 4)
-  yield snap({ line: 34, tag: 'call', narrate: "main calls push with the value '7'.", frames: [mainF()] });
-  stackIx += 1;             // 2 -> 3
-  yield snap({ line: 2, tag: 'assign', narrate: 'stack_ix rises to 3 — that is where the new element goes.', hot: 'stack_ix', frames: [mainF(34), pushF('7')] });
-  stack[stackIx] = '7';    // cell [3] takes '7', member again
-  yield snap({ line: 3, tag: 'store', narrate: "'7' is written over the 4 that used to be there.", active: 3, frames: [mainF(34), pushF('7')] });
-
-  /* ================= PART 2 — the scanner =============================== */
-
-  // ---- SCAN 1 — main line 35: scan("a)(b")  ->  TOO_MANY_RIGHT ----
-  yield* scanCall(35, 'a)(b');
+  /* ================= SCAN 1 — scan("a)(b")  ->  TOO_MANY_RIGHT ========== */
+  yield* scanCall(33, 'a)(b');
   yield* scanInit(
-    'ix starts at the first character, stack_ix goes to -1 — the stack is empty — and error is set to NONE.',
-    SCAN1_INIT_NOTE);
+    'ix starts at the first character, stack_ix is -1 — the stack is empty — and error is set to NONE.');
   yield* charIgnore(0, {
     loop:     'ix is 0, which is less than 4, and error is NONE, so the scanner reads the next character.',
     notOpen:  "'a' is not an opening symbol.",
@@ -2254,15 +2339,17 @@ function* trace() {
   });
   yield* exitWithError('too many right parentheses', SILENT_NOTE);
 
-  // ---- SCAN 2 — main line 36: scan("[a)")  ->  MISMATCH ----
-  yield* scanCall(36, '[a)');
+  /* ================= SCAN 2 — scan("[a)")  ->  MISMATCH ================= */
+  yield* scanCall(34, '[a)');
   yield* scanInit(
     'The next expression loads: [ a ) fills cells 0 to 2, and cell 3 stays empty. ix is 0, stack_ix is -1, error is NONE.');
   yield* charOpen(0, '[', {
     loop:   'ix is 0, less than 3, and error is NONE, so the scan begins.',
     isOpen: "'[' is an opening symbol.",
     isFull: 'stack_ix is -1, not 3, so the stack is not full. This test is isFull.',
-    push:   "'[' is an opening symbol, so it goes on the stack. stack_ix moves from -1 to 0.",
+    call:   "'[' is an opening symbol, so scan calls push to put it on the stack.",
+    raise:  'stack_ix rises from -1 to 0 — that is where the new symbol goes.',
+    write:  "'[' is written into cell 0. It is on the stack now.",
     inc:    'ix advances to 1.',
   });
   yield* charIgnore(1, {
@@ -2276,7 +2363,10 @@ function* trace() {
     notOpen:  "')' is not an opening symbol.",
     isClose:  "')' is a closing symbol.",
     notEmpty: 'stack_ix is 0, not -1, so the stack is not empty. This test is isEmpty.',
-    pop:      "The stack is not empty, so pop it. popped holds '[' — the symbol this ')' is supposed to be closing.",
+    call:     'The stack is not empty, so scan calls pop.',
+    read:     "popped takes the top symbol, '[' — the symbol this ')' is supposed to be closing.",
+    drop:     "stack_ix drops back to -1. The '[' is no longer on the stack.",
+    dropNote: POP_NOTE,
     matches:  "'[' and ')' are not the same type.",
     setErr:   'error is set to MISMATCH.',
     errNote:  MISMATCH_NOTE,
@@ -2284,22 +2374,26 @@ function* trace() {
   }, true);
   yield* exitWithError('mismatched parentheses');
 
-  // ---- SCAN 3 — main line 37: scan("((a)")  ->  TOO_MANY_LEFT (the payoff) ----
-  yield* scanCall(37, '((a)');
+  /* ================= SCAN 3 — scan("((a)")  ->  TOO_MANY_LEFT (payoff) == */
+  yield* scanCall(35, '((a)');
   yield* scanInit(
     'The last expression loads: ( ( a ) fills all four cells. ix is 0, stack_ix is -1, error is NONE.');
   yield* charOpen(0, '(', {
     loop:   'ix is 0, less than 4, and error is NONE.',
     isOpen: "'(' is an opening symbol.",
     isFull: 'stack_ix is -1, not 3, so the stack is not full. This test is isFull.',
-    push:   "'(' goes on the stack. stack_ix moves from -1 to 0.",
+    call:   "'(' is an opening symbol, so scan calls push.",
+    raise:  'stack_ix rises from -1 to 0.',
+    write:  "'(' is written into cell 0, over the '[' that scan 2 left behind.",
     inc:    'ix advances to 1.',
   });
   yield* charOpen(1, '(', {
     loop:   'ix is 1, less than 4, and error is NONE.',
     isOpen: "'(' is an opening symbol.",
     isFull: 'stack_ix is 0, not 3, so the stack is not full.',
-    push:   "A second '(' goes on the stack. stack_ix moves from 0 to 1 — two opening symbols are on the stack now.",
+    call:   'A second opening symbol, so scan calls push again.',
+    raise:  'stack_ix rises from 0 to 1.',
+    write:  "'(' is written into cell 1. Two opening symbols are on the stack now.",
     inc:    'ix advances to 2.',
   });
   yield* charIgnore(2, {
@@ -2313,7 +2407,9 @@ function* trace() {
     notOpen:  "')' is not an opening symbol.",
     isClose:  "')' is a closing symbol.",
     notEmpty: 'stack_ix is 1, not -1, so the stack is not empty. This test is isEmpty.',
-    pop:      "The stack is not empty, so pop it. popped holds '(' — the opening symbol this ')' should close.",
+    call:     'The stack is not empty, so scan calls pop.',
+    read:     "popped takes the top symbol, '(' — the opening symbol this ')' should close.",
+    drop:     "stack_ix drops from 1 to 0. One opening symbol is still on the stack.",
     matches:  "'(' and ')' are the same type. No error — this closing symbol is correct.",
     inc:      'ix advances to 4.',
   }, false);
@@ -2342,26 +2438,19 @@ const SPEC = {
   columns: 2,
   languages: ['pseudo', 'java', 'cpp'],
 
-  // Left column: the code listing, spanning every row. Right column: five
-  // stacked panels (expr, stack, state, Function calls, output). Every panel's
-  // height is reserved by the engine to its per-run maximum (reserveHeights) --
-  // the output stream to 3 lines, the state strip to its widest error name -- so
-  // no panel changes height and nothing below shifts as steps advance. The STACK
-  // row is PINNED (190px) so all four cells AND the parked -1 sentinel below cell
-  // [0] are always visible: an `auto` row shrinks below its content when the
-  // stage is tight, and clipping the sentinel would hide a core teaching point.
-  // The other rows are `auto`: at the 1920x1080 design target all five panels fit
-  // fully; on a short viewport the accumulating panels (Function calls, output)
-  // yield first while the pinned stack and the pinned-height note stay visible,
-  // with the open-in-own-window link as the escape hatch.
-  stageRows: 'auto 190px auto auto auto',
-
+  // Placement is derived by the engine from each panel's kind (AUTHORING.md
+  // "Panels flow across both columns"): the code listing anchors the left column
+  // at its 15-line floor; the two structure panels -- the expression and the
+  // stack -- sit side by side in the capped region at the top of the right
+  // column; and the bookkeeping panels (Variables, Function calls, output) flow
+  // down, the balancing overflow continuing beneath the code. Everything resolves
+  // once on load and holds, so nothing moves as steps advance.
   panels: [
-    { type: 'code',      id: 'code',      title: 'checking parentheses', tall: true,
+    { type: 'code',      id: 'code',      title: 'checking parentheses',
       listings: LISTINGS, labels: { pseudo: 'pseudocode', java: 'Java', cpp: 'C++' } },
-    { type: 'cells',     id: 'expr',      title: 'the expression' },
-    { type: 'cells',     id: 'stack',     title: 'the stack' },
-    { type: 'cells',     id: 'state',     title: 'what we store', compact: true },
+    { type: 'cells',     id: 'expr',      title: 'the expression', structure: true },
+    { type: 'cells',     id: 'stack',     title: 'the stack',      structure: true },
+    { type: 'cells',     id: 'vars',      title: 'Variables', compact: true },
     { type: 'callstack', id: 'callstack', title: 'Function calls' },
     { type: 'stream',    id: 'out',       title: 'output', compact: true },
   ],

@@ -122,67 +122,48 @@ body {
 .pac-openwin:focus-visible { outline: 2px solid var(--warn); outline-offset: 2px; }
 .pac-openwin[hidden] { display: none; }
 
-/* ---- layout: the bounded stage ----
- * A grid of panels that sizes to its content and never grows the page. The top
- * row holds the fixed 15-line code viewport; the bottom row is at least
- * --stage-row-bottom (a shallow call stack + strip) but GROWS to fit a taller
- * reserved panel (e.g. a call stack whose deepest state is main -> ADD -> INSERT
- * -- three frames -- reserved fully visible by the engine). Because every panel's
- * height is reserved to its per-run maximum (reserveHeights), the content height
- * is constant, so the stage never changes height as steps advance. It shrinks on
- * a short viewport (flex-shrink) so the note is never pushed off screen.
- * See AUTHORING.md "Stable layout". */
+/* ---- layout: panels flow across two columns ----
+ * The stage is two side-by-side columns whose exact height is resolved ONCE by
+ * the engine (layoutStage) and then held -- the master invariant. The code panel
+ * anchors the top of the LEFT column at its 15-line floor; structure panels sit
+ * side by side in a height-capped region at the top of the RIGHT column; and
+ * bookkeeping panels flow down the right column, the balancing overflow
+ * continuing beneath the code panel in the left. The engine sets the stage
+ * height, the structure-region height, each bookkeeping body's min-height, and
+ * the code body height inline, so nothing changes as steps advance. See
+ * AUTHORING.md "Panels flow across both columns" / "structure region ceiling" /
+ * "bookkeeping 2-row floor". */
 .pac-stage {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  grid-template-rows: var(--stage-row-top) minmax(var(--stage-row-bottom), auto);
-  grid-auto-rows: minmax(0, 1fr);
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;        /* both columns take the resolved stage height */
   gap: var(--gap);
   position: relative;          /* anchor origin for the arrow overlay */
-  flex: 0 1 auto;              /* hug content; never grow past it */
-  min-height: 0;               /* allow the grid to shrink below content size */
-  max-height: calc(100vh - 300px);
+  flex: 0 0 auto;              /* height is set by the engine, not by flex */
+  min-height: 0;
   overflow: hidden;            /* the bound is hard; panels scroll, not the stage */
 }
-.pac-stage[data-cols="1"] { grid-template-columns: 1fr; }
-.pac-stage[data-cols="2"] { grid-template-columns: 1fr 1fr; }
+/* A column is a vertical stack of panels; both share the stage width equally. */
+.pac-col {
+  display: flex; flex-direction: column; gap: var(--gap);
+  flex: 1 1 0; min-width: 0; min-height: 0; overflow: hidden;
+}
+.pac-col > .pac-panel { flex: 0 0 auto; }   /* panels keep their resolved heights */
 
-/* A multi-row layout (spec.stageRows) supplies its own grid-template-rows inline
- * and opts out of the two-row bound: the stage instead fills the space above the
- * pinned footer and shrinks on a short viewport, so the note is never pushed off
- * screen. The footer (controls + narration + note) stays a constant height, so
- * this still satisfies "the controls never move as steps advance". Design target
- * 1920x1080; the open-in-own-window link is the escape hatch on very short
- * viewports. See AUTHORING.md "Stable layout". */
-/* A multi-row stage sizes to its content (flex:0 1 auto -- every panel's height
- * is reserved, so the content height is constant and the stage never grows as
- * steps advance). The cap only bounds it on a short viewport, where it shrinks
- * (flex-shrink) and panels scroll so the note is never pushed off screen. */
-.pac-stage[data-multirow] { flex: 0 1 auto; max-height: calc(100vh - 300px); }
-
-/* A full-width panel spans every column -- a shared preamble above a two-column
- * comparison. It sits on its own grid row (the first `auto` row when the row
- * template leads with one). */
-.pac-panel[data-full] { grid-column: 1 / -1; }
-
-/* A tall panel occupies the whole first column, spanning every row -- e.g. a
- * code listing beside a stack of smaller panels stacked in the second column. */
-.pac-panel[data-tall] { grid-column: 1; grid-row: 1 / -1; }
-
-/* A panel that holds very little (e.g. a two-value count/capacity strip) opts
- * out of stretching to fill its tall grid cell: it top-aligns and sizes to its
- * content, so it reads as a compact strip rather than a tall box with a void.
- * See AUTHORING.md "Panels fill their grid cells; don't oversize a cell". */
-.pac-panel[data-compact] { align-self: start; max-height: 100%; }
-
-/* The CALLSTACK panel top-aligns its frames. Its height is RESERVED to the
- * deepest stack the animation reaches (engine reserveHeights, which pins the
- * body's min-height to the tallest frame set across all steps) -- so every
- * frame's contents are fully visible, and a shallow stack (just main) shows the
- * frames at the top with the reserved space empty below, never a smaller panel.
- * The reservation, not a per-type cap, sets the size. See AUTHORING.md
- * "Stable layout". */
-.pac-panel[data-type="callstack"] { align-self: start; }
+/* The structure region: structure panes side by side, sharing the region height
+ * the engine pins (<= half the stage). Each pane fills the region and scrolls
+ * internally, following its active element, if its content overflows. */
+.pac-structure {
+  display: flex; flex-direction: row; gap: var(--gap);
+  min-width: 0; min-height: 0; flex: 0 0 auto;
+}
+.pac-structure:empty { display: none; }
+/* A single structure pane fills the region width. When several share the region,
+ * each is sized to its own CONTENT width (a wide horizontal array and a narrow
+ * vertical column each keep exactly the width they need, neither squeezed into
+ * wrapping) and they sit side by side from the left. */
+.pac-structure > .pac-panel { flex: 0 0 auto; }
+.pac-structure > .pac-panel:only-child { flex: 1 1 auto; }
 
 /* ---- panel chrome ---- */
 .pac-panel {
@@ -306,14 +287,13 @@ body {
 
 /* ---- CODE panel ----
  * The viewport is --code-lines (15) lines as a FLOOR, not a fixed value: the
- * engine (fitCodePanels) grows it to as many WHOLE lines as fit the column,
- * capped at the listing's length, resolved ONCE from the viewport on load and on
- * window resize and then held constant -- it never changes with steps, frames, or
- * the language tab. The height below is the 15-line floor used before the engine
- * measures (and as the fallback). `align-self: start` pins the panel to the top
- * of its grid area. See AUTHORING.md "Stable layout" and code.js for the
- * follow-the-highlight scrolling. */
-.pac-panel[data-type="code"] { align-self: start; }
+ * engine (layoutStage) grows it to as many WHOLE lines as fit the left column
+ * once every other panel is placed, capped at the listing's length, resolved
+ * ONCE on load and on window resize and then held constant -- it never changes
+ * with steps, frames, or the language tab. The engine sets the body height and
+ * the listing's whole-line max-height inline; the height below is the pre-measure
+ * fallback. See AUTHORING.md "Panels flow across both columns" and code.js for
+ * the follow-the-highlight scrolling. */
 .pac-panel[data-type="code"] .pac-panel-body {
   height: calc(var(--code-lines) * var(--code-line-h) + var(--body-pad));
   flex: none;
@@ -347,16 +327,11 @@ body {
 .pac-code-num { color: var(--text-dim); width: 2.2em; text-align: right; margin-right: 12px; user-select: none; }
 
 /* ---- STREAM panel ---- */
-/* Stable layout: the STREAM accumulates output as steps advance, so it has a
- * FIXED height of --stream-lines (3) text lines, reserved from the first step
- * whether or not anything has printed yet -- an empty STREAM is an empty box of
- * the same size, not a collapsed strip. Lines beyond three scroll internally
- * (stream.js auto-scrolls to the newest at the bottom). The height never changes
- * as lines arrive, so nothing below it moves. See AUTHORING.md "Stable layout". */
-.pac-panel[data-type="stream"] .pac-panel-body {
-  height: calc(var(--stream-lines) * var(--stream-line-h) + var(--body-pad));
-  flex: none;
-}
+/* The STREAM accumulates output as steps advance. As a bookkeeping panel it is
+ * reserved by the engine (layoutStage) to its per-run MAXIMUM number of lines
+ * (with a 2-row floor), so an empty STREAM at step 0 is already a box of that
+ * final size and nothing below it shifts as lines arrive. stream.js keeps the
+ * newest line scrolled into view. See AUTHORING.md "bookkeeping 2-row floor". */
 .pac-stream { font-family: var(--mono); font-size: 12.5px; line-height: 1.7; }
 .pac-stream-line { white-space: pre; }
 .pac-stream-line.dir-in   { color: var(--warn); }
@@ -420,12 +395,21 @@ body {
  * its index, its label below the caret; two markers on the SAME cell render side
  * by side (flex row) rather than overlapping. All markers are solid/stored --
  * there is no "derived" marker style. */
-.pac-cells[data-marked] { align-items: start; gap: 8px; }
+/* A marked index array never WRAPS: [0][1][2][3] is one row, always -- a wrapped
+ * index array is the index-vs-position confusion rendered as a layout. If the row
+ * is wider than its panel it scrolls horizontally rather than folding. This also
+ * gives the panel a natural single-row width, so a structure pane holding it is
+ * sized to fit all its cells side by side. */
+.pac-cells[data-marked] { align-items: start; gap: 8px; flex-wrap: nowrap; }
 /* Columns are wide enough that TWO labelled markers (front + rear on the same
  * cell) sit side by side without overlapping each other or the neighbouring
  * cells' labels. */
 .pac-cell-col { display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 72px; }
 .pac-cell-col .pac-cell { min-width: 44px; padding: 3px 9px; }
+/* A single-marker array needs no room for a second caret under a cell, so its
+ * columns are narrower -- letting a short array (e.g. the expression) sit beside
+ * another structure panel. */
+.pac-cells[data-marked][data-single] .pac-cell-col { min-width: 52px; }
 /* The row's name (e.g. "contents"), once at the left, aligned with the cell
  * boxes so it reads as the array's label. */
 .pac-cells-name {

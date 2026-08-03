@@ -520,6 +520,54 @@ more room without pushing anything off screen, it should — a fixed size that l
 visible hole is as much a defect as one that overflows. **Floors and ceilings, not
 fixed values.**
 
+## Panels flow across both columns
+
+The author declares panels in **reading order** — what the student watches first,
+bookkeeping and machinery last — and the **engine places them** (`layoutStage`). It
+resolves ONCE on load (and on a real window resize) and holds; nothing re-flows as
+steps advance.
+
+- Panels flow in declaration order down the **right** column. When the right column
+  reaches the balanced height, the remainder continues in the **left** column,
+  **beneath the code panel**.
+- The **code panel** anchors the top of the left column and takes its **15-line
+  floor**, never the full column height. Earlier builds pinned code to the full
+  left-column height, so a five-panel right column stretched it to 37 lines, most of
+  them dead weight — that is the bug this rule fixes.
+- **Resolution order** (this is what makes the ceilings below bite): bookkeeping
+  panels claim their minimums first; the structure region takes what it needs up to
+  its ceiling; the code panel takes its 15-line floor; any slack left over goes to
+  the code panel — the only panel that always has more listing it could usefully
+  show (but never past the listing's own length: a short listing does not stretch).
+
+### The structure region has a ceiling
+
+**Structure panels** are the CELLS/NODES/CHART panels showing the data structure the
+animation is about — the thing whose shape the student reads. They are the only
+panels whose height cannot be predicted from the content file. A NODES/CHART panel is
+a structure panel by default; a CELLS panel is bookkeeping by default (it is more
+often an auxiliary strip) and opts in with `structure: true` — the array or stack it
+*is* the structure of.
+
+- The structure region occupies at most **half the stage height** — a share, not a
+  pixel count, so it scales with the viewport.
+- **Multiple structure panels share that region HORIZONTALLY, side by side — never
+  stacked.** Two views of one structure (a heap's tree view and its array view) must
+  stay side by side or the correspondence that is the whole lesson is lost. A single
+  structure panel fills the region width; several are each sized to their own content
+  width.
+- A structure that does not fit its ceiling **scrolls internally** and **follows its
+  active element** — the same "follow the highlight" the code panel has, so a student
+  never hunts for the cell being modified. *Known limitation, accepted for now:*
+  scrolling a large tree loses its shape; revisit at `heap-is-this-valid` /
+  `trees-bst-operations`. The open-in-own-window link is the escape hatch until then.
+
+### Bookkeeping panels get a 2-row floor
+
+State strips, CALLSTACK, and STREAM have known maximum content, so size them to it —
+with a floor of **2 rows** so a panel never collapses to a sliver. The floor is on
+the content area: title, padding, and 2 rows of content is the minimum.
+
 ## Stable layout — bounded stage, internal scrolling, pinned footer
 
 The animation must fit on screen and never reflow. Resolution-independent by
@@ -532,10 +580,10 @@ content. Do NOT hardcode to a screen resolution.
 **Every panel scrolls internally within its grid cell.**
 
 - **CODE: 15 lines is the FLOOR, not a fixed value.** Show as many whole lines as fit
-  the column, never fewer than 15 (the Canvas-iframe floor), never more than the
-  listing has. **Whole lines only** — never a half-height row clipped at the bottom
-  edge. The panel's bottom edge should meet the bottom of the adjacent column so no
-  dead gap opens above the controls. **Resolve on load, hold constant**: switching
+  the left column once the other panels are placed, never fewer than 15 (the
+  Canvas-iframe floor), never more than the listing has (a short listing does not
+  stretch into a tall panel of empty rows). **Whole lines only** — never a
+  half-height row clipped at the bottom edge. **Resolve on load, hold constant**: switching
   language tabs or advancing steps must not change it. The highlighted line
   auto-scrolls into view, holding roughly the middle with context above and below —
   **and only when it would otherwise reach an edge.** Scrolling on every step is as

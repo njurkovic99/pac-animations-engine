@@ -428,7 +428,7 @@ export default {
     { type: 'code',      id: 'code',      title: 'a queue, front + rear', tall: true,
       listings: LISTINGS, labels: { pseudo: 'pseudocode', java: 'Java', cpp: 'C++' } },
     { type: 'cells',     id: 'contents',  title: 'the array' },
-    { type: 'cells',     id: 'state',     title: 'what we store', compact: true },
+    { type: 'cells',     id: 'state',     title: 'Variables', compact: true },
     { type: 'callstack', id: 'callstack', title: 'Function calls' },
     { type: 'stream',    id: 'out',       title: 'output', compact: true },
   ],

@@ -55,6 +55,11 @@ export function render(body, data, ctx) {
   // Marked mode: a `box` grid with index-pointer markers below the cell row.
   const markers = mode === 'box' && data?.markers ? data.markers : null;
   if (markers) { wrap.dataset.marked = ''; } else { delete wrap.dataset.marked; }
+  // A single-marker array uses narrower columns (there is never a pair of markers
+  // to sit side by side under one cell), so a short array fits more panels beside
+  // it. Two-or-more-marker arrays keep the wider column so front + rear on the
+  // same cell never overlap.
+  if (markers && markers.length <= 1) { wrap.dataset.single = ''; } else { delete wrap.dataset.single; }
 
   // A row label names the whole row once, to the LEFT of the cells (marked mode).
   if (markers && data.rowLabel) {
@@ -70,8 +75,13 @@ export function render(body, data, ctx) {
   // bands reserve the exact same heights as a real cell -- the marker lane then
   // begins at the same y here as over any cell. A marker moving from -1 onto a
   // cell therefore travels laterally only, never vertically.
+  // The parked lane is ALWAYS present in marked mode (not only when a marker is
+  // currently parked), so the cells never shift left as a marker leaves the -1
+  // sentinel and the panel's width never changes across steps -- the width
+  // analogue of the master invariant. Its box and index bands are invisible (they
+  // only reserve height); the marker track holds any parked markers, or nothing.
   const parked = markers ? markers.filter(m => m.index == null || m.index < 0) : [];
-  if (parked.length) {
+  if (markers) {
     const col = document.createElement('div');
     col.className = 'pac-cell-col pac-cell-parked';
     const box = document.createElement('div');
