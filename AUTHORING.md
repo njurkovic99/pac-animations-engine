@@ -568,6 +568,60 @@ State strips, CALLSTACK, and STREAM have known maximum content, so size them to 
 with a floor of **2 rows** so a panel never collapses to a sliver. The floor is on
 the content area: title, padding, and 2 rows of content is the minimum.
 
+### STREAM is declared last
+
+STREAM is what the program *emits*; every other non-code panel is state the student
+*inspects*. Output reads as a continuation of the code that produced it, so declare
+the STREAM panel **last** — after every structure and bookkeeping panel. The column
+flow then places it at the end, which is the left column beneath the code panel once
+the right column is full. This is a preference expressed through declaration order,
+not a special case: where balancing puts it elsewhere, that is acceptable.
+
+## Width rules — height is scarce, width is not
+
+The height rules allocate vertical space strictly, because it costs the student
+scrolling. The width rules are the opposite temperament: **don't WASTE horizontal
+space, and degrade gracefully when there is less of it.** All resolve ONCE on load
+(they may change on a real window resize) and then hold — a panel's width never
+changes as steps advance, exactly like its height.
+
+1. **Structure panels size to content, then left-align.** A CELLS/NODES panel takes
+   the width its content needs — cells at their fixed size, the marker lane, the
+   index band, padding — and no more. It does NOT stretch to fill the column. Content
+   left-aligns; leftover width at the right stays empty. Do not spread the slack as
+   padding between cells: that makes a small structure look sparse and, worse, makes
+   cell spacing depend on the viewport.
+2. **Panels sharing a row sit adjacent, each at its own natural width.** Two
+   structure panels in the region sit next to each other from the left, each as wide
+   as it needs — not a 50/50 split. They DO share the row's **height** (tops and
+   bottoms align; the row is as tall as the tallest panel), so the row reads as
+   deliberate, not ragged.
+3. **Fixed-content panels take their natural width.** The Variables strip, CALLSTACK,
+   and STREAM are each exactly as wide as their widest content across the whole run
+   (per the master invariant), never the full column. This applies to every such
+   panel — pointer-variable boxes and invariant readouts included, not only the
+   obvious strips.
+4. **The code panel takes all the width it is given.** It is the one panel whose
+   content genuinely benefits from width; a long line wrapping or scrolling
+   horizontally is far worse than a wide panel. So the right column is sized to its
+   widest panel and the code panel fills whatever the left column has left. Code is
+   the exception to rules 1–3, not the model for them.
+5. **Narrow viewports.** When the available width will not fit a row's panels side by
+   side, that row **stacks vertically** instead of shrinking — shrinking a structure
+   below its natural width clips cells. Resolved once on load; it may change on a real
+   resize but never as steps advance.
+
+## Panel count — a soft ceiling for `standard`
+
+`beginner` caps at 3 panels, enforced in the engine. `standard` has a **soft ceiling
+of 6** — not enforced, but an animation reaching for a 7th must justify it, and the
+first two moves to try are **merging related state into one panel** or **cutting a
+panel that is not earning its place**. A screen the student cannot hold in their head
+teaches less than a smaller one, however correct each panel is. Never add a panel to
+make a labelling point: a distinct row inside an existing panel, with a highlight, is
+nearly always enough (the `n + level` invariant row lives inside Variables, not in a
+panel of its own).
+
 ## Stable layout — bounded stage, internal scrolling, pinned footer
 
 The animation must fit on screen and never reflow. Resolution-independent by

@@ -212,8 +212,10 @@ export default {
     { type: 'code',   id: 'code', title: 'fib(n, level)',
       listings: LISTINGS, labels: { pseudo: 'pseudocode', java: 'Java', cpp: 'C++' } },
     { type: 'nodes',  id: 'tree', title: 'Call tree' },
+    { type: 'cells',  id: 'inv',  title: 'Variables' },
+    // STREAM is declared LAST so the column flow puts it beneath the code panel
+    // (it is what the program EMITS, reading as a continuation of the code).
     { type: 'stream', id: 'out',  title: 'Program output' },
-    { type: 'cells',  id: 'inv',  title: 'Invariant' },
   ],
 
   initialTrace: 'correct',

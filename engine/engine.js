@@ -120,34 +120,65 @@ export class Engine {
     const book      = items.filter(p => p.kind === 'book');
 
     const H = this._availableStageHeight();
+    const stageW = this.stage.clientWidth;
 
-    // Reserve each panel's body to its per-step MAXIMUM content height, so it
-    // never changes size as steps advance (the cure for the height-change bug
-    // class: collapsed empty cells, a growing CALLSTACK, an accumulating STREAM).
+    // Reserve each panel's per-step MAXIMUM content HEIGHT and its natural WIDTH,
+    // so neither changes as steps advance (the master invariant, both axes). The
+    // natural width is read with the panel forced to `max-content` -- as wide as
+    // the content wants, with nothing wrapping.
     const measure = p => {
       const body = p.el.querySelector('.pac-panel-body');
-      body.style.minHeight = ''; body.style.height = '';
+      body.style.minHeight = ''; body.style.height = ''; p.el.style.width = '';
       const codeEl = body.querySelector('.pac-code');
       if (codeEl) codeEl.style.maxHeight = '';
       const id = p.spec.id ?? p.spec.type;
-      let m = 0;
+      let mH = 0, mW = 0;
       for (const step of this.steps) {
         p.ctx.anchors.clear();
+        p.el.style.width = 'max-content';
         p.renderer.render(body, step.panels?.[id], p.ctx, { lang: this.lang, step });
-        m = Math.max(m, body.scrollHeight);
+        mW = Math.max(mW, p.el.offsetWidth);
+        mH = Math.max(mH, body.scrollHeight);
       }
+      p.el.style.width = '';
       p.headerH  = p.el.querySelector('.pac-panel-head').offsetHeight;
-      p.contentH = m;
+      p.contentH = mH;
+      p.contentW = mW;
     };
     for (const p of [...structure, ...book]) measure(p);
     if (code) code.headerH = code.el.querySelector('.pac-panel-head').offsetHeight;
 
-    const outer = (p, bodyH) => p.headerH + bodyH + BORDER;
+    // The code panel's WIDEST line (across every language tab) is its minimum
+    // width -- a long line must never wrap or scroll horizontally (rule 4).
+    let codeMinW = 0;
+    if (code) {
+      const codeEl = code.el.querySelector('.pac-panel-body .pac-code');
+      for (const lang of Object.keys(code.spec.listings ?? {})) {
+        code.ctx.anchors.clear();
+        code.renderer.render(code.el.querySelector('.pac-panel-body'), { line: null }, code.ctx, { lang, step: this.steps[0] });
+        if (codeEl) codeMinW = Math.max(codeMinW, codeEl.scrollWidth);
+      }
+      codeMinW += bodyPad + BORDER;
+    }
 
-    // (2) structure region -- capped at half the stage; panes share its height.
+    const outer = (p, bodyH) => p.headerH + bodyH + BORDER;
+    const sum   = a => a.reduce((s, h) => s + h, 0);
+
+    // Structure region orientation (rule 5): panes sit side by side unless that
+    // would leave the code panel narrower than its widest line; then they stack
+    // vertically. Resolved once, here -- it never changes as steps advance.
+    const structW = structure.length ? sum(structure.map(p => p.contentW)) + gap * (structure.length - 1) : 0;
+    const stacked = structure.length > 1 && (structW + gap + codeMinW > stageW);
+
+    // (2) structure region -- each pane capped at half the stage height.
     const ceiling = Math.max(140, Math.floor(H / 2));
+    const paneH   = p => Math.min(outer(p, p.contentH), ceiling);
     let regionH = 0;
-    for (const p of structure) regionH = Math.max(regionH, Math.min(outer(p, p.contentH), ceiling));
+    if (structure.length) {
+      regionH = stacked
+        ? sum(structure.map(paneH)) + gap * (structure.length - 1)
+        : Math.max(...structure.map(paneH));
+    }
 
     // (1) bookkeeping floors -- 2 content rows minimum.
     const bookFloor = 2 * lineH + bodyPad;
@@ -156,14 +187,13 @@ export class Engine {
     // (3) code 15-line floor.
     const codeFloor = code ? outer(code, floorL * lineH + bodyPad) : 0;
 
-    // Balance: right column = [region, book[0..k)], left = [code, book[k..)].
-    // Pick the split k (keeping declaration order) that minimises the taller
-    // column, so the stage is as short as the content allows.
+    // Balance HEIGHT: right column = [region, book[0..k)], left = [code,
+    // book[k..)]. Pick the split k (keeping declaration order) that minimises the
+    // taller column, so the stage is as short as the content allows.
     const bh = book.map(p => p.outerH);
-    const sum = a => a.reduce((s, h) => s + h, 0);
     const colH = (base, arr, hasBase) => {
-      const items = (hasBase ? 1 : 0) + arr.length;
-      return base + sum(arr) + gap * Math.max(0, items - 1);
+      const n = (hasBase ? 1 : 0) + arr.length;
+      return base + sum(arr) + gap * Math.max(0, n - 1);
     };
     let bestK = 0, bestStage = Infinity;
     for (let k = 0; k <= book.length; k++) {
@@ -179,14 +209,26 @@ export class Engine {
     for (const p of book.slice(0, bestK)) this.colRight.appendChild(p.el);
     for (const p of book.slice(bestK))    this.colLeft.appendChild(p.el);
 
-    // Apply heights. Structure panes fill the fixed-height region (flex), so they
-    // stay constant and scroll internally; bookkeeping bodies pin a min-height.
+    // ---- apply HEIGHTS ----
     this.stage.style.height = `${Math.round(stageH)}px`;
-    this.structureRegion.style.height = regionH > 0 ? `${Math.round(regionH)}px` : '';
-    for (const p of book) {
-      p.el.querySelector('.pac-panel-body').style.minHeight =
-        `${Math.round(p.outerH - p.headerH - BORDER)}px`;
+    if (structure.length) {
+      this.structureRegion.toggleAttribute('data-stacked', stacked);
+      if (stacked) {
+        this.structureRegion.style.height = '';
+        for (const p of structure)
+          p.el.querySelector('.pac-panel-body').style.minHeight = `${Math.round(paneH(p) - p.headerH - BORDER)}px`;
+      } else {
+        this.structureRegion.style.height = `${Math.round(regionH)}px`;
+        for (const p of structure) p.el.querySelector('.pac-panel-body').style.minHeight = '';
+      }
     }
+    for (const p of book) {
+      p.el.querySelector('.pac-panel-body').style.minHeight = `${Math.round(p.outerH - p.headerH - BORDER)}px`;
+    }
+
+    // ---- apply WIDTHS (rules 1-3): every non-code panel takes its own natural
+    // width and left-aligns; the code panel fills its column via CSS. ----
+    for (const p of [...structure, ...book]) p.el.style.width = `${Math.round(p.contentW)}px`;
 
     // (4) code absorbs the left column's leftover slack -- but only up to the
     // number of lines it actually HAS. It shows as many whole lines as fit the
@@ -344,6 +386,12 @@ export class Engine {
     if (s.profile === 'beginner' && panels.length > 3) {
       console.warn(`beginner profile caps panels at 3; dropping ${panels.length - 3}`);
       panels.length = 3;
+    }
+    // `standard` has a SOFT ceiling of 6 (AUTHORING.md "Panel count"): not
+    // enforced, but a 7th panel should be justified -- try merging related state
+    // into one panel or cutting one that isn't earning its place first.
+    if ((s.profile ?? 'standard') === 'standard' && panels.length > 6) {
+      console.warn(`standard profile: ${panels.length} panels exceeds the soft ceiling of 6 — consider merging or cutting a panel`);
     }
 
     for (const p of panels) {
