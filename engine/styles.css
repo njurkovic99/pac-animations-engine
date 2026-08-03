@@ -343,8 +343,19 @@ body {
 @keyframes pac-blink { 50% { opacity: 0; } }
 
 /* ---- CELLS panel ---- */
+/* A compact VARIABLES strip flows horizontally and WRAPS to a new row only when
+ * the current row is full (AUTHORING.md "The variables strip flows horizontally")
+ * -- the base wrap. An INDEXED array (a non-compact box: the list's backing
+ * store) must NOT wrap: a wrapped [0][1][2] / [3][4] is the index-vs-position
+ * confusion drawn as a layout, so it stays one row and SCROLLS horizontally when
+ * it outgrows its column (the panel body is overflow:auto). Marked arrays already
+ * nowrap (below). */
 .pac-cells { display: flex; flex-wrap: wrap; gap: 6px; }
-.pac-cells[data-render="row"] { flex-direction: column; gap: 3px; }
+.pac-panel:not([data-compact]) .pac-cells[data-render="box"]:not([data-marked]) { flex-wrap: nowrap; }
+/* The `row` render mode (a labelled `name value` cell) also flows HORIZONTALLY and
+ * wraps only when full -- it is a variables strip, never a vertical list (that was
+ * the old state-strip layout the horizontal-flow rule replaces). */
+.pac-cells[data-render="row"] { flex-direction: row; flex-wrap: wrap; gap: 6px; }
 .pac-cell {
   border: 1px solid var(--border); border-radius: 4px;
   padding: 5px 9px; font-family: var(--mono); font-size: 12.5px;
@@ -384,7 +395,7 @@ body {
 .pac-cell[data-role="stale"]    { opacity: .4; border-color: transparent; }
 
 .pac-cells[data-render="row"] .pac-cell {
-  display: flex; justify-content: space-between; text-align: left; min-width: 0;
+  display: flex; align-items: baseline; gap: 8px; text-align: left;
 }
 .pac-cells[data-render="row"] .pac-cell-label { display: inline; }
 
@@ -579,10 +590,14 @@ body {
 .pac-frame-var[data-role="done"] { opacity: .45; }
 
 /* ---- NODES panel ---- */
-/* The node diagram sizes to its own natural width (height + viewBox aspect), so
- * the panel takes the width the structure needs (AUTHORING.md "Width rules"),
- * capped at the column so it never overflows. */
-.pac-nodes { display: block; max-width: 100%; }
+/* The node diagram renders at its NATURAL pixel size (width + height set on the
+ * SVG). The panel is pinned to that width up to its column budget (Width rules);
+ * a diagram wider or taller than the panel is not scaled down or clipped -- the
+ * panel body (overflow:auto) SCROLLS both axes and _followActive keeps the active
+ * node, or the root at step 0, in view (AUTHORING.md "No panel may exceed the
+ * viewport width"). No max-width: scaling a call tree to fit makes it an
+ * unreadable smear; scrolling keeps every node full-size and reachable. */
+.pac-nodes { display: block; }
 .pac-node-box {
   fill: var(--bg); stroke: var(--border); stroke-width: 1;
   transition: fill .15s, stroke .15s;

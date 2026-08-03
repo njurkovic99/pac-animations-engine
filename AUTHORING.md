@@ -617,6 +617,40 @@ often an auxiliary strip) and opts in with `structure: true` — the array or st
   scrolling a large tree loses its shape; revisit at `heap-is-this-valid` /
   `trees-bst-operations`. The open-in-own-window link is the escape hatch until then.
 
+### No panel may exceed the viewport width
+
+Cut-off content is a hard failure — the student cannot scroll to it, pan to it, or
+see it at all, unlike *scrolled* content which is always reachable. So:
+
+- **The sum of a row's panel widths, plus gaps, never exceeds the stage width**,
+  resolved on load. Every right-column panel is capped at the width left over once
+  the code keeps its widest line; a panel wider than its cap is **not clipped** — it
+  keeps its natural content and **scrolls internally** (the panel body is
+  `overflow:auto`).
+- A wide **call tree** (or any NODES diagram) renders at its natural pixel size and
+  **scrolls in both axes**, following the active node — it is never scaled down to an
+  unreadable smear, and never clipped at a panel or viewport edge. At **step 0**, with
+  nothing active yet, a tree centres on its **root**, the origin of execution the
+  opening note points at.
+- An **indexed array** (a non-compact CELLS box) does not wrap when narrowed — a
+  wrapped `[0][1][2] / [3][4]` is the index-vs-position confusion drawn as a layout —
+  it stays one row and scrolls.
+
+### The Variables strip flows horizontally
+
+Variable boxes flow left to right, filling each row before starting a new one. A new
+row starts **only when the next box will not fit** the available width; never stack
+vertically by default, and never wrap while space remains on the current row. fib's
+`n, level, depth, N` is four boxes on one row; a queue's `front, rear, ch` is three
+on one row. This is the same for the `box` (label above value) and `row` (label
+beside value) cell layouts — both flow horizontally.
+
+**Only true variables belong in a Variables strip.** A derived expression — fib's
+`n + level` — is not a variable and does not get a box; the relationship it expresses
+(the invariant `n + level = N`) is taught in a note and in narration that points at
+the values already on screen (the tree prints `level` and `depth` on every node), not
+by adding a computed cell to a panel named Variables.
+
 ### Bookkeeping panels get a 2-row floor
 
 State strips, CALLSTACK, and STREAM have known maximum content, so size them to it —
@@ -698,7 +732,13 @@ content. Do NOT hardcode to a screen resolution.
   once the other panels are placed. The 15-line floor applies **only when the listing
   is longer than 15**: a 9-line listing produces a 9-line panel (never padded to 15
   with blank rows), a 37-line listing shows at least 15 and as many more as fit. The
-  panel never renders a blank row below the last line of code. **Whole lines only** — never a
+  panel never renders a blank row below the last line of code. `listing length` is the
+  **currently displayed** language's line count, not the max across languages — a
+  9-line pseudo listing is 9 rows even if the Java variant is 12. Switching the
+  language tab **re-runs the layout** (a user action, like a resize), so a longer
+  variant grows the panel *then*, never mid-trace; the panel WIDTH still measures
+  across all languages so a long line never wraps and the width does not jump on
+  switch. **Whole lines only** — never a
   half-height row clipped at the bottom edge, and never a sliver of the next line
   peeking in at the top. This is a sub-pixel trap: a *unitless* line-height (12.5px ×
   1.65 = 20.625px) is fractional, and scrollTop rounds to whole pixels, so no matter

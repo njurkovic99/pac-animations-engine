@@ -54,8 +54,16 @@ export function render(body, data, ctx) {
 
   const xs = [...pos.values()].map(p => p.x), ys = [...pos.values()].map(p => p.y);
   const W = Math.max(...xs) + w / 2 + PAD, H = Math.max(...ys) + h + PAD + 12;
+  // Render at NATURAL size (1:1 with the viewBox), width AND height both set, so
+  // a diagram wider or taller than its panel SCROLLS internally rather than
+  // scaling down to a smear or clipping at the edge (AUTHORING.md "No panel may
+  // exceed the viewport width"). The engine caps the panel to its column and the
+  // body (overflow:auto) scrolls both axes; _followActive keeps the active node --
+  // or the root, at step 0 -- in view. Never a fixed pixel cap here: capping the
+  // height was what clipped the root off the top.
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-  svg.setAttribute('height', Math.min(H, 440));
+  svg.setAttribute('width', W);
+  svg.setAttribute('height', H);
 
   const edges = (data.edges ?? impliedEdges(data.nodes)).map(e => {
     const a = pos.get(e.from), b = pos.get(e.to);
