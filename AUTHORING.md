@@ -549,8 +549,10 @@ during `queues-count-vs-rear` — every one caught in review rather than by the 
 | Index labels bounced as cells filled | empty cells rendered collapsed | cells are a fixed size for every role |
 | Markers jumped down when leaving -1 | parked zone had no index label above it | the index band spans the parked zone at full height |
 | Controls moved on the step that printed output | STREAM sized to content | STREAM has a fixed line count from step 0 |
-| Panel breathed on every call and return | CALLSTACK sized to content | fixed to the deepest stack reached |
-| Dead gap above the controls | code panel pinned to exactly 15 lines | 15 is a floor; the panel fills the column |
+| Panel breathed on every call and return | CALLSTACK sized to content | capped at its 2-frame ceiling, scrolls past it |
+| Blank rows below the last line of code | code padded to 15 lines | floor is min(15, listing length); a short listing shows in full |
+| Output panel swallowed the column | STREAM sized to its full 18-line max | capped at its line ceiling, scrolls past it |
+| Panel stretched with an internal void | a panel grown to fill leftover column space | only code absorbs slack (up to its listing); leftover stays empty |
 
 **When adding any renderer or panel, ask: can this change size between steps? If yes,
 it is wrong.** Reserving space that is sometimes empty is always correct and always
@@ -577,21 +579,21 @@ steps advance.
   left-column height, so a five-panel right column stretched it to 37 lines, most of
   them dead weight — that is the bug this rule fixes.
 - **Resolution order** (this is what makes the ceilings below bite): bookkeeping
-  panels claim their minimums first; the structure region takes what it needs up to
-  its ceiling; the code panel takes its 15-line floor; any slack left over goes to
-  the code panel — the only panel that always has more listing it could usefully
-  show (but never past the listing's own length: a short listing does not stretch).
-- **Bottom alignment.** The stage is a bounded box and both columns fill its height,
-  so a shorter column would leave a ragged gap below its last panel. Each column has
-  one *filler* that absorbs the slack so the two column bottoms land on the same y:
-  the **left** column's filler is the **code panel body** (it grows to fill the
-  column while the listing inside stays clipped to whole lines — any remainder is
-  blank space below the listing, never a clipped line); the **right** column's is the
-  **structure region** (it grows the same way, capped at its half-stage ceiling). A
-  filler only grows the *shorter* column up to the taller one — it never inflates the
-  stage, which is still driven by the taller column's real content. A right column
-  with no structure region (all bookkeeping) has no filler and keeps its natural
-  bottom; the call stack is never used as a filler (see CALLSTACK).
+  panels claim their sizes first (each sized to content, capped where noted); the
+  structure region takes what it needs up to its ceiling; the code panel takes its
+  floor; any slack left over in the left column goes to the code panel — the only
+  panel that always has more listing it could usefully show (but never past the
+  listing's own length: a short listing does not stretch).
+- **No panel stretches to fill leftover space.** Only the code panel absorbs slack,
+  and only up to its listing's length. Once every panel has taken its content size
+  and the code panel has grown to show as much of its listing as fits, any space
+  still left over stays **EMPTY at the bottom of the column**. Empty space below the
+  last panel is correct; a panel stretched with an internal void is not. The two
+  columns therefore usually have *ragged* bottoms, and that is fine — the stage is
+  driven by the taller column's real content, and the shorter column simply ends
+  where its content ends. (The structure region is bounded by its ceiling, never
+  grown to fill; the STREAM is capped and scrolls, never grown to fill; the call
+  stack is capped and scrolls, never grown to fill.)
 
 ### The structure region has a ceiling
 
@@ -691,10 +693,12 @@ content. Do NOT hardcode to a screen resolution.
 
 **Every panel scrolls internally within its grid cell.**
 
-- **CODE: 15 lines is the FLOOR, not a fixed value.** Show as many whole lines as fit
-  the left column once the other panels are placed, never fewer than 15 (the
-  Canvas-iframe floor), never more than the listing has (a short listing does not
-  stretch into a tall panel of empty rows). **Whole lines only** — never a
+- **CODE: 15 lines is the FLOOR, and the floor is `min(15, listing length)`.** Show
+  `min(listing length, lines that fit)` — as many whole lines as fit the left column
+  once the other panels are placed. The 15-line floor applies **only when the listing
+  is longer than 15**: a 9-line listing produces a 9-line panel (never padded to 15
+  with blank rows), a 37-line listing shows at least 15 and as many more as fit. The
+  panel never renders a blank row below the last line of code. **Whole lines only** — never a
   half-height row clipped at the bottom edge, and never a sliver of the next line
   peeking in at the top. This is a sub-pixel trap: a *unitless* line-height (12.5px ×
   1.65 = 20.625px) is fractional, and scrollTop rounds to whole pixels, so no matter
@@ -708,8 +712,16 @@ content. Do NOT hardcode to a screen resolution.
   **and only when it would otherwise reach an edge.** Scrolling on every step is as
   disorienting as never scrolling. This matters most where a `main()` driver sits 20
   lines from the functions it calls.
-- **STREAM / CALLSTACK / any accumulating panel:** fixed cell sized to the maximum
-  the animation reaches, internal scroll, newest content scrolled into view.
+- **STREAM: height sizes to its known maximum, then caps.** An animation's output is
+  fully determined by its trace, so the line count is a *known* maximum — size to it
+  and fix it from step 0 (master invariant), exactly like any bounded panel. But that
+  maximum can be a large share of the column (fib emits ~18 lines; A3 emits 3), so
+  past a ceiling (`STREAM_CEILING` lines) the panel **caps and scrolls internally**,
+  keeping the newest line in view, rather than dominating the column. **Width is
+  still full-column** (output line length is not predictable) — height is known and
+  bounded, width is not, and the two dimensions get different treatment deliberately.
+- **CALLSTACK / any unbounded-depth panel:** fixed cell capped at its ceiling,
+  internal scroll, newest content (the running frame) scrolled into view.
 
 **Panels fill their grid cells; don't oversize a cell for little content.** A
 two-value panel is a compact strip, not a tall boxed panel with a void. Content

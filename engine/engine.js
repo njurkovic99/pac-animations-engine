@@ -28,6 +28,7 @@ const RENDERERS = {
 const MAX_STEPS = 5000;
 const AUTOPLAY_MS = 900;
 const CALLSTACK_CEILING = 2;   // frames visible before the CALLSTACK scrolls
+const STREAM_CEILING    = 8;   // output lines visible before the STREAM scrolls
 
 // Default student-facing panel titles per renderer (used when a panel declares
 // no `title`). The CALLSTACK renderer displays as "Function calls" -- the
@@ -170,6 +171,14 @@ export class Engine {
       if (lineEl) codeLineH = lineEl.getBoundingClientRect().height || lineH;
     }
 
+    // The code panel shows min(listing length, lines that fit) -- the 15-line
+    // FLOOR applies ONLY when the listing is longer than 15 (AUTHORING.md "CODE:
+    // 15 lines is the FLOOR"). A 9-line listing yields a 9-line panel: the floor
+    // never pads a short listing with blank rows. So the effective floor is
+    // min(15, listing length).
+    const maxLen   = code ? Math.max(1, ...Object.values(code.spec.listings ?? {}).map(l => l.length)) : 0;
+    const codeFloorLines = Math.min(floorL, maxLen);
+
     const outer = (p, bodyH) => p.headerH + bodyH + BORDER;
     const sum   = a => a.reduce((s, h) => s + h, 0);
 
@@ -193,9 +202,10 @@ export class Engine {
     const bookFloor = 2 * lineH + bodyPad;
     for (const p of book) p.outerH = outer(p, Math.max(p.contentH, bookFloor));
 
-    // (3) code 15-line floor -- an INTEGER 15 whole lines, measured (ceil so the
-    // last line's sub-pixel remainder is inside the box, never clipped).
-    const codeFloor = code ? outer(code, Math.ceil(floorL * codeLineH) + bodyPad) : 0;
+    // (3) code floor -- min(15, listing length) whole lines, measured (ceil so the
+    // last line's sub-pixel remainder is inside the box, never clipped). A short
+    // listing floors at its own length, not 15 (item "15-line FLOOR is min").
+    const codeFloor = code ? outer(code, Math.ceil(codeFloorLines * codeLineH) + bodyPad) : 0;
 
     // Balance HEIGHT: right column = [region, book[0..k)], left = [code,
     // book[k..)]. Pick the split k (keeping declaration order) that minimises the
@@ -219,21 +229,6 @@ export class Engine {
     for (const p of book.slice(0, bestK)) this.colRight.appendChild(p.el);
     for (const p of book.slice(bestK))    this.colLeft.appendChild(p.el);
 
-    // Bottom alignment. The stage is a fixed box and BOTH columns fill it, so the
-    // shorter column would otherwise leave a ragged gap below its last panel. The
-    // left column already fills via the code panel (below); the right column fills
-    // the same way through its structure region -- it grows to swallow the slack
-    // below the last right-column panel, so its bottom edge lands on the left
-    // column's (AUTHORING.md "Bottom alignment"). Capped at the region ceiling, so
-    // structure still never dominates; any residual is left as space. Side-by-side
-    // regions only -- a stacked (narrow) region is its own vertical flow.
-    let regionFillH = regionH;
-    if (structure.length && !stacked) {
-      const rightContent = colH(regionH, bh.slice(0, bestK), regionH > 0);
-      const deficit = stageH - rightContent;
-      if (deficit > 0) regionFillH = Math.min(regionH + deficit, ceiling);
-    }
-
     // ---- apply HEIGHTS ----
     this.stage.style.height = `${Math.round(stageH)}px`;
     if (structure.length) {
@@ -243,19 +238,22 @@ export class Engine {
         for (const p of structure)
           p.el.querySelector('.pac-panel-body').style.minHeight = `${Math.round(paneH(p) - p.headerH - BORDER)}px`;
       } else {
-        this.structureRegion.style.height = `${Math.round(regionFillH)}px`;
+        this.structureRegion.style.height = `${Math.round(regionH)}px`;
         for (const p of structure) p.el.querySelector('.pac-panel-body').style.minHeight = '';
       }
     }
     for (const p of book) {
       const body = p.el.querySelector('.pac-panel-body');
       const bodyH = `${Math.round(p.outerH - p.headerH - BORDER)}px`;
-      // The CALLSTACK is capped: a FIXED height (with flex:none, or flex-basis:0
-      // would ignore it) so a stack past the ceiling scrolls rather than growing
-      // the panel. Other bookkeeping has a bounded maximum, so a min-height
-      // reservation is enough.
-      if (p.spec.type === 'callstack') { body.style.height = bodyH; body.style.flex = 'none'; body.style.minHeight = ''; }
-      else { body.style.minHeight = bodyH; body.style.height = ''; body.style.flex = ''; }
+      // The CALLSTACK and the STREAM are capped panels: a FIXED height (with
+      // flex:none, or flex-basis:0 would ignore it) so content past the ceiling
+      // scrolls rather than growing the panel -- a deep stack past its 2-frame
+      // ceiling, or output past its STREAM_CEILING line ceiling. Both keep their
+      // newest content in view (the renderer scrolls to it). Other bookkeeping has
+      // a bounded maximum, so a min-height reservation is enough.
+      if (p.spec.type === 'callstack' || p.spec.type === 'stream') {
+        body.style.height = bodyH; body.style.flex = 'none'; body.style.minHeight = '';
+      } else { body.style.minHeight = bodyH; body.style.height = ''; body.style.flex = ''; }
     }
 
     // ---- apply WIDTHS (rules 1-3): every non-code panel takes its own natural
@@ -276,24 +274,19 @@ export class Engine {
       const leftBook = book.slice(bestK);
       const leftUsed = sum(leftBook.map(p => p.outerH)) + gap * leftBook.length;
       const avail   = Math.max(codeFloor, Math.round(stageH - leftUsed));
-      const maxLen  = Math.max(1, ...Object.values(code.spec.listings ?? {}).map(l => l.length));
-      // The LISTING shows as many WHOLE lines as fit `avail`, floored at 15 and
-      // capped at the listing length -- a short listing never gains empty rows
-      // (AUTHORING.md "the code never stretches into blank rows"). viewH is that
-      // whole-line height (ceil so no line is a sliver -- item "whole lines only").
+      // The code is the ONE panel that absorbs the left column's slack, and only
+      // up to its listing's length (item "no panel stretches to fill"). It shows
+      // min(listing length, lines that fit), floored at min(15, listing length) --
+      // a short listing shows in full (no blank rows), a long one shows >= 15 and
+      // as many more as fit. Any space still left after that stays EMPTY at the
+      // bottom of the column; the body is sized to the lines shown, never stretched.
       const fit     = Math.floor((avail - code.headerH - BORDER - bodyPad) / codeLineH);
-      const lines   = Math.max(floorL, Math.min(maxLen, fit));
+      const lines   = Math.max(codeFloorLines, Math.min(maxLen, fit));
+      // viewH is the whole-line height (ceil so no line is a sliver -- "whole lines
+      // only"); the body is exactly that plus its padding, nothing more.
       const viewH   = Math.ceil(lines * codeLineH);
       const body    = code.el.querySelector('.pac-panel-body');
-      // The BODY fills the left column so its bottom lines up with the right
-      // column's (AUTHORING.md "Bottom alignment") -- the mirror of the structure
-      // region filling the right column. The listing is clipped to viewH (whole
-      // lines); any sub-line remainder falls as blank space BELOW the listing,
-      // never a clipped line and never a ragged gap below the panel. When the code
-      // is the taller column (avail == its floor) there is no slack and the body
-      // is exactly the whole-line height -- so a small stack does not inflate it.
-      const bodyH   = Math.max(viewH + bodyPad, avail - code.headerH - BORDER);
-      body.style.height = `${Math.round(bodyH)}px`;
+      body.style.height = `${viewH + bodyPad}px`;
       const codeEl = body.querySelector('.pac-code');
       if (codeEl) codeEl.style.maxHeight = `${viewH}px`;
     }
@@ -317,12 +310,16 @@ export class Engine {
     return Math.max(200, avail);
   }
 
-  /** The content height to RESERVE for a panel this step. Every panel reserves its
-   *  full content -- EXCEPT the CALLSTACK, whose depth has no natural upper bound
-   *  (a deep recursion could be ten frames), so it is capped at a ceiling of
-   *  CALLSTACK_CEILING frames and scrolls to the newest ones instead (AUTHORING.md
-   *  "CALLSTACK is a capped, scrolling panel"). Below the ceiling it sizes to the
-   *  actual depth; there are never empty frame slots. */
+  /** The content height to RESERVE for a panel this step. Most panels reserve their
+   *  full content. Two capped exceptions reserve only a ceiling and scroll past it:
+   *   - CALLSTACK: depth has no natural upper bound (a deep recursion is ten
+   *     frames), so it is capped at CALLSTACK_CEILING frames.
+   *   - STREAM: an animation's output IS bounded (the trace determines it), but its
+   *     maximum can be a large share of the column (fib emits ~18 lines); past
+   *     STREAM_CEILING lines it is capped and scrolls, keeping the newest line in
+   *     view, rather than dominating the column (AUTHORING.md "STREAM sizes to its
+   *     known maximum").
+   *  Below their ceiling both size to the actual content -- never empty slots. */
   _panelContentH(p, body) {
     if (p.spec.type === 'callstack') {
       const frames = [...body.querySelectorAll('.pac-frame')];
@@ -330,6 +327,14 @@ export class Engine {
         const padB = parseFloat(getComputedStyle(body).paddingBottom) || 11;
         const top  = body.getBoundingClientRect().top;
         return Math.round(frames[CALLSTACK_CEILING - 1].getBoundingClientRect().bottom - top + padB);
+      }
+    }
+    if (p.spec.type === 'stream') {
+      const lines = [...body.querySelectorAll('.pac-stream-line')];
+      if (lines.length > STREAM_CEILING) {
+        const padB = parseFloat(getComputedStyle(body).paddingBottom) || 11;
+        const top  = body.getBoundingClientRect().top;
+        return Math.round(lines[STREAM_CEILING - 1].getBoundingClientRect().bottom - top + padB);
       }
     }
     return body.scrollHeight;
