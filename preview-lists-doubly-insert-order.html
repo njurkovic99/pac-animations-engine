@@ -140,9 +140,13 @@ body {
 .pac-col[data-side="left"]  { flex: 1 1 auto; min-width: 0; }
 .pac-col[data-side="right"] { flex: 0 0 auto; }
 .pac-col > .pac-panel { flex: 0 0 auto; }   /* panels keep their resolved heights */
-/* The code panel is the exception -- it takes ALL the width its column has, so a
- * long line never wraps or scrolls horizontally (AUTHORING.md rule 4). */
-.pac-col > .pac-panel[data-kind="code"] { align-self: stretch; }
+/* CODE and STREAM are the exceptions -- they take ALL the width their column has.
+ * Code so a long line never wraps or scrolls (rule 4); STREAM because output has
+ * no predictable width, so a narrow box would wrap or truncate text the student
+ * must read. Beneath the code panel, STREAM matches its width and the two read as
+ * one column. (AUTHORING.md "Width rules".) */
+.pac-col > .pac-panel[data-kind="code"],
+.pac-col > .pac-panel[data-type="stream"] { align-self: stretch; }
 
 /* The structure region: structure panes side by side at their own widths, from
  * the left, SHARING the row height the engine pins (<= half the stage). Each pane
@@ -1383,6 +1387,7 @@ const RENDERERS = {
 
 const MAX_STEPS = 5000;
 const AUTOPLAY_MS = 900;
+const CALLSTACK_CEILING = 3;   // frames visible before the CALLSTACK scrolls
 
 // Default student-facing panel titles per renderer (used when a panel declares
 // no `title`). The CALLSTACK renderer displays as "Function calls" -- the
@@ -1494,7 +1499,7 @@ class Engine {
         p.el.style.width = 'max-content';
         p.renderer.render(body, step.panels?.[id], p.ctx, { lang: this.lang, step });
         mW = Math.max(mW, p.el.offsetWidth);
-        mH = Math.max(mH, body.scrollHeight);
+        mH = Math.max(mH, this._panelContentH(p, body));
       }
       p.el.style.width = '';
       p.headerH  = p.el.querySelector('.pac-panel-head').offsetHeight;
@@ -1579,12 +1584,24 @@ class Engine {
       }
     }
     for (const p of book) {
-      p.el.querySelector('.pac-panel-body').style.minHeight = `${Math.round(p.outerH - p.headerH - BORDER)}px`;
+      const body = p.el.querySelector('.pac-panel-body');
+      const bodyH = `${Math.round(p.outerH - p.headerH - BORDER)}px`;
+      // The CALLSTACK is capped: a FIXED height (with flex:none, or flex-basis:0
+      // would ignore it) so a stack past the ceiling scrolls rather than growing
+      // the panel. Other bookkeeping has a bounded maximum, so a min-height
+      // reservation is enough.
+      if (p.spec.type === 'callstack') { body.style.height = bodyH; body.style.flex = 'none'; body.style.minHeight = ''; }
+      else { body.style.minHeight = bodyH; body.style.height = ''; body.style.flex = ''; }
     }
 
     // ---- apply WIDTHS (rules 1-3): every non-code panel takes its own natural
-    // width and left-aligns; the code panel fills its column via CSS. ----
-    for (const p of [...structure, ...book]) p.el.style.width = `${Math.round(p.contentW)}px`;
+    // width and left-aligns. CODE and STREAM are the exceptions -- output has no
+    // predictable width, so like the code it FILLS its column (via CSS), matching
+    // the code's width when it sits below it. ----
+    for (const p of [...structure, ...book]) {
+      if (p.spec.type === 'stream') { p.el.style.width = ''; continue; }
+      p.el.style.width = `${Math.round(p.contentW)}px`;
+    }
 
     // (4) code absorbs the left column's leftover slack -- but only up to the
     // number of lines it actually HAS. It shows as many whole lines as fit the
@@ -1623,13 +1640,32 @@ class Engine {
     return Math.max(200, avail);
   }
 
-  /** A structure pane that overflows its capped region scrolls to keep its active
-   *  element in view -- the same "follow the highlight" behaviour the CODE panel
-   *  has, so a student never hunts for the cell being modified (AUTHORING.md "The
-   *  structure region has a ceiling"). A pane that fits does nothing. */
+  /** The content height to RESERVE for a panel this step. Every panel reserves its
+   *  full content -- EXCEPT the CALLSTACK, whose depth has no natural upper bound
+   *  (a deep recursion could be ten frames), so it is capped at a ceiling of
+   *  CALLSTACK_CEILING frames and scrolls to the newest ones instead (AUTHORING.md
+   *  "CALLSTACK is a capped, scrolling panel"). Below the ceiling it sizes to the
+   *  actual depth; there are never empty frame slots. */
+  _panelContentH(p, body) {
+    if (p.spec.type === 'callstack') {
+      const frames = [...body.querySelectorAll('.pac-frame')];
+      if (frames.length > CALLSTACK_CEILING) {
+        const padB = parseFloat(getComputedStyle(body).paddingBottom) || 11;
+        const top  = body.getBoundingClientRect().top;
+        return Math.round(frames[CALLSTACK_CEILING - 1].getBoundingClientRect().bottom - top + padB);
+      }
+    }
+    return body.scrollHeight;
+  }
+
+  /** A structure pane that overflows its capped region -- or a CALLSTACK past its
+   *  frame ceiling -- scrolls to keep its ACTIVE element in view: the cell being
+   *  modified, or the running (top) frame. The same "follow the highlight" the
+   *  CODE panel has, so a student never hunts for it. A panel that fits does
+   *  nothing. */
   _followActive() {
     for (const [, p] of this.panels) {
-      if (p.kind !== 'structure') continue;
+      if (p.kind !== 'structure' && p.spec.type !== 'callstack') continue;
       const body = p.el.querySelector('.pac-panel-body');
       if (!body || body.scrollHeight <= body.clientHeight + 1) continue;
       const target = body.querySelector('[data-role="active"], [data-role="compared"], [data-active="true"], .pac-marker');

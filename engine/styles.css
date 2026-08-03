@@ -136,9 +136,13 @@ body {
 .pac-col[data-side="left"]  { flex: 1 1 auto; min-width: 0; }
 .pac-col[data-side="right"] { flex: 0 0 auto; }
 .pac-col > .pac-panel { flex: 0 0 auto; }   /* panels keep their resolved heights */
-/* The code panel is the exception -- it takes ALL the width its column has, so a
- * long line never wraps or scrolls horizontally (AUTHORING.md rule 4). */
-.pac-col > .pac-panel[data-kind="code"] { align-self: stretch; }
+/* CODE and STREAM are the exceptions -- they take ALL the width their column has.
+ * Code so a long line never wraps or scrolls (rule 4); STREAM because output has
+ * no predictable width, so a narrow box would wrap or truncate text the student
+ * must read. Beneath the code panel, STREAM matches its width and the two read as
+ * one column. (AUTHORING.md "Width rules".) */
+.pac-col > .pac-panel[data-kind="code"],
+.pac-col > .pac-panel[data-type="stream"] { align-self: stretch; }
 
 /* The structure region: structure panes side by side at their own widths, from
  * the left, SHARING the row height the engine pins (<= half the stage). Each pane

@@ -253,10 +253,16 @@ frame's) so their edges are not ragged. A value genuinely too long for a reasona
 width **truncates with an ellipsis** rather than wrapping or dragging the whole panel
 wide.
 
-**Height is the DEEPEST stack, computed from the trace** — not a padded guess. The
-panel is fixed (master invariant) at the maximum frames it ever holds, which is the
-deepest the trace actually reaches (`main → scan → push` is three, so reserve three,
-not four). The 2-row bookkeeping floor still applies where a stack is shallower.
+**Height is CAPPED at a ceiling of 3 frames — the CALLSTACK scrolls; it does not
+size to its maximum.** A call stack's depth has no natural upper bound (a deep
+recursion is ten frames), so reserving the trace's deepest would waste space or
+explode. The panel is fixed (master invariant) at `min(deepest reached, 3 frames)`:
+below the ceiling it is the actual depth (never empty frame slots — a 2-frame trace
+is 2 frames tall); past it, it **scrolls to keep the running (top) frame visible**,
+the same follow-the-highlight the structure region has. This generalises: **any panel
+whose content has no natural upper bound gets a ceiling plus internal scrolling**
+(structure region, CALLSTACK); panels with a genuinely known maximum (a 4-cell array,
+a 4-box strip) size to that maximum. CALLSTACK was long misfiled as the second kind.
 
 ## Arrows (cross-panel overlay)
 
@@ -610,16 +616,21 @@ changes as steps advance, exactly like its height.
    as it needs — not a 50/50 split. They DO share the row's **height** (tops and
    bottoms align; the row is as tall as the tallest panel), so the row reads as
    deliberate, not ragged.
-3. **Fixed-content panels take their natural width.** The Variables strip, CALLSTACK,
-   and STREAM are each exactly as wide as their widest content across the whole run
+3. **Fixed-content panels take their natural width.** The Variables strip and
+   CALLSTACK are each exactly as wide as their widest content across the whole run
    (per the master invariant), never the full column. This applies to every such
    panel — pointer-variable boxes and invariant readouts included, not only the
-   obvious strips.
-4. **The code panel takes all the width it is given.** It is the one panel whose
-   content genuinely benefits from width; a long line wrapping or scrolling
-   horizontally is far worse than a wide panel. So the right column is sized to its
-   widest panel and the code panel fills whatever the left column has left. Code is
-   the exception to rules 1–3, not the model for them.
+   obvious strips. (CALLSTACK frame boxes size to their widest row and share one
+   width; a value never wraps, and truncates with an ellipsis if genuinely too long.)
+4. **CODE and STREAM take all the width they are given.** These two are the exception
+   to rule 3, because their content has no predictable maximum width: a long code
+   line, or an error message / echoed line / formatted number in the output. A wide
+   panel is far better than wrapping or scrolling text the student must read. So the
+   right column is sized to its widest natural-width panel and the code panel fills
+   whatever the left column has left; STREAM fills its column too, so when it sits
+   beneath the code panel the two share one width and read as a single column. The
+   test is whether the content has a predictable maximum width — a 4-box strip does,
+   a line of output does not.
 5. **Narrow viewports.** When the available width will not fit a row's panels side by
    side, that row **stacks vertically** instead of shrinking — shrinking a structure
    below its natural width clips cells. Resolved once on load; it may change on a real
