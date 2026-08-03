@@ -72,7 +72,13 @@ export function render(body, data, ctx, { lang }) {
     const viewH  = scroller.clientHeight;
     const MARGIN = 3 * lineH;                          // keep >= 3 lines of context each side
     if (offset < MARGIN || offset > viewH - MARGIN - lineH) {
-      scroller.scrollTop += offset - (viewH - lineH) / 2; // bring it to roughly the middle
+      // Bring it to roughly the middle, then SNAP scrollTop to a whole-line
+      // boundary: an unsnapped scrollTop leaves the top line half-scrolled (a
+      // sliver of the line above bleeding in, the bottom line clipped), which is
+      // the same partial-line defect the viewport height guards against. Rounding
+      // the target to a multiple of the line height keeps every visible line whole.
+      const target = scroller.scrollTop + offset - (viewH - lineH) / 2;
+      scroller.scrollTop = Math.round(target / lineH) * lineH;
     }
   }
 }

@@ -34,7 +34,7 @@
    * CODE panel to as many whole lines as fit (floored at 15), each other panel to
    * its measured content. These are the base metrics it reads. Design target: a
    * 1920x1080 window at 100%. */
-  --code-line-h:   20.6px;   /* code font-size 12.5px x line-height 1.65 */
+  --code-line-h:   21px;     /* code line height -- an INTEGER px (see .pac-code) */
   --code-lines:    15;       /* code lines FLOOR before the CODE panel scrolls */
   --body-pad:      22px;     /* a panel body's vertical padding (both edges) */
 
@@ -309,7 +309,13 @@ body {
 .pac-lang-tab[aria-selected="true"] {
   color: var(--text); border-color: var(--border); background: var(--panel);
 }
-.pac-code { font-family: var(--mono); font-size: 12.5px; line-height: 1.65; }
+/* line-height is an INTEGER px, not a unitless ratio: 12.5 x 1.65 = 20.625 is a
+ * sub-pixel value, and that fractional height defeats whole-line clipping --
+ * scrollTop rounds to whole pixels, so a fractional line height always leaves a
+ * sliver of a neighbouring line. An integer line height makes the viewport
+ * (lines x height), the scroll boundaries, and the panel height all exact, so
+ * every visible line is whole (AUTHORING.md "whole lines only"). */
+.pac-code { font-family: var(--mono); font-size: 12.5px; line-height: 21px; }
 .pac-code-line { display: flex; padding: 0 4px; border-radius: 3px; white-space: pre; }
 .pac-code-line.is-active { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
 .pac-code-line.is-active.is-danger { background: rgba(226, 86, 74, 0.16); box-shadow: inset 2px 0 0 var(--error); color: var(--error); }
@@ -514,11 +520,41 @@ body {
   border-color: var(--accent);
   box-shadow: inset 0 0 0 1px var(--accent-soft);
 }
-.pac-frame-fn {
-  font-family: var(--mono); font-size: 12px; font-weight: 600;
-  color: var(--text); margin-bottom: 2px; line-height: 1.3;
+/* The call line: ONE line, the call itself -- fn(name = value, …), or fn() for
+ * a frame with no parameters. It never wraps: the whole call stays on a single
+ * line so a frame is exactly one line tall (plus any locals below), and the
+ * panel's height is the frame count, not padded slots. */
+.pac-frame-call {
+  font-family: var(--mono); font-size: 12px; line-height: 1.35;
+  white-space: nowrap;
 }
-.pac-frame-vars { display: flex; flex-direction: column; gap: 2px; }
+.pac-frame-fn { font-weight: 600; color: var(--text); }
+.pac-paren, .pac-arg-sep, .pac-arg-eq { color: var(--text-dim); }
+/* One parameter: `name = value`. The blue activity fill (role active) wraps the
+ * whole token so a changing argument reads the same as a changing cell/node. */
+.pac-arg { border-radius: 3px; padding: 0 2px; }
+.pac-arg-name { color: var(--text-dim); }
+/* A parameter value is an ATOMIC token -- a string, char, or number -- and never
+ * wraps: breaking "a)(b" across lines makes it unreadable and the frame taller,
+ * the opposite of what the width rules are for. The frame is measured to fit the
+ * value's full width. A genuinely long value truncates with an ellipsis instead
+ * of driving the whole panel wide -- the cap bounds the natural width the engine
+ * measures, so it never collapses narrower. */
+.pac-arg-val {
+  color: var(--text);
+  display: inline-block;
+  vertical-align: bottom;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 22ch;
+}
+.pac-arg[data-role="active"] { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+.pac-arg[data-role="active"] .pac-arg-name { color: var(--text); }
+.pac-arg[data-role="done"] { opacity: .45; }
+
+/* Continuation rows -- locals only, below the call line, only when present. */
+.pac-frame-locals { display: flex; flex-direction: column; gap: 2px; margin-top: 3px; }
 .pac-frame-var {
   display: flex; justify-content: space-between; gap: 14px;
   font-family: var(--mono); font-size: 12px;
@@ -526,12 +562,6 @@ body {
   border: 1px solid transparent;
 }
 .pac-frame-var-name { color: var(--text-dim); white-space: nowrap; }
-/* A parameter value is an ATOMIC token -- a string, char, or number -- and never
- * wraps: breaking "a)(b" across lines makes it unreadable and the frame taller,
- * the opposite of what the width rules are for. The frame is measured to fit the
- * value's full width. A genuinely long value (over --frame-val-max) truncates
- * with an ellipsis instead of wrapping or driving the whole panel wide -- the cap
- * bounds the natural width the engine measures, so it never collapses narrower. */
 .pac-frame-var-val {
   color: var(--text);
   white-space: nowrap;
@@ -540,8 +570,6 @@ body {
   max-width: 22ch;
   flex-shrink: 0;   /* never collapse below content (only max-width caps it) */
 }
-/* Activity channel (FILL) -- a local changing THIS step gets the blue fill, the
- * same rule as nodes/cells. */
 .pac-frame-var[data-role="active"] {
   background: var(--accent-soft); border-color: var(--accent);
 }
@@ -549,7 +577,6 @@ body {
 /* A finished local (e.g. loop i after the loop) stays visible but greyed until
  * the function returns -- it does not vanish mid-frame. */
 .pac-frame-var[data-role="done"] { opacity: .45; }
-.pac-frame-empty { color: var(--text-dim); font-family: var(--mono); font-size: 11.5px; opacity: .6; }
 
 /* ---- NODES panel ---- */
 /* The node diagram sizes to its own natural width (height + viewBox aspect), so

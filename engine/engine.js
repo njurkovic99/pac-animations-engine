@@ -150,8 +150,14 @@ export class Engine {
     if (code) code.headerH = code.el.querySelector('.pac-panel-head').offsetHeight;
 
     // The code panel's WIDEST line (across every language tab) is its minimum
-    // width -- a long line must never wrap or scroll horizontally (rule 4).
-    let codeMinW = 0;
+    // width -- a long line must never wrap or scroll horizontally (rule 4). While
+    // it is rendered, capture the ACTUAL rendered line height: font-size x
+    // line-height resolves to a sub-pixel value (12.5 x 1.65 = 20.625) that the
+    // --code-line-h token (20.6) only approximates, and that 0.025px-per-line
+    // drift is exactly what clips the last line once the panel is a dozen lines
+    // tall. Sizing off the measured height keeps the viewport an INTEGER number of
+    // whole lines, so no line is ever a sliver (AUTHORING.md "whole lines only").
+    let codeMinW = 0, codeLineH = lineH;
     if (code) {
       const codeEl = code.el.querySelector('.pac-panel-body .pac-code');
       for (const lang of Object.keys(code.spec.listings ?? {})) {
@@ -160,6 +166,8 @@ export class Engine {
         if (codeEl) codeMinW = Math.max(codeMinW, codeEl.scrollWidth);
       }
       codeMinW += bodyPad + BORDER;
+      const lineEl = codeEl?.querySelector('.pac-code-line');
+      if (lineEl) codeLineH = lineEl.getBoundingClientRect().height || lineH;
     }
 
     const outer = (p, bodyH) => p.headerH + bodyH + BORDER;
@@ -185,8 +193,9 @@ export class Engine {
     const bookFloor = 2 * lineH + bodyPad;
     for (const p of book) p.outerH = outer(p, Math.max(p.contentH, bookFloor));
 
-    // (3) code 15-line floor.
-    const codeFloor = code ? outer(code, floorL * lineH + bodyPad) : 0;
+    // (3) code 15-line floor -- an INTEGER 15 whole lines, measured (ceil so the
+    // last line's sub-pixel remainder is inside the box, never clipped).
+    const codeFloor = code ? outer(code, Math.ceil(floorL * codeLineH) + bodyPad) : 0;
 
     // Balance HEIGHT: right column = [region, book[0..k)], left = [code,
     // book[k..)]. Pick the split k (keeping declaration order) that minimises the
@@ -210,6 +219,21 @@ export class Engine {
     for (const p of book.slice(0, bestK)) this.colRight.appendChild(p.el);
     for (const p of book.slice(bestK))    this.colLeft.appendChild(p.el);
 
+    // Bottom alignment. The stage is a fixed box and BOTH columns fill it, so the
+    // shorter column would otherwise leave a ragged gap below its last panel. The
+    // left column already fills via the code panel (below); the right column fills
+    // the same way through its structure region -- it grows to swallow the slack
+    // below the last right-column panel, so its bottom edge lands on the left
+    // column's (AUTHORING.md "Bottom alignment"). Capped at the region ceiling, so
+    // structure still never dominates; any residual is left as space. Side-by-side
+    // regions only -- a stacked (narrow) region is its own vertical flow.
+    let regionFillH = regionH;
+    if (structure.length && !stacked) {
+      const rightContent = colH(regionH, bh.slice(0, bestK), regionH > 0);
+      const deficit = stageH - rightContent;
+      if (deficit > 0) regionFillH = Math.min(regionH + deficit, ceiling);
+    }
+
     // ---- apply HEIGHTS ----
     this.stage.style.height = `${Math.round(stageH)}px`;
     if (structure.length) {
@@ -219,7 +243,7 @@ export class Engine {
         for (const p of structure)
           p.el.querySelector('.pac-panel-body').style.minHeight = `${Math.round(paneH(p) - p.headerH - BORDER)}px`;
       } else {
-        this.structureRegion.style.height = `${Math.round(regionH)}px`;
+        this.structureRegion.style.height = `${Math.round(regionFillH)}px`;
         for (const p of structure) p.el.querySelector('.pac-panel-body').style.minHeight = '';
       }
     }
@@ -253,12 +277,25 @@ export class Engine {
       const leftUsed = sum(leftBook.map(p => p.outerH)) + gap * leftBook.length;
       const avail   = Math.max(codeFloor, Math.round(stageH - leftUsed));
       const maxLen  = Math.max(1, ...Object.values(code.spec.listings ?? {}).map(l => l.length));
-      const fit     = Math.floor((avail - code.headerH - BORDER - bodyPad) / lineH);
+      // The LISTING shows as many WHOLE lines as fit `avail`, floored at 15 and
+      // capped at the listing length -- a short listing never gains empty rows
+      // (AUTHORING.md "the code never stretches into blank rows"). viewH is that
+      // whole-line height (ceil so no line is a sliver -- item "whole lines only").
+      const fit     = Math.floor((avail - code.headerH - BORDER - bodyPad) / codeLineH);
       const lines   = Math.max(floorL, Math.min(maxLen, fit));
+      const viewH   = Math.ceil(lines * codeLineH);
       const body    = code.el.querySelector('.pac-panel-body');
-      body.style.height = `${Math.round(lines * lineH + bodyPad)}px`;
+      // The BODY fills the left column so its bottom lines up with the right
+      // column's (AUTHORING.md "Bottom alignment") -- the mirror of the structure
+      // region filling the right column. The listing is clipped to viewH (whole
+      // lines); any sub-line remainder falls as blank space BELOW the listing,
+      // never a clipped line and never a ragged gap below the panel. When the code
+      // is the taller column (avail == its floor) there is no slack and the body
+      // is exactly the whole-line height -- so a small stack does not inflate it.
+      const bodyH   = Math.max(viewH + bodyPad, avail - code.headerH - BORDER);
+      body.style.height = `${Math.round(bodyH)}px`;
       const codeEl = body.querySelector('.pac-code');
-      if (codeEl) codeEl.style.maxHeight = `${Math.round(lines * lineH)}px`;
+      if (codeEl) codeEl.style.maxHeight = `${viewH}px`;
     }
   }
 

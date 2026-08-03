@@ -227,15 +227,23 @@ this call — that's a comprehension hole.
 
 - A vertical stack of **frames**, newest on top and emphasized; caller frames below
   greyed but visible. `main` is the bottom frame — the driver.
-- Each frame shows the **function name**, its **bound parameters** with values, and
-  its **active locals**.
+- **A frame is ONE line — the call itself.** `fn(name = value, …)`, formed from the
+  function name, its parameters as `name = value`, comma-separated, in parentheses.
+  A frame with no parameters renders as just `main()` — no placeholder row, no
+  "no locals" line. This keeps a frame one line tall, so the panel's height is the
+  frame *count*, not padded slots.
 - **Push on call**, already showing bound argument values — `ADD` calling
-  `INSERT(count, value)` pushes an INSERT frame showing `index = 3` and
-  `value = 40`. This is how the ADD-is-INSERT lesson becomes visible.
+  `INSERT(count, value)` pushes a frame reading `INSERT(index = 3, value = 40)`.
+  This is how the ADD-is-INSERT lesson becomes visible.
 - **Pop on return.**
+- **Locals are NOT part of the call**, so they do not go inside the parens. A frame
+  that has locals (a loop `i`, a running `result`) shows them on **continuation rows
+  below** the call line — and only frames that have them grow past one line. Author a
+  local by tagging its var `kind: 'local'` (or listing it in the frame's `locals`);
+  parameters are the default and render inline.
 - A local that finishes (loop `i` after the loop) **stays greyed** in the frame
   until the function returns — it doesn't vanish mid-frame.
-- The **active local** gets the blue activity fill on the step it changes.
+- The **active** parameter or local gets the blue activity fill on the step it changes.
 
 **Author it whenever an animation steps into a function.** Show `main` as the driver
 so calls have a visible origin. It is *the whole point* of several beginner-course
@@ -245,13 +253,19 @@ The step's `line` highlight and the CALLSTACK stay in sync: when the highlight
 enters a function body, that function's frame is the active one.
 
 **Frame boxes size to content (width rules).** A frame box is as wide as its widest
-row needs — the function name, or a parameter's name plus its value plus the gap —
-and never narrower. **A parameter value is an atomic token and never wraps**: breaking
+row needs — the one-line call, or a local's continuation row — and never narrower.
+**The call line never wraps**, and **a parameter value is an atomic token**: breaking
 `"a)(b"` across two lines makes it unreadable and the frame taller, the opposite of
 what the width rules are for. All frames in the panel share one width (the widest
 frame's) so their edges are not ragged. A value genuinely too long for a reasonable
 width **truncates with an ellipsis** rather than wrapping or dragging the whole panel
 wide.
+
+**The panel is never the tallest thing in its column.** With one-line frames and the
+2-frame ceiling, "Function calls" is a small panel (~2 lines of frames plus the
+2-row book floor); it does not stretch to fill, align to a neighbour, or reserve
+empty frame slots. If a column has a taller panel it is the code, the structure
+region, or a state strip — never the call stack.
 
 **Height is CAPPED at a ceiling of 2 frames — the CALLSTACK scrolls; it does not
 size to its maximum.** A call stack's depth has no natural upper bound (a deep
@@ -567,6 +581,17 @@ steps advance.
   its ceiling; the code panel takes its 15-line floor; any slack left over goes to
   the code panel — the only panel that always has more listing it could usefully
   show (but never past the listing's own length: a short listing does not stretch).
+- **Bottom alignment.** The stage is a bounded box and both columns fill its height,
+  so a shorter column would leave a ragged gap below its last panel. Each column has
+  one *filler* that absorbs the slack so the two column bottoms land on the same y:
+  the **left** column's filler is the **code panel body** (it grows to fill the
+  column while the listing inside stays clipped to whole lines — any remainder is
+  blank space below the listing, never a clipped line); the **right** column's is the
+  **structure region** (it grows the same way, capped at its half-stage ceiling). A
+  filler only grows the *shorter* column up to the taller one — it never inflates the
+  stage, which is still driven by the taller column's real content. A right column
+  with no structure region (all bookkeeping) has no filler and keeps its natural
+  bottom; the call stack is never used as a filler (see CALLSTACK).
 
 ### The structure region has a ceiling
 
@@ -670,7 +695,14 @@ content. Do NOT hardcode to a screen resolution.
   the left column once the other panels are placed, never fewer than 15 (the
   Canvas-iframe floor), never more than the listing has (a short listing does not
   stretch into a tall panel of empty rows). **Whole lines only** — never a
-  half-height row clipped at the bottom edge. **Resolve on load, hold constant**: switching
+  half-height row clipped at the bottom edge, and never a sliver of the next line
+  peeking in at the top. This is a sub-pixel trap: a *unitless* line-height (12.5px ×
+  1.65 = 20.625px) is fractional, and scrollTop rounds to whole pixels, so no matter
+  how the viewport is sized a fraction of a neighbouring line leaks in. The line
+  height is therefore an **integer px** (`--code-line-h`), so the viewport
+  (`lines × height`), the scroll boundaries, and the panel body all land on exact
+  line edges; the follow-the-highlight scroll snaps its target to a whole-line
+  multiple. **Resolve on load, hold constant**: switching
   language tabs or advancing steps must not change it. The highlighted line
   auto-scrolls into view, holding roughly the middle with context above and below —
   **and only when it would otherwise reach an edge.** Scrolling on every step is as

@@ -38,7 +38,7 @@
    * CODE panel to as many whole lines as fit (floored at 15), each other panel to
    * its measured content. These are the base metrics it reads. Design target: a
    * 1920x1080 window at 100%. */
-  --code-line-h:   20.6px;   /* code font-size 12.5px x line-height 1.65 */
+  --code-line-h:   21px;     /* code line height -- an INTEGER px (see .pac-code) */
   --code-lines:    15;       /* code lines FLOOR before the CODE panel scrolls */
   --body-pad:      22px;     /* a panel body's vertical padding (both edges) */
 
@@ -313,7 +313,13 @@ body {
 .pac-lang-tab[aria-selected="true"] {
   color: var(--text); border-color: var(--border); background: var(--panel);
 }
-.pac-code { font-family: var(--mono); font-size: 12.5px; line-height: 1.65; }
+/* line-height is an INTEGER px, not a unitless ratio: 12.5 x 1.65 = 20.625 is a
+ * sub-pixel value, and that fractional height defeats whole-line clipping --
+ * scrollTop rounds to whole pixels, so a fractional line height always leaves a
+ * sliver of a neighbouring line. An integer line height makes the viewport
+ * (lines x height), the scroll boundaries, and the panel height all exact, so
+ * every visible line is whole (AUTHORING.md "whole lines only"). */
+.pac-code { font-family: var(--mono); font-size: 12.5px; line-height: 21px; }
 .pac-code-line { display: flex; padding: 0 4px; border-radius: 3px; white-space: pre; }
 .pac-code-line.is-active { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
 .pac-code-line.is-active.is-danger { background: rgba(226, 86, 74, 0.16); box-shadow: inset 2px 0 0 var(--error); color: var(--error); }
@@ -518,11 +524,41 @@ body {
   border-color: var(--accent);
   box-shadow: inset 0 0 0 1px var(--accent-soft);
 }
-.pac-frame-fn {
-  font-family: var(--mono); font-size: 12px; font-weight: 600;
-  color: var(--text); margin-bottom: 2px; line-height: 1.3;
+/* The call line: ONE line, the call itself -- fn(name = value, …), or fn() for
+ * a frame with no parameters. It never wraps: the whole call stays on a single
+ * line so a frame is exactly one line tall (plus any locals below), and the
+ * panel's height is the frame count, not padded slots. */
+.pac-frame-call {
+  font-family: var(--mono); font-size: 12px; line-height: 1.35;
+  white-space: nowrap;
 }
-.pac-frame-vars { display: flex; flex-direction: column; gap: 2px; }
+.pac-frame-fn { font-weight: 600; color: var(--text); }
+.pac-paren, .pac-arg-sep, .pac-arg-eq { color: var(--text-dim); }
+/* One parameter: `name = value`. The blue activity fill (role active) wraps the
+ * whole token so a changing argument reads the same as a changing cell/node. */
+.pac-arg { border-radius: 3px; padding: 0 2px; }
+.pac-arg-name { color: var(--text-dim); }
+/* A parameter value is an ATOMIC token -- a string, char, or number -- and never
+ * wraps: breaking "a)(b" across lines makes it unreadable and the frame taller,
+ * the opposite of what the width rules are for. The frame is measured to fit the
+ * value's full width. A genuinely long value truncates with an ellipsis instead
+ * of driving the whole panel wide -- the cap bounds the natural width the engine
+ * measures, so it never collapses narrower. */
+.pac-arg-val {
+  color: var(--text);
+  display: inline-block;
+  vertical-align: bottom;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 22ch;
+}
+.pac-arg[data-role="active"] { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+.pac-arg[data-role="active"] .pac-arg-name { color: var(--text); }
+.pac-arg[data-role="done"] { opacity: .45; }
+
+/* Continuation rows -- locals only, below the call line, only when present. */
+.pac-frame-locals { display: flex; flex-direction: column; gap: 2px; margin-top: 3px; }
 .pac-frame-var {
   display: flex; justify-content: space-between; gap: 14px;
   font-family: var(--mono); font-size: 12px;
@@ -530,12 +566,6 @@ body {
   border: 1px solid transparent;
 }
 .pac-frame-var-name { color: var(--text-dim); white-space: nowrap; }
-/* A parameter value is an ATOMIC token -- a string, char, or number -- and never
- * wraps: breaking "a)(b" across lines makes it unreadable and the frame taller,
- * the opposite of what the width rules are for. The frame is measured to fit the
- * value's full width. A genuinely long value (over --frame-val-max) truncates
- * with an ellipsis instead of wrapping or driving the whole panel wide -- the cap
- * bounds the natural width the engine measures, so it never collapses narrower. */
 .pac-frame-var-val {
   color: var(--text);
   white-space: nowrap;
@@ -544,8 +574,6 @@ body {
   max-width: 22ch;
   flex-shrink: 0;   /* never collapse below content (only max-width caps it) */
 }
-/* Activity channel (FILL) -- a local changing THIS step gets the blue fill, the
- * same rule as nodes/cells. */
 .pac-frame-var[data-role="active"] {
   background: var(--accent-soft); border-color: var(--accent);
 }
@@ -553,7 +581,6 @@ body {
 /* A finished local (e.g. loop i after the loop) stays visible but greyed until
  * the function returns -- it does not vanish mid-frame. */
 .pac-frame-var[data-role="done"] { opacity: .45; }
-.pac-frame-empty { color: var(--text-dim); font-family: var(--mono); font-size: 11.5px; opacity: .6; }
 
 /* ---- NODES panel ---- */
 /* The node diagram sizes to its own natural width (height + viewBox aspect), so
@@ -687,7 +714,13 @@ function render(body, data, ctx, { lang }) {
     const viewH  = scroller.clientHeight;
     const MARGIN = 3 * lineH;                          // keep >= 3 lines of context each side
     if (offset < MARGIN || offset > viewH - MARGIN - lineH) {
-      scroller.scrollTop += offset - (viewH - lineH) / 2; // bring it to roughly the middle
+      // Bring it to roughly the middle, then SNAP scrollTop to a whole-line
+      // boundary: an unsnapped scrollTop leaves the top line half-scrolled (a
+      // sliver of the line above bleeding in, the bottom line clipped), which is
+      // the same partial-line defect the viewport height guards against. Rounding
+      // the target to a multiple of the line height keeps every visible line whole.
+      const target = scroller.scrollTop + offset - (viewH - lineH) / 2;
+      scroller.scrollTop = Math.round(target / lineH) * lineH;
     }
   }
 }
@@ -1132,23 +1165,40 @@ function render(body, data) {
 const callstackPanel = (() => { /* CALLSTACK panel — a debugger's locals/stack pane.
  *
  * A vertical stack of call frames, newest on top (emphasized), callers below
- * greyed but present. Each frame shows its function name, bound parameters, and
- * active locals with live values. Frames push on call and pop on return; `main`
- * is the bottom frame (the driver), so calls have a visible origin. This is what
- * makes parameter binding visible: when ADD calls INSERT(count, value), the
- * INSERT frame appears already showing index = 3 (count's value) and value = 40.
+ * greyed but present. Frames push on call and pop on return; `main` is the
+ * bottom frame (the driver), so calls have a visible origin. This is what makes
+ * parameter binding visible: when ADD calls INSERT(index, value), the INSERT
+ * frame appears already showing index = 3 (count's value) and value = 40.
  *
- * Step data: { frames: [{fn, vars: [{name, value, role}], active}] }
+ * A frame renders as ONE LINE — the call itself (AUTHORING.md "CALLSTACK panel —
+ * frame layout"):
+ *
+ *     scan(expr = "a)(b")        push(c = '[')        main()
+ *
+ * function name, open paren, each PARAMETER as `name = value` comma-separated,
+ * close paren. A frame with no parameters is just `main()` — no "no locals"
+ * line, no empty rows. This keeps every frame a single line, so the panel's
+ * height is the frame count, not padded slots.
+ *
+ * LOCALS (a loop `i`, a running `result`) are NOT part of the call, so they do
+ * NOT go inside the parens. They render on continuation rows BELOW the call
+ * line, and only for the frames that actually have them — a frame with no
+ * locals stays one line tall. A var carries a local either as `kind: 'local'`
+ * inside `vars`, or in a separate `locals` array (equivalent).
+ *
+ * Step data: { frames: [{fn, vars: [{name, value, role, kind}], locals?, active}] }
  *   - `frames` is ordered bottom-to-top: frames[0] is `main`, the last element
  *     is the currently-running (top) frame. Rendered newest-on-top and
- *     top-aligned within the panel's bounded grid cell, so the running frame is
+ *     top-aligned within the panel's bounded cell, so the running frame is
  *     always visible and the pane scrolls internally if the stack outgrows the
  *     cell — the layout never reflows (AUTHORING.md "Stable layout").
  *   - `active: true` marks the running frame (emphasized); the rest are greyed.
- *   - a var's `role: 'active'` paints the blue activity fill — a local changing
+ *   - a var's `role: 'active'` paints the blue activity fill — a value changing
  *     THIS step, the same colour rule as nodes/cells. `role: 'done'` greys a
  *     finished local (e.g. the loop `i` after the loop) so it stays visible in
  *     the frame until the function returns rather than vanishing mid-frame.
+ *   - a var's `kind: 'local'` moves it out of the call parens onto a
+ *     continuation row; the default (a parameter) renders inline in the call.
  *   - the data model tolerates a future per-var `kind: 'copy'|'reference'` for
  *     pass-by-value vs. pass-by-reference animations; not rendered yet (deferred
  *     per AUTHORING.md "CALLSTACK panel"). */
@@ -1168,16 +1218,40 @@ function render(body, data) {
     frame.className = 'pac-frame';
     frame.dataset.active = String(!!f.active);
 
-    const vars = (f.vars ?? []).map(v =>
-      `<div class="pac-frame-var"${v.role ? ` data-role="${esc(v.role)}"` : ''}>` +
-        `<span class="pac-frame-var-name">${esc(v.name)}</span>` +
-        `<span class="pac-frame-var-val">${esc(v.value)}</span>` +
-      `</div>`
-    ).join('');
+    const all = f.vars ?? [];
+    // Parameters render inline in the call parens; locals drop to continuation
+    // rows. A var is a local via `kind: 'local'`, or via the frame's `locals`.
+    const params = all.filter(v => v.kind !== 'local');
+    const locals = all.filter(v => v.kind === 'local').concat(f.locals ?? []);
 
-    frame.innerHTML =
-      `<div class="pac-frame-fn">${esc(f.fn)}</div>` +
-      `<div class="pac-frame-vars">${vars || '<div class="pac-frame-empty">no locals</div>'}</div>`;
+    // The call line: fn(name = value, …). No parameters → fn().
+    const args = params.map(v =>
+      `<span class="pac-arg"${v.role ? ` data-role="${esc(v.role)}"` : ''}>` +
+        `<span class="pac-arg-name">${esc(v.name)}</span>` +
+        `<span class="pac-arg-eq"> = </span>` +
+        `<span class="pac-arg-val">${esc(v.value)}</span>` +
+      `</span>`
+    ).join('<span class="pac-arg-sep">, </span>');
+
+    let html =
+      `<div class="pac-frame-call">` +
+        `<span class="pac-frame-fn">${esc(f.fn)}</span>` +
+        `<span class="pac-paren">(</span>` +
+        args +
+        `<span class="pac-paren">)</span>` +
+      `</div>`;
+
+    // Continuation rows — only when the frame has locals.
+    if (locals.length) {
+      html += `<div class="pac-frame-locals">` + locals.map(v =>
+        `<div class="pac-frame-var"${v.role ? ` data-role="${esc(v.role)}"` : ''}>` +
+          `<span class="pac-frame-var-name">${esc(v.name)}</span>` +
+          `<span class="pac-frame-var-val">${esc(v.value)}</span>` +
+        `</div>`
+      ).join('') + `</div>`;
+    }
+
+    frame.innerHTML = html;
     wrap.appendChild(frame);
   }
 }
@@ -1510,8 +1584,14 @@ class Engine {
     if (code) code.headerH = code.el.querySelector('.pac-panel-head').offsetHeight;
 
     // The code panel's WIDEST line (across every language tab) is its minimum
-    // width -- a long line must never wrap or scroll horizontally (rule 4).
-    let codeMinW = 0;
+    // width -- a long line must never wrap or scroll horizontally (rule 4). While
+    // it is rendered, capture the ACTUAL rendered line height: font-size x
+    // line-height resolves to a sub-pixel value (12.5 x 1.65 = 20.625) that the
+    // --code-line-h token (20.6) only approximates, and that 0.025px-per-line
+    // drift is exactly what clips the last line once the panel is a dozen lines
+    // tall. Sizing off the measured height keeps the viewport an INTEGER number of
+    // whole lines, so no line is ever a sliver (AUTHORING.md "whole lines only").
+    let codeMinW = 0, codeLineH = lineH;
     if (code) {
       const codeEl = code.el.querySelector('.pac-panel-body .pac-code');
       for (const lang of Object.keys(code.spec.listings ?? {})) {
@@ -1520,6 +1600,8 @@ class Engine {
         if (codeEl) codeMinW = Math.max(codeMinW, codeEl.scrollWidth);
       }
       codeMinW += bodyPad + BORDER;
+      const lineEl = codeEl?.querySelector('.pac-code-line');
+      if (lineEl) codeLineH = lineEl.getBoundingClientRect().height || lineH;
     }
 
     const outer = (p, bodyH) => p.headerH + bodyH + BORDER;
@@ -1545,8 +1627,9 @@ class Engine {
     const bookFloor = 2 * lineH + bodyPad;
     for (const p of book) p.outerH = outer(p, Math.max(p.contentH, bookFloor));
 
-    // (3) code 15-line floor.
-    const codeFloor = code ? outer(code, floorL * lineH + bodyPad) : 0;
+    // (3) code 15-line floor -- an INTEGER 15 whole lines, measured (ceil so the
+    // last line's sub-pixel remainder is inside the box, never clipped).
+    const codeFloor = code ? outer(code, Math.ceil(floorL * codeLineH) + bodyPad) : 0;
 
     // Balance HEIGHT: right column = [region, book[0..k)], left = [code,
     // book[k..)]. Pick the split k (keeping declaration order) that minimises the
@@ -1570,6 +1653,21 @@ class Engine {
     for (const p of book.slice(0, bestK)) this.colRight.appendChild(p.el);
     for (const p of book.slice(bestK))    this.colLeft.appendChild(p.el);
 
+    // Bottom alignment. The stage is a fixed box and BOTH columns fill it, so the
+    // shorter column would otherwise leave a ragged gap below its last panel. The
+    // left column already fills via the code panel (below); the right column fills
+    // the same way through its structure region -- it grows to swallow the slack
+    // below the last right-column panel, so its bottom edge lands on the left
+    // column's (AUTHORING.md "Bottom alignment"). Capped at the region ceiling, so
+    // structure still never dominates; any residual is left as space. Side-by-side
+    // regions only -- a stacked (narrow) region is its own vertical flow.
+    let regionFillH = regionH;
+    if (structure.length && !stacked) {
+      const rightContent = colH(regionH, bh.slice(0, bestK), regionH > 0);
+      const deficit = stageH - rightContent;
+      if (deficit > 0) regionFillH = Math.min(regionH + deficit, ceiling);
+    }
+
     // ---- apply HEIGHTS ----
     this.stage.style.height = `${Math.round(stageH)}px`;
     if (structure.length) {
@@ -1579,7 +1677,7 @@ class Engine {
         for (const p of structure)
           p.el.querySelector('.pac-panel-body').style.minHeight = `${Math.round(paneH(p) - p.headerH - BORDER)}px`;
       } else {
-        this.structureRegion.style.height = `${Math.round(regionH)}px`;
+        this.structureRegion.style.height = `${Math.round(regionFillH)}px`;
         for (const p of structure) p.el.querySelector('.pac-panel-body').style.minHeight = '';
       }
     }
@@ -1613,12 +1711,25 @@ class Engine {
       const leftUsed = sum(leftBook.map(p => p.outerH)) + gap * leftBook.length;
       const avail   = Math.max(codeFloor, Math.round(stageH - leftUsed));
       const maxLen  = Math.max(1, ...Object.values(code.spec.listings ?? {}).map(l => l.length));
-      const fit     = Math.floor((avail - code.headerH - BORDER - bodyPad) / lineH);
+      // The LISTING shows as many WHOLE lines as fit `avail`, floored at 15 and
+      // capped at the listing length -- a short listing never gains empty rows
+      // (AUTHORING.md "the code never stretches into blank rows"). viewH is that
+      // whole-line height (ceil so no line is a sliver -- item "whole lines only").
+      const fit     = Math.floor((avail - code.headerH - BORDER - bodyPad) / codeLineH);
       const lines   = Math.max(floorL, Math.min(maxLen, fit));
+      const viewH   = Math.ceil(lines * codeLineH);
       const body    = code.el.querySelector('.pac-panel-body');
-      body.style.height = `${Math.round(lines * lineH + bodyPad)}px`;
+      // The BODY fills the left column so its bottom lines up with the right
+      // column's (AUTHORING.md "Bottom alignment") -- the mirror of the structure
+      // region filling the right column. The listing is clipped to viewH (whole
+      // lines); any sub-line remainder falls as blank space BELOW the listing,
+      // never a clipped line and never a ragged gap below the panel. When the code
+      // is the taller column (avail == its floor) there is no slack and the body
+      // is exactly the whole-line height -- so a small stack does not inflate it.
+      const bodyH   = Math.max(viewH + bodyPad, avail - code.headerH - BORDER);
+      body.style.height = `${Math.round(bodyH)}px`;
       const codeEl = body.querySelector('.pac-code');
-      if (codeEl) codeEl.style.maxHeight = `${Math.round(lines * lineH)}px`;
+      if (codeEl) codeEl.style.maxHeight = `${viewH}px`;
     }
   }
 
