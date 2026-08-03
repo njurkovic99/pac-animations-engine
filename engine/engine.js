@@ -28,7 +28,6 @@ const RENDERERS = {
 const MAX_STEPS = 5000;
 const AUTOPLAY_MS = 900;
 const CALLSTACK_CEILING = 2;   // frames visible before the CALLSTACK scrolls
-const STREAM_CEILING    = 8;   // output lines visible before the STREAM scrolls
 
 // Default student-facing panel titles per renderer (used when a panel declares
 // no `title`). The CALLSTACK renderer displays as "Function calls" -- the
@@ -297,12 +296,15 @@ export class Engine {
     for (const p of book) {
       const body = p.el.querySelector('.pac-panel-body');
       const bodyH = `${Math.round(p.outerH - p.headerH - BORDER)}px`;
-      // The CALLSTACK and the STREAM are capped panels: a FIXED height (with
-      // flex:none, or flex-basis:0 would ignore it) so content past the ceiling
-      // scrolls rather than growing the panel -- a deep stack past its 2-frame
-      // ceiling, or output past its STREAM_CEILING line ceiling. Both keep their
-      // newest content in view (the renderer scrolls to it). Other bookkeeping has
-      // a bounded maximum, so a min-height reservation is enough.
+      // The CALLSTACK and the STREAM get a FIXED height with flex:none (a
+      // min-height alone lets the body's flex:1 grab leftover column space and
+      // STRETCH -- item "no panel stretches"). The difference is only in the height
+      // each is given: the CALLSTACK is capped at its 2-frame ceiling and scrolls
+      // past it; the STREAM is sized to its FULL content -- the trace fixes the
+      // output line count (fib emits 18), so the panel is exactly that many rows,
+      // derived from the content, and never scrolls or stretches (item "STREAM
+      // sizes to exactly its emitted rows"). Other bookkeeping has a bounded
+      // maximum, so a min-height reservation is enough.
       if (p.spec.type === 'callstack' || p.spec.type === 'stream') {
         body.style.height = bodyH; body.style.flex = 'none'; body.style.minHeight = '';
       } else { body.style.minHeight = bodyH; body.style.height = ''; body.style.flex = ''; }
@@ -365,16 +367,13 @@ export class Engine {
     return Math.max(200, avail);
   }
 
-  /** The content height to RESERVE for a panel this step. Most panels reserve their
-   *  full content. Two capped exceptions reserve only a ceiling and scroll past it:
-   *   - CALLSTACK: depth has no natural upper bound (a deep recursion is ten
-   *     frames), so it is capped at CALLSTACK_CEILING frames.
-   *   - STREAM: an animation's output IS bounded (the trace determines it), but its
-   *     maximum can be a large share of the column (fib emits ~18 lines); past
-   *     STREAM_CEILING lines it is capped and scrolls, keeping the newest line in
-   *     view, rather than dominating the column (AUTHORING.md "STREAM sizes to its
-   *     known maximum").
-   *  Below their ceiling both size to the actual content -- never empty slots. */
+  /** The content height to RESERVE for a panel this step. Most panels -- the STREAM
+   *  included -- reserve their FULL content: an animation's output is bounded by its
+   *  trace (fib emits exactly 18 lines), so the panel sizes to that many rows and is
+   *  fixed from step 0, derived from the content, never from the space available or
+   *  an arbitrary cap. The one exception is the CALLSTACK, whose depth has no natural
+   *  upper bound (a deep recursion is ten frames), so it is capped at
+   *  CALLSTACK_CEILING frames and scrolls past it. */
   _panelContentH(p, body) {
     if (p.spec.type === 'callstack') {
       const frames = [...body.querySelectorAll('.pac-frame')];
@@ -382,14 +381,6 @@ export class Engine {
         const padB = parseFloat(getComputedStyle(body).paddingBottom) || 11;
         const top  = body.getBoundingClientRect().top;
         return Math.round(frames[CALLSTACK_CEILING - 1].getBoundingClientRect().bottom - top + padB);
-      }
-    }
-    if (p.spec.type === 'stream') {
-      const lines = [...body.querySelectorAll('.pac-stream-line')];
-      if (lines.length > STREAM_CEILING) {
-        const padB = parseFloat(getComputedStyle(body).paddingBottom) || 11;
-        const top  = body.getBoundingClientRect().top;
-        return Math.round(lines[STREAM_CEILING - 1].getBoundingClientRect().bottom - top + padB);
       }
     }
     return body.scrollHeight;

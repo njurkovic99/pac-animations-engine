@@ -752,14 +752,17 @@ content. Do NOT hardcode to a screen resolution.
   **and only when it would otherwise reach an edge.** Scrolling on every step is as
   disorienting as never scrolling. This matters most where a `main()` driver sits 20
   lines from the functions it calls.
-- **STREAM: height sizes to its known maximum, then caps.** An animation's output is
-  fully determined by its trace, so the line count is a *known* maximum — size to it
-  and fix it from step 0 (master invariant), exactly like any bounded panel. But that
-  maximum can be a large share of the column (fib emits ~18 lines; A3 emits 3), so
-  past a ceiling (`STREAM_CEILING` lines) the panel **caps and scrolls internally**,
-  keeping the newest line in view, rather than dominating the column. **Width is
-  still full-column** (output line length is not predictable) — height is known and
-  bounded, width is not, and the two dimensions get different treatment deliberately.
+- **STREAM: height is exactly its emitted line count.** An animation's output is
+  fully determined by its trace, so the line count is *known* — size the panel to
+  that many rows and fix it from step 0 (master invariant), derived from the content,
+  never from the space available. fib emits 18 lines → an 18-row panel; A3 emits 3 →
+  a 3-row panel. It does **not** cap-and-scroll, and it does **not** stretch to fill
+  leftover column space (`flex:none` on a content height, not a `flex:1` min-height
+  that would grab the space below it). If that makes the output the tallest thing in
+  its column, the shorter column simply has empty space at its foot — correct, per
+  "no panel stretches to fill." **Width is still full-column** (output line length is
+  not predictable) — height is known and bounded, width is not; the two dimensions
+  get different treatment deliberately.
 - **CALLSTACK / any unbounded-depth panel:** fixed cell capped at its ceiling,
   internal scroll, newest content (the running frame) scrolled into view.
 
