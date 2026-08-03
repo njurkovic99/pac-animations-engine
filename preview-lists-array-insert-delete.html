@@ -32,36 +32,15 @@
   --gap:           14px;
   --mono:          "SF Mono", "Cascadia Code", Consolas, monospace;
 
-  /* ---- stable layout (see AUTHORING.md "Stable layout") ----
-   * The stage (panel grid) is BOUNDED: it never grows past --stage-max-h no
-   * matter how much content a panel holds. Panels scroll internally within
-   * their grid cell; the controls, narration bar, and note box are pinned
-   * below the stage and stay on screen at any viewport height.
-   *
-   * The bound is derived, not hardcoded to a resolution: start from "~15 code
-   * lines visible" and the current 2-row grid, and tune these values. All
-   * values below are tunable. Design target: a 1920x1080 window at 100%.
-   *
-   * The two grid rows are sized to their content, NOT equally: the top row
-   * (code + array) gets ~15 code lines; the bottom row (call stack +
-   * count/capacity) holds a shallow call stack -- main -> ADD -> INSERT is the
-   * maximum, 3 frames -- and a two-value strip, so it is sized to about 2
-   * call-stack frames rather than a large reserve. Both rows are FIXED, so row
-   * heights stay stable across steps; a deeper stack scrolls internally instead
-   * of resizing the row. */
+  /* ---- layout metrics (see AUTHORING.md "Panels flow across both columns") ----
+   * The engine (layoutStage) resolves every panel's size ONCE from the viewport
+   * and from the maximum content each panel holds across the whole trace -- the
+   * CODE panel to as many whole lines as fit (floored at 15), each other panel to
+   * its measured content. These are the base metrics it reads. Design target: a
+   * 1920x1080 window at 100%. */
   --code-line-h:   20.6px;   /* code font-size 12.5px x line-height 1.65 */
-  --code-lines:    15;       /* code lines visible before the CODE panel scrolls */
-  --stream-line-h: 21.25px;  /* stream font-size 12.5px x line-height 1.7 */
-  --stream-lines:  3;        /* text lines the STREAM reserves before scrolling */
-  --panel-chrome:  54px;     /* a panel's header + body vertical padding (non-content) */
-  --body-pad:      22px;     /* a panel body's vertical padding alone */
-  --frame-h:       88px;     /* a representative call-stack frame (fn + ~1-2 vars) */
-  --callstack-frames: 2;     /* call-stack frames shown before the pane scrolls */
-
-  --callstack-stack-h: calc(var(--callstack-frames) * var(--frame-h) + (var(--callstack-frames) - 1) * 6px);
-  --stage-row-top:     calc(var(--code-lines) * var(--code-line-h) + var(--panel-chrome));
-  --stage-row-bottom:  calc(var(--callstack-stack-h) + var(--panel-chrome));
-  --stage-max-h:       calc(var(--stage-row-top) + var(--stage-row-bottom) + var(--gap));
+  --code-lines:    15;       /* code lines FLOOR before the CODE panel scrolls */
+  --body-pad:      22px;     /* a panel body's vertical padding (both edges) */
 
   /* ---- fixed footer heights (see AUTHORING.md "Stable layout") ----
    * The narration bar and note box are RESERVED at a constant height so their
@@ -546,8 +525,21 @@ body {
   padding: 1px 6px; border-radius: 3px;
   border: 1px solid transparent;
 }
-.pac-frame-var-name { color: var(--text-dim); }
-.pac-frame-var-val  { color: var(--text); }
+.pac-frame-var-name { color: var(--text-dim); white-space: nowrap; }
+/* A parameter value is an ATOMIC token -- a string, char, or number -- and never
+ * wraps: breaking "a)(b" across lines makes it unreadable and the frame taller,
+ * the opposite of what the width rules are for. The frame is measured to fit the
+ * value's full width. A genuinely long value (over --frame-val-max) truncates
+ * with an ellipsis instead of wrapping or driving the whole panel wide -- the cap
+ * bounds the natural width the engine measures, so it never collapses narrower. */
+.pac-frame-var-val {
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 22ch;
+  flex-shrink: 0;   /* never collapse below content (only max-width caps it) */
+}
 /* Activity channel (FILL) -- a local changing THIS step gets the blue fill, the
  * same rule as nodes/cells. */
 .pac-frame-var[data-role="active"] {

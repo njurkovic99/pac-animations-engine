@@ -244,6 +244,20 @@ animations (functions-call-return, value-vs-reference, recursion).
 The step's `line` highlight and the CALLSTACK stay in sync: when the highlight
 enters a function body, that function's frame is the active one.
 
+**Frame boxes size to content (width rules).** A frame box is as wide as its widest
+row needs — the function name, or a parameter's name plus its value plus the gap —
+and never narrower. **A parameter value is an atomic token and never wraps**: breaking
+`"a)(b"` across two lines makes it unreadable and the frame taller, the opposite of
+what the width rules are for. All frames in the panel share one width (the widest
+frame's) so their edges are not ragged. A value genuinely too long for a reasonable
+width **truncates with an ellipsis** rather than wrapping or dragging the whole panel
+wide.
+
+**Height is the DEEPEST stack, computed from the trace** — not a padded guess. The
+panel is fixed (master invariant) at the maximum frames it ever holds, which is the
+deepest the trace actually reaches (`main → scan → push` is three, so reserve three,
+not four). The 2-row bookkeeping floor still applies where a stack is shallower.
+
 ## Arrows (cross-panel overlay)
 
 A pointer lives in CELLS; the node it points at lives in NODES. Renderers publish
