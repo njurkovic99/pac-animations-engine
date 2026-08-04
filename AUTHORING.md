@@ -722,19 +722,33 @@ never, and never merely because the code took width it did not need.)
    at its natural width (not a 50/50 split), sharing the row's height.
 2. `'natural'` — **fixed-content panels** (variable strips, CALLSTACK) claim their
    natural width — as wide as their widest content across the run, never the column.
-3. `'fill'` — **CODE** takes the width that remains, down to `minCh` (~60) characters.
-   A short listing needs less and takes less, leaving the rest to the structure; a
-   listing with lines longer than that floor is held at the floor and scrolls, because
-   the structure has priority. (Code left-aligns; extra width past its lines is empty
-   space — the “wide code, little content” case is correct, not wasteful.)
-4. `'column'` — **STREAM** matches the width of the column it sits in, so beneath the
-   code it reads as one column.
+3. `'content'` — **CODE** is bounded on BOTH sides by its own longest line. Its
+   **ceiling** is that line (measured across *all* language tabs, plus a small
+   allowance) — the panel is never wider than its widest line, so on a wide stage the
+   leftover width falls **empty to its right**, the width analogue of the empty rows
+   the 15-line height ceiling leaves below it (item "code needs a width ceiling").
+   Its **floor** is `minCh` (~60) characters, applying only when the longest line is
+   longer than that: a listing with lines past 60 chars is held at 60 and scrolls,
+   because the structure has priority; a short listing takes only its own width,
+   leaving the rest to the structure. Measuring across all tabs is the master
+   invariant — switching pseudocode/Java/C++ must not change the panel's width.
+4. `'column'` — **STREAM** matches the width of the column it sits in; sitting beneath
+   the code, that is the code's width (capped to the same ceiling), so the two read
+   as one column.
+
+**The leftover is never redistributed.** Whatever width is left after the code takes
+its longest line and the structure takes its natural width stays **empty at the right
+of the row** — it is not handed to the code (that was the defect: a floor with no
+ceiling let the code swallow it) nor to the structure (stretching it would undo the
+"no panel off the viewport" fix). Empty at the right is correct, exactly as empty at
+the foot of the shorter column is correct.
 
 **If steps 1–3 cannot be satisfied side by side** — the widest non-code panel plus
 `codeMin` plus a gap exceed the stage — the row **collapses to a single column**
-(code full width, then the structure region, then the bookkeeping panels, stacked
-top to bottom). Nothing is compressed and nothing overflows; the page just grows
-taller. This is the resize-time fallback, resolved once on load, never mid-trace.
+(code, then the structure region, then the bookkeeping panels, stacked top to
+bottom; each still at its own resolved width, the code still capped at its longest
+line). Nothing is compressed and nothing overflows; the page just grows taller. This
+is the resize-time fallback, resolved once on load, never mid-trace.
 
 **Narrow viewports.** Two structure panels that will not fit side by side first
 **stack vertically within their region** (each still at its natural width); if the

@@ -133,14 +133,21 @@ body {
   display: flex; flex-direction: column; gap: var(--gap);
   align-items: flex-start; min-height: 0;
 }
-.pac-col[data-side="left"]  { flex: 1 1 auto; min-width: 0; }
+/* The left column sizes to its CONTENT, it does not grow to fill (item "code needs
+ * a width ceiling"). If it grew, the code panel -- stretched to the column -- would
+ * swallow all the slack and render a wide empty band right of every line. Sized to
+ * content instead, the code takes only its longest line (capped by the engine's
+ * inline max-width), the structure column packs immediately to its right, and the
+ * leftover width falls at the far right of the stage, empty -- the width analogue of
+ * the empty space left at the foot of the shorter column. */
+.pac-col[data-side="left"]  { flex: 0 1 auto; min-width: 0; }
 .pac-col[data-side="right"] { flex: 0 0 auto; }
 .pac-col > .pac-panel { flex: 0 0 auto; }   /* panels keep their resolved heights */
-/* CODE and STREAM are the exceptions -- they take ALL the width their column has.
- * Code so a long line never wraps or scrolls (rule 4); STREAM because output has
- * no predictable width, so a narrow box would wrap or truncate text the student
- * must read. Beneath the code panel, STREAM matches its width and the two read as
- * one column. (AUTHORING.md "Width rules".) */
+/* CODE and STREAM stretch to their COLUMN's width; the engine bounds that with an
+ * inline max-width (= the code's longest line) so neither grows past it. Code so a
+ * long line never wraps; STREAM because output has no predictable width and, sitting
+ * beneath the code, matches its width so the two read as one column. (AUTHORING.md
+ * "Width rules".) */
 .pac-col > .pac-panel[data-kind="code"],
 .pac-col > .pac-panel[data-type="stream"] { align-self: stretch; }
 
