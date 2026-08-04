@@ -227,23 +227,15 @@ this call — that's a comprehension hole.
 
 - A vertical stack of **frames**, newest on top and emphasized; caller frames below
   greyed but visible. `main` is the bottom frame — the driver.
-- **A frame is ONE line — the call itself.** `fn(name = value, …)`, formed from the
-  function name, its parameters as `name = value`, comma-separated, in parentheses.
-  A frame with no parameters renders as just `main()` — no placeholder row, no
-  "no locals" line. This keeps a frame one line tall, so the panel's height is the
-  frame *count*, not padded slots.
+- Each frame shows the **function name**, its **bound parameters** with values, and
+  its **active locals**.
 - **Push on call**, already showing bound argument values — `ADD` calling
-  `INSERT(count, value)` pushes a frame reading `INSERT(index = 3, value = 40)`.
-  This is how the ADD-is-INSERT lesson becomes visible.
+  `INSERT(count, value)` pushes an INSERT frame showing `index = 3` and
+  `value = 40`. This is how the ADD-is-INSERT lesson becomes visible.
 - **Pop on return.**
-- **Locals are NOT part of the call**, so they do not go inside the parens. A frame
-  that has locals (a loop `i`, a running `result`) shows them on **continuation rows
-  below** the call line — and only frames that have them grow past one line. Author a
-  local by tagging its var `kind: 'local'` (or listing it in the frame's `locals`);
-  parameters are the default and render inline.
 - A local that finishes (loop `i` after the loop) **stays greyed** in the frame
   until the function returns — it doesn't vanish mid-frame.
-- The **active** parameter or local gets the blue activity fill on the step it changes.
+- The **active local** gets the blue activity fill on the step it changes.
 
 **Author it whenever an animation steps into a function.** Show `main` as the driver
 so calls have a visible origin. It is *the whole point* of several beginner-course
@@ -251,40 +243,6 @@ animations (functions-call-return, value-vs-reference, recursion).
 
 The step's `line` highlight and the CALLSTACK stay in sync: when the highlight
 enters a function body, that function's frame is the active one.
-
-**Frame boxes size to content (width rules).** A frame box is as wide as its widest
-row needs — the one-line call, or a local's continuation row — and never narrower.
-**The call line never wraps**, and **a parameter value is an atomic token**: breaking
-`"a)(b"` across two lines makes it unreadable and the frame taller, the opposite of
-what the width rules are for. All frames in the panel share one width (the widest
-frame's) so their edges are not ragged. A value genuinely too long for a reasonable
-width **truncates with an ellipsis** rather than wrapping or dragging the whole panel
-wide.
-
-**The panel is never the tallest thing in its column.** With one-line frames and the
-2-frame ceiling, "Function calls" is a small panel (~2 lines of frames plus the
-2-row book floor); it does not stretch to fill, align to a neighbour, or reserve
-empty frame slots. If a column has a taller panel it is the code, the structure
-region, or a state strip — never the call stack.
-
-**Height is CAPPED at a ceiling of 2 frames — the CALLSTACK scrolls; it does not
-size to its maximum.** A call stack's depth has no natural upper bound (a deep
-recursion is ten frames), and even a shallow trace's *typical* depth is usually 2
-(`main → f`), reaching a third only briefly inside a nested call — reserving for that
-exception wastes the space for most of the animation. The panel is fixed (master
-invariant) at `min(deepest reached, 2 frames)`: below the ceiling it is the actual
-depth (never empty frame slots); at or past it, it **scrolls to keep the running
-(top) frame visible**, the same follow-the-highlight the structure region has. This
-generalises: **any panel whose content has no natural upper bound gets a ceiling plus
-internal scrolling** (structure region, CALLSTACK); panels with a genuinely known
-maximum (a 4-cell array, a 4-box strip) size to that maximum. CALLSTACK was long
-misfiled as the second kind.
-
-Because the code panel receives *whatever the layout leaves it* (it has no height of
-its own — see "Panels flow across both columns"), capping the CALLSTACK actually
-shrinks the code panel and the stage: less height in the right column means the
-balancing gives the code panel less, down to its 15-line floor. That is the point —
-the CALLSTACK ceiling is one of the levers that keeps the whole screen compact.
 
 ## Arrows (cross-panel overlay)
 
@@ -549,228 +507,93 @@ during `queues-count-vs-rear` — every one caught in review rather than by the 
 | Index labels bounced as cells filled | empty cells rendered collapsed | cells are a fixed size for every role |
 | Markers jumped down when leaving -1 | parked zone had no index label above it | the index band spans the parked zone at full height |
 | Controls moved on the step that printed output | STREAM sized to content | STREAM has a fixed line count from step 0 |
-| Panel breathed on every call and return | CALLSTACK sized to content | capped at its 2-frame ceiling, scrolls past it |
-| Blank rows below the last line of code | code padded to 15 lines | floor is min(15, listing length); a short listing shows in full |
-| Output panel swallowed the column | STREAM sized to its full 18-line max | capped at its line ceiling, scrolls past it |
-| Panel stretched with an internal void | a panel grown to fill leftover column space | only code absorbs slack (up to its listing); leftover stays empty |
+| Panel breathed on every call and return | CALLSTACK sized to content | fixed to the deepest stack reached |
+| Dead gap above the controls | code panel pinned to exactly 15 lines | 15 is a floor; the panel fills the column |
 
 **When adding any renderer or panel, ask: can this change size between steps? If yes,
 it is wrong.** Reserving space that is sometimes empty is always correct and always
 cheap. Recalculating on an actual window *resize* is fine; recalculating because the
 *content* changed is the bug.
 
-Corollary, learned the same way: **unused space has no cost.** Where a panel can take
-more room without pushing anything off screen, it should — a fixed size that leaves a
-visible hole is as much a defect as one that overflows. **Floors and ceilings, not
-fixed values.**
+### Reserve the maximum — UP TO A CEILING. Scroll beyond it.
 
-## Panels flow across both columns
+The invariant above was originally written as "reserve the maximum," full stop, and
+that half-statement caused its own round of defects: a trace emitting 18 output lines
+reserved 18 rows from step 0 and ate most of a column, mostly empty, for most of the
+animation. Reserving is right; reserving without a bound is not.
 
-The author declares panels in **reading order** — what the student watches first,
-bookkeeping and machinery last — and the **engine places them** (`layoutStage`). It
-resolves ONCE on load (and on a real window resize) and holds; nothing re-flows as
-steps advance.
+Every panel answers ONE question: **does its content have a known maximum?**
 
-- Panels flow in declaration order down the **right** column. When the right column
-  reaches the balanced height, the remainder continues in the **left** column,
-  **beneath the code panel**.
-- The **code panel** anchors the top of the left column and takes its **15-line
-  floor**, never the full column height. Earlier builds pinned code to the full
-  left-column height, so a five-panel right column stretched it to 37 lines, most of
-  them dead weight — that is the bug this rule fixes.
-- **Resolution order** (this is what makes the ceilings below bite): bookkeeping
-  panels claim their sizes first (each sized to content, capped where noted); the
-  structure region takes what it needs up to its ceiling; the code panel takes its
-  floor; any slack left over in the left column goes to the code panel — the only
-  panel that always has more listing it could usefully show (but never past the
-  listing's own length: a short listing does not stretch).
-- **No panel stretches to fill leftover space.** Only the code panel absorbs slack,
-  and only up to its listing's length. Once every panel has taken its content size
-  and the code panel has grown to show as much of its listing as fits, any space
-  still left over stays **EMPTY at the bottom of the column**. Empty space below the
-  last panel is correct; a panel stretched with an internal void is not. The two
-  columns therefore usually have *ragged* bottoms, and that is fine — the stage is
-  driven by the taller column's real content, and the shorter column simply ends
-  where its content ends. (The structure region is bounded by its ceiling, never
-  grown to fill; the STREAM is capped and scrolls, never grown to fill; the call
-  stack is capped and scrolls, never grown to fill.)
+- **Yes** → size to that maximum (a 4-cell array, a 3-box variable strip, a listing).
+- **No, or the maximum is large** → apply a ceiling, scroll beyond it, and keep the
+  active element in view.
 
-### The structure region has a ceiling
+Both axes, same rule:
 
-**Structure panels** are the CELLS/NODES/CHART panels showing the data structure the
-animation is about — the thing whose shape the student reads. They are the only
-panels whose height cannot be predicted from the content file. A NODES/CHART panel is
-a structure panel by default; a CELLS panel is bookkeeping by default (it is more
-often an auxiliary strip) and opts in with `structure: true` — the array or stack it
-*is* the structure of.
+    height = min(rows needed, available)   with a floor and a per-type ceiling
+    width  = min(content width, available) with a floor and a per-type ceiling
 
-- The structure region occupies at most **half the stage height** — a share, not a
-  pixel count, so it scales with the viewport.
-- **Multiple structure panels share that region HORIZONTALLY, side by side — never
-  stacked.** Two views of one structure (a heap's tree view and its array view) must
-  stay side by side or the correspondence that is the whole lesson is lost. A single
-  structure panel fills the region width; several are each sized to their own content
-  width.
-- A structure that does not fit its ceiling **scrolls internally** and **follows its
-  active element** — the same "follow the highlight" the code panel has, so a student
-  never hunts for the cell being modified. *Known limitation, accepted for now:*
-  scrolling a large tree loses its shape; revisit at `heap-is-this-valid` /
-  `trees-bst-operations`. The open-in-own-window link is the escape hatch until then.
+Leftover space in either axis stays **empty**. It is not distributed, and no panel
+grows into it. Empty space at the foot of the shorter column, or to the right of the
+last panel in a row, is the correct look — it reads as "this column has less in it,"
+which is true.
 
-### No panel may exceed the viewport width
+### The sizing policy table
 
-Cut-off content is a hard failure — the student cannot scroll to it, pan to it, or
-see it at all, unlike *scrolled* content which is always reachable. So:
+Policy is **data, in one table**, applied by **one resolver**. This is the most
+important structural rule in this document, and it was learned the expensive way.
 
-- **The sum of a row's panel widths, plus gaps, never exceeds the stage width**,
-  resolved on load. This is now achieved by giving the **structure** width priority
-  and letting the code take what remains (see "Width rules") — not by capping the
-  structure. A structure never scrolls horizontally.
-- **When the row cannot fit side by side, it stacks — it never overflows.** If the
-  widest non-code panel plus the code's char floor plus a gap exceed the stage, the
-  two columns **collapse to one**: the code goes full width, then the structure
-  region, then the bookkeeping panels, each stacked below the last. The page grows
-  taller (always reachable), and no panel is pushed off the right edge or left
-  overlapping its neighbour — off-screen is strictly worse than a taller page. This
-  is resolved once, on load/resize, never mid-trace. The only case that no layout
-  can rescue is a **single** panel wider than the whole stage (it overflows even at
-  full width, on its own row); that is the too-wide content problem, reported not
-  accommodated.
-- **A panel claims the width of its content, not the space around it.** The width a
-  panel reserves is measured at `max-content` — its widest rendered row — so a panel
-  never demands blank space it will render empty (the code's floor is its widest
-  *line*, not the wide empty column it happens to sit in).
-- A **call tree** (or any NODES diagram) renders at its natural pixel size. It never
-  scrolls **horizontally**; it may scroll **vertically** only if it is deeper than
-  half the stage. It is never scaled to an unreadable smear or clipped at an edge. At
-  **step 0**, with nothing active yet, a tree centres on its **root**.
-- An **indexed array** (a non-compact CELLS box) does not wrap when narrowed — a
-  wrapped `[0][1][2] / [3][4]` is the index-vs-position confusion drawn as a layout —
-  and, sized at its natural width now, does not scroll either.
-
-### The Variables strip flows horizontally
-
-Variable boxes flow left to right, filling each row before starting a new one. A new
-row starts **only when the next box will not fit** the available width; never stack
-vertically by default, and never wrap while space remains on the current row. fib's
-`n, level, depth, N` is four boxes on one row; a queue's `front, rear, ch` is three
-on one row. This is the same for the `box` (label above value) and `row` (label
-beside value) cell layouts — both flow horizontally.
-
-**Only true variables belong in a Variables strip.** A derived expression — fib's
-`n + level` — is not a variable and does not get a box; the relationship it expresses
-(the invariant `n + level = N`) is taught in a note and in narration that points at
-the values already on screen (the tree prints `level` and `depth` on every node), not
-by adding a computed cell to a panel named Variables.
-
-### Panel sizing policy — one table, not four call sites
-
-Every panel body is **`flex: none` with an explicit height derived from its own
-content**. The CSS default is `flex: none` (not `flex: 1`): a flex-grow default let
-whichever panel had column space below it *stretch* to fill it, and that single
-mechanism caused every "panel grew instead of sizing to content" regression — each
-fixed one panel at a time. With `flex: none` no body can inflate past its assigned
-height; `overflow: auto` still scrolls content that exceeds it.
-
-The floor/ceiling for each panel type is **data**, in the engine's `SIZE_POLICY`
-table, applied uniformly — not literals scattered across the layout code (which is
-how the rule drifted). Adding a panel type is a new row in that table, not a new
-branch:
-
-| class | floor | ceiling | past ceiling |
+| Panel | Floor | Ceiling | Beyond ceiling |
 |---|---|---|---|
-| code | 15 rows | listing length (never more rows than the code has) | absorbs column slack |
-| callstack | 2 rows | 2 frames | scrolls, running frame in view |
-| stream | 2 rows | 8 rows | scrolls, newest line in view |
-| structure | 2 rows | ½ the stage | scrolls, active element in view |
-| strip (cells) | 2 rows | none (exact content) | — |
+| CODE | 15 rows; ~60 chars wide | listing length; longest line | scroll |
+| CALLSTACK | 2 rows | 2 frames | scroll, active frame in view |
+| STREAM | 2 rows | 8 rows | scroll, newest line in view |
+| structure (CELLS/NODES) | content | half the stage (height only) | scroll vertically; **never horizontally** |
+| strips | 2 rows | exact content | — |
 
-The 2-row floor keeps a panel from collapsing to a sliver; the floor is on the
-content area (title + padding + ≥2 content rows). A **count** ceiling (2 frames, 8
-rows) caps the body at that many rendered rows and scrolls the rest — one generic
-mechanism, so `stream: {rows: 8}` was a one-line table change, not new behaviour.
-The STREAM's ceiling exists because output is bounded but can still be large (fib
-emits 18 lines); 8 rows shows a run of output as a block at a fraction of the cost,
-and the newest line — the one the current step just printed — stays in view.
+**Adding a panel type means adding a row to this table, never a branch at a call
+site.** The reason is the whole story of `stacks-paren-scanner`: the same rule
+("size to content") was implemented independently in four places — stage, structure
+region, callstack+stream, code — and the four drifted. Every fix corrected one branch,
+so the same defect resurfaced from a different branch, again and again, for roughly
+thirty review rounds. Centralising the resolver and making the clamps data ended it in
+a single pass.
 
-### STREAM is declared last
+Two specific traps, both of which cost multiple rounds:
 
-STREAM is what the program *emits*; every other non-code panel is state the student
-*inspects*. Output reads as a continuation of the code that produced it, so declare
-the STREAM panel **last** — after every structure and bookkeeping panel. The column
-flow then places it at the end, which is the left column beneath the code panel once
-the right column is full. This is a preference expressed through declaration order,
-not a special case: where balancing puts it elsewhere, that is acceptable.
+- **`flex: 1` was the default on panel bodies.** That made every panel stretch to fill
+  its container, and `flex: none` was applied one panel at a time as each was
+  reported. The default is now `flex: none`. Do not reintroduce a growing default.
+- **A floor with no ceiling swallows all slack.** The code panel had a 15-row floor and
+  no ceiling, so it absorbed every spare pixel — first vertically (padding a 9-line
+  listing to 15 rows), later horizontally (a 50-character listing in a 1200px panel).
+  Same defect, two axes, two separate discoveries.
 
-## Width rules — height is scarce, width is not
+Corollary, and it cuts both ways: **unused space has no cost, but unused space is not
+a hole to fill.** A panel that leaves a visible gap because it was pinned too small is
+a defect; a panel that grows past its content to close a gap is also a defect. Floors
+and ceilings, not fixed values, and not stretching.
 
-The height rules allocate vertical space strictly, because it costs the student
-scrolling. Width is resolved the same way height is — **one pass, priority per panel
-type declared as data in `SIZE_POLICY.width`** — not emergent grid behaviour. It
-resolves ONCE on load (may change on a real resize) and holds; a panel's width never
-changes as steps advance.
+### Column ends do not align, and that is correct
 
-**The governing rule: a STRUCTURE PANEL NEVER SCROLLS HORIZONTALLY.** A student
-reading a data structure must see its shape; a horizontally scrolled structure
-teaches nothing. So structure has **width priority over the code**. (Vertically a
-structure may still scroll — a deep tree past half the stage — but horizontally,
-never, and never merely because the code took width it did not need.)
+Panels are an integer number of rows times a row height, plus chrome. Different panel
+types have different row heights, so two columns of "as much content as fits" land on
+different pixel totals — a residual gap of less than one row at the foot of the
+shorter column.
 
-**Resolution order (`SIZE_POLICY.width`):**
-1. `'natural'` — **structure panels** claim the width their content actually needs,
-   uncompressed. Two structure panels in the region sit adjacent from the left, each
-   at its natural width (not a 50/50 split), sharing the row's height.
-2. `'natural'` — **fixed-content panels** (variable strips, CALLSTACK) claim their
-   natural width — as wide as their widest content across the run, never the column.
-3. `'content'` — **CODE** is bounded on BOTH sides by its own longest line. Its
-   **ceiling** is that line (measured across *all* language tabs, plus a small
-   allowance) — the panel is never wider than its widest line, so on a wide stage the
-   leftover width falls **empty to its right**, the width analogue of the empty rows
-   the 15-line height ceiling leaves below it (item "code needs a width ceiling").
-   Its **floor** is `minCh` (~60) characters, applying only when the longest line is
-   longer than that: a listing with lines past 60 chars is held at 60 and scrolls,
-   because the structure has priority; a short listing takes only its own width,
-   leaving the rest to the structure. Measuring across all tabs is the master
-   invariant — switching pseudocode/Java/C++ must not change the panel's width.
-4. `'column'` — **STREAM** matches the width of the column it sits in; sitting beneath
-   the code, that is the code's width (capped to the same ceiling), so the two read
-   as one column.
+Making the columns end together would require giving some panel a fractional row,
+which is the partial-line clipping this document forbids. **Whole rows and equal
+column ends cannot both hold. Whole rows wins.**
 
-**The leftover is never redistributed.** Whatever width is left after the code takes
-its longest line and the structure takes its natural width stays **empty at the right
-of the row** — it is not handed to the code (that was the defect: a floor with no
-ceiling let the code swallow it) nor to the structure (stretching it would undo the
-"no panel off the viewport" fix). Empty at the right is correct, exactly as empty at
-the foot of the shorter column is correct.
-
-**If steps 1–3 cannot be satisfied side by side** — the widest non-code panel plus
-`codeMin` plus a gap exceed the stage — the row **collapses to a single column**
-(code, then the structure region, then the bookkeeping panels, stacked top to
-bottom; each still at its own resolved width, the code still capped at its longest
-line). Nothing is compressed and nothing overflows; the page just grows taller. This
-is the resize-time fallback, resolved once on load, never mid-trace.
-
-**Narrow viewports.** Two structure panels that will not fit side by side first
-**stack vertically within their region** (each still at its natural width); if the
-region is still too wide beside the code, the whole row collapses to the single
-column above. A structure is never shrunk.
-
-**The one unfixable case** — a **single** panel wider than the whole stage, which
-overflows even at full width on its own row — is NOT a layout problem to accommodate.
-It means the **animation is too wide** and must be redesigned (fewer cells, shorter
-lines, a split view). The engine `console.warn`s it rather than compressing.
-(No current animation trips this at the 1920×1080 target.)
-
-## Panel count — a soft ceiling for `standard`
-
-`beginner` caps at 3 panels, enforced in the engine. `standard` has a **soft ceiling
-of 6** — not enforced, but an animation reaching for a 7th must justify it, and the
-first two moves to try are **merging related state into one panel** or **cutting a
-panel that is not earning its place**. A screen the student cannot hold in their head
-teaches less than a smaller one, however correct each panel is. Never add a panel to
-make a labelling point: a distinct row inside an existing panel, with a highlight, is
-nearly always enough (the `n + level` invariant row lives inside Variables, not in a
-panel of its own).
+Two measurement notes for anyone who investigates this again (it has been
+investigated three times):
+- `.pac-col` is `align-items: stretch`, so the column ELEMENT measures as the full
+  stage height regardless of content. Verification must compare against the column's
+  *content* height — last panel's bottom minus first panel's top.
+- `pac.verifyHeights()` reports, per column, the sum of resolved panel heights plus
+  declared gaps against the measured content height. Those must match exactly. A
+  constant offset across every animation would be an accounting bug; gaps that vary
+  per animation are just quantization. Run it before questioning any panel's size.
 
 ## Stable layout — bounded stage, internal scrolling, pinned footer
 
@@ -783,48 +606,72 @@ content. Do NOT hardcode to a screen resolution.
 
 **Every panel scrolls internally within its grid cell.**
 
-- **CODE: 15 lines is the FLOOR, and the floor is `min(15, listing length)`.** Show
-  `min(listing length, lines that fit)` — as many whole lines as fit the left column
-  once the other panels are placed. The 15-line floor applies **only when the listing
-  is longer than 15**: a 9-line listing produces a 9-line panel (never padded to 15
-  with blank rows), a 37-line listing shows at least 15 and as many more as fit. The
-  panel never renders a blank row below the last line of code. `listing length` is the
-  **currently displayed** language's line count, not the max across languages — a
-  9-line pseudo listing is 9 rows even if the Java variant is 12. Switching the
-  language tab **re-runs the layout** (a user action, like a resize), so a longer
-  variant grows the panel *then*, never mid-trace; the panel WIDTH still measures
-  across all languages so a long line never wraps and the width does not jump on
-  switch. **Whole lines only** — never a
-  half-height row clipped at the bottom edge, and never a sliver of the next line
-  peeking in at the top. This is a sub-pixel trap: a *unitless* line-height (12.5px ×
-  1.65 = 20.625px) is fractional, and scrollTop rounds to whole pixels, so no matter
-  how the viewport is sized a fraction of a neighbouring line leaks in. The line
-  height is therefore an **integer px** (`--code-line-h`), so the viewport
-  (`lines × height`), the scroll boundaries, and the panel body all land on exact
-  line edges; the follow-the-highlight scroll snaps its target to a whole-line
-  multiple. **Resolve on load, hold constant**: switching
-  language tabs or advancing steps must not change it. The highlighted line
-  auto-scrolls into view, holding roughly the middle with context above and below —
-  **and only when it would otherwise reach an edge.** Scrolling on every step is as
-  disorienting as never scrolling. This matters most where a `main()` driver sits 20
-  lines from the functions it calls.
-- **STREAM: height is exactly its emitted line count.** An animation's output is
-  fully determined by its trace, so the line count is *known* — size the panel to
-  that many rows and fix it from step 0 (master invariant), derived from the content,
-  never from the space available. fib emits 18 lines → an 18-row panel; A3 emits 3 →
-  a 3-row panel. It does **not** cap-and-scroll, and it does **not** stretch to fill
-  leftover column space (`flex:none` on a content height, not a `flex:1` min-height
-  that would grab the space below it). If that makes the output the tallest thing in
-  its column, the shorter column simply has empty space at its foot — correct, per
-  "no panel stretches to fill." **Width is still full-column** (output line length is
-  not predictable) — height is known and bounded, width is not; the two dimensions
-  get different treatment deliberately.
-- **CALLSTACK / any unbounded-depth panel:** fixed cell capped at its ceiling,
-  internal scroll, newest content (the running frame) scrolled into view.
+- **CODE:** `rows = min(listing length, rows that fit)`, with the 15-row floor
+  applying **only when the listing is longer than 15**. A 9-line listing produces a
+  9-row panel — it does NOT pad to 15. (An earlier revision of this document said
+  "pads to 15"; that was wrong and produced a 9-line listing in a 15-row box.)
+  **Whole rows only** — never a half-height row clipped at an edge. Width is
+  `min(longest line across ALL language tabs, available)`, floor ~60 characters.
+  **Resolve on load, hold constant**: switching language tabs or advancing steps must
+  not change either dimension.
+  The highlighted line auto-scrolls into view, holding roughly the middle with context
+  above and below — **and only when it would otherwise reach an edge.** Scrolling on
+  every step is as disorienting as never scrolling. This matters most where a `main()`
+  driver sits 20 lines from the functions it calls.
+- **STREAM / CALLSTACK:** ceiling from the policy table, internal scroll, newest
+  content (or the active frame) kept in view.
 
 **Panels fill their grid cells; don't oversize a cell for little content.** A
 two-value panel is a compact strip, not a tall boxed panel with a void. Content
 top-aligns.
+
+### Where panels go — column flow and width priority
+
+**Which panel goes in which column was never stated** until `stacks-paren-scanner`,
+and in its absence the shape "code left, everything right" was copied from build
+prompt to build prompt. It happened to balance with 3-4 right-hand panels and broke at
+five: the code panel, pinned to the full height of the left column, was being sized by
+the OTHER column's content and stretched to 37 rows, 22 of them dead.
+
+- **The author declares panels in READING ORDER**; the engine places them. Reading
+  order is: what the student watches first, then bookkeeping, then machinery. STREAM
+  is declared last — it is what the program *emits*, and reads naturally as a
+  continuation of the code that emitted it, which usually places it beneath the code
+  panel.
+- Panels flow down the right column in declaration order; when it is full, the
+  remainder continues in the LEFT column beneath the code panel.
+- **Resolution order (height):** bookkeeping panels claim their minimums → the
+  structure region takes what it needs up to its ceiling → CODE takes its floor → any
+  slack goes to CODE, up to its listing length.
+
+**Width priority is the reverse, and this matters: a structure panel NEVER scrolls
+horizontally.** A student reading a data structure must see its shape; a horizontally
+scrolled structure teaches nothing.
+
+- **Resolution order (width):** structure panels claim their natural width → fixed-
+  content panels claim theirs → CODE takes what remains, down to ~60 characters →
+  STREAM matches its column.
+- **The sum of a row's widths plus gaps never exceeds the viewport.** No panel may be
+  positioned partly outside it. Off-screen content is unreachable, which is strictly
+  worse than any amount of wasted space.
+- If a structure genuinely cannot fit beside the code minimum, **the animation is too
+  wide and must be redesigned** — fewer cells, a different layout, a split view. It is
+  never resolved by shrinking the structure or letting a panel overflow.
+
+Structure panels sharing a row sit adjacent, each at its own natural width, sharing
+the row's height (so tops and bottoms align). They do not split the row evenly and
+they do not stretch. Two views of one structure — the heap's tree and its array — must
+be side by side, never stacked, or the correspondence that is the lesson is lost.
+
+### Panel count — soft ceiling of 6 for `standard`
+
+`beginner` caps at 3, enforced. `standard` was documented as unbounded, which is how
+one animation reached five panels without anything objecting. **Six is a soft ceiling**
+— not enforced, but a seventh must be justified. The first two things to try are
+merging related state into one panel, or cutting one that is not earning its place.
+Do not add a panel to make a labelling point: a distinct row inside an existing panel,
+with a highlight, is nearly always enough. A screen the student cannot hold in their
+head teaches less than a smaller one, however correct each panel is.
 
 **Controls and note are pinned below the stage, always visible.** They are never
 pushed below the fold at any viewport size. On a short viewport panels show less and

@@ -69,7 +69,9 @@ aJava** (advanced C++/Java), and **ds** (data structures). ~91 animations planne
 
 ### Formatting he wants from me (learned preferences)
 - **Prompts for Claude Code → in a copy-box (code block)** so he can one-click copy.
-- **GitHub URLs and PowerShell → in code blocks** (copiable).
+- **GitHub URLs → markdown links (clickable)**, with the bare URL alongside only when
+  he needs to copy rather than click. PowerShell stays a plain code block — it gets
+  pasted into a terminal, not clicked.
 - **Every git block is SELF-CONTAINED and begins with fetch + checkout**, branch
   name included, so it works whether he is on `main` or already on the branch
   (`checkout` on the current branch is a harmless no-op). This cost three separate
@@ -137,7 +139,7 @@ with per-field anchors), STREAM (console I/O), CHART (series over n), **CALLSTAC
 
 ---
 
-## WHAT'S DONE (4 animations, all merged to main + live)
+## WHAT'S DONE (5 animations, all merged to main + live)
 
 1. **recursion-fib-levels** (ds A5) — recursion trace, `level`/`depth` node meta.
 2. **lists-doubly-insert-order** (ds A10) — 4-line doubly-linked insertion; the
@@ -147,6 +149,15 @@ with per-field anchors), STREAM (console I/O), CHART (series over n), **CALLSTAC
    **CELLS rendering contract** and the **master layout invariant**. Renamed the
    CALLSTACK panel to **"Function calls"** (student-visible only) so it can't be
    confused with the actual stack in A3/A4.
+5. **stacks-paren-scanner** (ds A3) — array stack + scanner, three expressions each
+   isolating one error, ending on the post-loop check the lecture leaves as an open
+   question. Added the **vertical CELLS mode** (column, [0] at bottom, markers left).
+   Forced the engine's **layout rebuild**: one height resolver, one width resolver,
+   sizing policy as a data table, `pac.verifyHeights()`.
+4. **queues-count-vs-rear** (ds A2) — array queue, `front` + `rear`, `-1` sentinel,
+   built from empty. Debuts the **index-pointer primitive**; established the
+   **CELLS rendering contract** and the **master layout invariant**. Renamed the
+   CALLSTACK panel to **"Function calls"** (student-visible only).
 3. **lists-array-insert-delete** (ds A1) — THE big one. Array-based list menu
    (ADD/INSERT/DELETE, invalid-insert-at-7, badINSERT smear). It BUILT and proved,
    as reusable capabilities the whole project now inherits:
@@ -173,7 +184,58 @@ deferred): append `?a=ds-a1` to the src.
 
 ---
 
-## WHERE WE STOPPED — A2 SHIPPED. NEXT UP: stacks (ds A3/A4)
+## WHERE WE STOPPED — A3 SHIPPED. NEXT UP: `stacks-postfix-eval` (ds A4)
+
+**5 animations** built, reviewed, merged, live. `stacks-paren-scanner` (ds A3) came
+with a substantial engine rebuild — see "WHAT A3 COST" below before estimating A4.
+
+**A4 is now the throughput test.** A3 was supposed to be, and wasn't: it added a
+vertical CELLS mode and then exposed that the layout rules were written from one
+animation's needs and applied where they didn't fit. A4 inherits a settled engine and
+should be genuinely cheap. If it isn't, the resolvers didn't hold.
+
+**Source docs for A4: `stacks.htm` (the lecture — Application 2, evaluating a postfix
+expression) and `ds4.html` (the assignment, not yet seen).** The lecture already walks
+`12+34-*` through a stack in a table, and gives the algorithm in three lines: push
+values, on an operator pop two and push the result, one value left at the end. It also
+flags the character-vs-ASCII trap and the switch-on-operator point. Infix→postfix
+conversion is explicitly NOT part of the project (extra credit), so the animation
+should not spend steps on it.
+
+---
+
+## WHAT A3 COST, AND WHY (read before estimating A4)
+
+Roughly 44 review items. Almost none were about the animation. The content needed one
+design pass and two changes (drop the push/pop demo, drop `{ }`). Everything else was
+**one bug wearing different clothes**, and the shape is worth remembering:
+
+- **"Size to content" was implemented in four separate places** — stage, structure
+  region, callstack+stream, code — which had drifted independently. Fixing one branch
+  left the others, so the same defect reappeared from a different direction ~30 times.
+  Centralising it into one resolver with the clamps as a **data table** ended it in a
+  single pass.
+- **`flex: 1` was the default on panel bodies**, so every panel stretched, and
+  `flex: none` was being applied one panel at a time as each was noticed.
+- **Floors with no ceilings swallow slack** — discovered separately for height (a
+  9-line listing padded to 15 rows) and width (a 50-character listing in a 1200px
+  panel).
+- **Rules stated for one animation don't generalise.** "Code left, everything right"
+  was never a rule; it was a shape copied through three build prompts that happened to
+  balance until it didn't.
+
+Two of my own reports were wrong and cost rounds: I read a *scrollable* call tree as
+clipped content, and a *legitimately shorter* column as a misalignment (three times).
+`pac.verifyHeights()` now exists precisely so that question is one command instead of
+an investigation — **run it before questioning any panel's size.**
+
+The lesson for planning: the expensive part was never pedagogy or trace design, both
+of which went in one pass. It was unstated layout invariants that Claude Code had to
+guess at, differently each time.
+
+---
+
+## (superseded) A2 notes — kept for the design record
 
 `queues-count-vs-rear` is built, reviewed, merged and live. That makes **4
 animations** done. The four reference docs are current as of this handover.
