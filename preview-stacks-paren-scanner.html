@@ -1858,6 +1858,19 @@ class Engine {
     // CONTENT height (last panel's bottom minus first panel's top), NOT the column
     // element's height, or it will "find" a phantom discrepancy equal to the
     // shorter column's foot gap. `verifyHeights()` below does exactly this.
+    //
+    // WHY the two columns end at different heights (item 43): the residual foot gap
+    // is ROW QUANTIZATION, not imbalance and not an error. Every panel is sized as
+    // an INTEGER number of rows x that panel type's row height, plus fixed chrome
+    // (header + border + padding) -- and the row heights differ by type: code lines
+    // (~20.6px), output lines, callstack frames, and cell rows are all different.
+    // Two columns each holding "as many whole rows as fit" therefore sum to
+    // different pixel totals; there is no shared grid they could land on together.
+    // Forcing the ends to align would mean giving some panel a FRACTIONAL row -- the
+    // partial-line clipping deliberately removed in items 21 and 29. Whole rows and
+    // equal column ends cannot both hold, and whole rows wins: the leftover pixels
+    // stay as empty space at the shorter column's foot (item 24), never a sliver of
+    // a clipped line. This is expected and correct -- do not "fix" it.
     this.stage.style.height = `${Math.round(stageH)}px`;
     if (structure.length) {
       this.structureRegion.toggleAttribute('data-stacked', regionStacked);
