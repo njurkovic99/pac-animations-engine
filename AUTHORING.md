@@ -623,18 +623,17 @@ Cut-off content is a hard failure — the student cannot scroll to it, pan to it
 see it at all, unlike *scrolled* content which is always reachable. So:
 
 - **The sum of a row's panel widths, plus gaps, never exceeds the stage width**,
-  resolved on load. Every right-column panel is capped at the width left over once
-  the code keeps its widest line; a panel wider than its cap is **not clipped** — it
-  keeps its natural content and **scrolls internally** (the panel body is
-  `overflow:auto`).
-- A wide **call tree** (or any NODES diagram) renders at its natural pixel size and
-  **scrolls in both axes**, following the active node — it is never scaled down to an
-  unreadable smear, and never clipped at a panel or viewport edge. At **step 0**, with
-  nothing active yet, a tree centres on its **root**, the origin of execution the
-  opening note points at.
+  resolved on load. This is now achieved by giving the **structure** width priority
+  and letting the code take what remains (see "Width rules") — not by capping the
+  structure. A structure never scrolls horizontally; if it will not fit beside the
+  code minimum, that is the too-wide content problem, reported not accommodated.
+- A **call tree** (or any NODES diagram) renders at its natural pixel size. It never
+  scrolls **horizontally**; it may scroll **vertically** only if it is deeper than
+  half the stage. It is never scaled to an unreadable smear or clipped at an edge. At
+  **step 0**, with nothing active yet, a tree centres on its **root**.
 - An **indexed array** (a non-compact CELLS box) does not wrap when narrowed — a
   wrapped `[0][1][2] / [3][4]` is the index-vs-position confusion drawn as a layout —
-  it stays one row and scrolls.
+  and, sized at its natural width now, does not scroll either.
 
 ### The Variables strip flows horizontally
 
@@ -693,41 +692,41 @@ not a special case: where balancing puts it elsewhere, that is acceptable.
 ## Width rules — height is scarce, width is not
 
 The height rules allocate vertical space strictly, because it costs the student
-scrolling. The width rules are the opposite temperament: **don't WASTE horizontal
-space, and degrade gracefully when there is less of it.** All resolve ONCE on load
-(they may change on a real window resize) and then hold — a panel's width never
-changes as steps advance, exactly like its height.
+scrolling. Width is resolved the same way height is — **one pass, priority per panel
+type declared as data in `SIZE_POLICY.width`** — not emergent grid behaviour. It
+resolves ONCE on load (may change on a real resize) and holds; a panel's width never
+changes as steps advance.
 
-1. **Structure panels size to content, then left-align.** A CELLS/NODES panel takes
-   the width its content needs — cells at their fixed size, the marker lane, the
-   index band, padding — and no more. It does NOT stretch to fill the column. Content
-   left-aligns; leftover width at the right stays empty. Do not spread the slack as
-   padding between cells: that makes a small structure look sparse and, worse, makes
-   cell spacing depend on the viewport.
-2. **Panels sharing a row sit adjacent, each at its own natural width.** Two
-   structure panels in the region sit next to each other from the left, each as wide
-   as it needs — not a 50/50 split. They DO share the row's **height** (tops and
-   bottoms align; the row is as tall as the tallest panel), so the row reads as
-   deliberate, not ragged.
-3. **Fixed-content panels take their natural width.** The Variables strip and
-   CALLSTACK are each exactly as wide as their widest content across the whole run
-   (per the master invariant), never the full column. This applies to every such
-   panel — pointer-variable boxes and invariant readouts included, not only the
-   obvious strips. (CALLSTACK frame boxes size to their widest row and share one
-   width; a value never wraps, and truncates with an ellipsis if genuinely too long.)
-4. **CODE and STREAM take all the width they are given.** These two are the exception
-   to rule 3, because their content has no predictable maximum width: a long code
-   line, or an error message / echoed line / formatted number in the output. A wide
-   panel is far better than wrapping or scrolling text the student must read. So the
-   right column is sized to its widest natural-width panel and the code panel fills
-   whatever the left column has left; STREAM fills its column too, so when it sits
-   beneath the code panel the two share one width and read as a single column. The
-   test is whether the content has a predictable maximum width — a 4-box strip does,
-   a line of output does not.
-5. **Narrow viewports.** When the available width will not fit a row's panels side by
-   side, that row **stacks vertically** instead of shrinking — shrinking a structure
-   below its natural width clips cells. Resolved once on load; it may change on a real
-   resize but never as steps advance.
+**The governing rule: a STRUCTURE PANEL NEVER SCROLLS HORIZONTALLY.** A student
+reading a data structure must see its shape; a horizontally scrolled structure
+teaches nothing. So structure has **width priority over the code**. (Vertically a
+structure may still scroll — a deep tree past half the stage — but horizontally,
+never, and never merely because the code took width it did not need.)
+
+**Resolution order (`SIZE_POLICY.width`):**
+1. `'natural'` — **structure panels** claim the width their content actually needs,
+   uncompressed. Two structure panels in the region sit adjacent from the left, each
+   at its natural width (not a 50/50 split), sharing the row's height.
+2. `'natural'` — **fixed-content panels** (variable strips, CALLSTACK) claim their
+   natural width — as wide as their widest content across the run, never the column.
+3. `'fill'` — **CODE** takes the width that remains, down to `minCh` (~60) characters.
+   A short listing needs less and takes less, leaving the rest to the structure; a
+   listing with lines longer than that floor is held at the floor and scrolls, because
+   the structure has priority. (Code left-aligns; extra width past its lines is empty
+   space — the “wide code, little content” case is correct, not wasteful.)
+4. `'column'` — **STREAM** matches the width of the column it sits in, so beneath the
+   code it reads as one column.
+
+**If steps 1–3 cannot be satisfied** — the structure genuinely needs more than
+`stageW − codeMin − gap` — that is NOT a layout problem to accommodate by compressing
+the structure. It means the **animation is too wide** and must be redesigned (fewer
+cells, a different layout, a split view). The engine `console.warn`s it rather than
+shrinking the structure. (No current animation trips this at the 1920×1080 target.)
+
+**Narrow viewports.** Two structure panels that will not fit side by side **stack
+vertically** (each still at its natural width) rather than compress. A single wide
+structure is never shrunk — if it will not fit beside the code minimum, that is the
+too-wide content problem above, reported not accommodated.
 
 ## Panel count — a soft ceiling for `standard`
 
