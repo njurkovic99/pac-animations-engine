@@ -455,9 +455,20 @@ body {
  * up with every cell's marker track. The markers are dimmed so they read as
  * "pointing at nothing yet" rather than missing. */
 .pac-cell-parked { min-width: auto; margin-right: 2px; }
+/* Hug the parked marker, not a full cell column. The single-marker rule above
+ * (`[data-single] .pac-cell-col { min-width: 52px }`) is more specific than
+ * `.pac-cell-parked` and was widening the parked lane to a full 52px column when
+ * its content (the parked "ix" caret + label) is ~13px -- the dead space left of
+ * cell [0]. This selector out-specifies it so the lane hugs the marker. */
+.pac-cells[data-marked][data-single] .pac-cell-col.pac-cell-parked { min-width: auto; }
 .pac-cell-parked .pac-cell { min-width: 0; }
 .pac-cell-parked .pac-cell,
 .pac-cell-parked .pac-cell-index { visibility: hidden; }
+/* The invisible box + index only reserve HEIGHT (so the parked marker track lines
+ * up with the cells' tracks); they must not reserve WIDTH, or the lane is padded
+ * to the index label's width. Zero their width -- the line box still holds height. */
+.pac-cell-parked .pac-cell,
+.pac-cell-parked .pac-cell-index { width: 0; min-width: 0; overflow: hidden; }
 .pac-cell-parked .pac-marker { opacity: .5; }
 
 /* ---- vertical stack column (render: 'column') ----
@@ -478,7 +489,9 @@ body {
 /* LEFT marker lane: fixed width, markers right-aligned so the caret hugs the box.
  * Wide enough for the longest label ("stack_ix ▶") without touching the box. */
 .pac-col-markers {
-  min-width: 92px;
+  min-width: 68px;   /* hugs the "stack_ix ▶" label (~64px); the reserved lane must
+                        be constant across rows so the boxes align, but no wider than
+                        the label needs -- excess reads as dead space left of the stack */
   display: flex; flex-direction: row; justify-content: flex-end; align-items: center;
   gap: 8px; white-space: nowrap;
 }
