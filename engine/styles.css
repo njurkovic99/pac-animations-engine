@@ -182,7 +182,13 @@ body {
    * panel the engine measured -- keep it one line so the measured width holds. */
   white-space: nowrap;
 }
-.pac-panel-body { padding: 11px; overflow: auto; flex: 1; min-height: 0; }
+/* flex:none by DEFAULT, not flex:1. A panel body is given an explicit height by
+ * the engine (from its own content), and flex-grow would let it STRETCH to fill
+ * whatever column space sits below it -- the single mechanism behind every "panel
+ * grew instead of sizing to content" regression. With flex:none no body can
+ * inflate past its assigned height; overflow:auto still scrolls content that
+ * exceeds it (a capped callstack, a wide/tall tree). See engine SIZE_POLICY. */
+.pac-panel-body { padding: 11px; overflow: auto; flex: none; min-height: 0; }
 
 /* ---- controls ---- */
 .pac-controls {
@@ -292,9 +298,8 @@ body {
  * the follow-the-highlight scrolling. */
 .pac-panel[data-type="code"] .pac-panel-body {
   height: calc(var(--code-lines) * var(--code-line-h) + var(--body-pad));
-  flex: none;
   overflow: hidden;                      /* the listing scrolls, not the body */
-}
+}                                        /* flex:none now inherited from the default */
 /* The body fills the column (bottom lines up with the other column); the listing
  * inside is clipped to a WHOLE number of lines (engine fitCodePanels sets its
  * max-height), so the last visible line is never a sliver and any sub-line

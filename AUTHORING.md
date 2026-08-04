@@ -651,11 +651,30 @@ beside value) cell layouts — both flow horizontally.
 the values already on screen (the tree prints `level` and `depth` on every node), not
 by adding a computed cell to a panel named Variables.
 
-### Bookkeeping panels get a 2-row floor
+### Panel sizing policy — one table, not four call sites
 
-State strips, CALLSTACK, and STREAM have known maximum content, so size them to it —
-with a floor of **2 rows** so a panel never collapses to a sliver. The floor is on
-the content area: title, padding, and 2 rows of content is the minimum.
+Every panel body is **`flex: none` with an explicit height derived from its own
+content**. The CSS default is `flex: none` (not `flex: 1`): a flex-grow default let
+whichever panel had column space below it *stretch* to fill it, and that single
+mechanism caused every "panel grew instead of sizing to content" regression — each
+fixed one panel at a time. With `flex: none` no body can inflate past its assigned
+height; `overflow: auto` still scrolls content that exceeds it.
+
+The floor/ceiling for each panel type is **data**, in the engine's `SIZE_POLICY`
+table, applied uniformly — not literals scattered across the layout code (which is
+how the rule drifted). Adding a panel type is a new row in that table, not a new
+branch:
+
+| class | floor | ceiling | past ceiling |
+|---|---|---|---|
+| code | 15 rows | listing length (never more rows than the code has) | absorbs column slack |
+| callstack | 2 rows | 2 frames | scrolls |
+| stream | 2 rows | none (exactly its emitted lines) | — |
+| structure | 2 rows | ½ the stage | scrolls |
+| strip (cells) | 2 rows | none (exact content) | — |
+
+The 2-row floor keeps a panel from collapsing to a sliver; the floor is on the
+content area (title + padding + ≥2 content rows).
 
 ### STREAM is declared last
 
