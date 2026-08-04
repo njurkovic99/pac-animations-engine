@@ -206,7 +206,7 @@ const EMPTY = '·';   // middot: a slot that exists but holds no element
  * caller lines"). It is set only on frames acting as callers; the running (top)
  * frame's `call` is ignored, since its executing line is the bright active one. */
 const vv    = (name, value, role) => (role ? { name, value, role } : { name, value });
-const iVar  = (value, role) => ({ name: 'i', value, role });   // role: 'active' | 'done'
+const iVar  = (value, role) => ({ name: 'i', value, role, kind: 'local' });   // loop local, not a parameter
 const mainF = (call)             => ({ fn: 'main',   vars: [], call });
 const addF  = (value, call)      => ({ fn: 'ADD',    vars: [vv('value', value)], call });
 const insF  = (index, value, i)  => ({ fn: 'INSERT', vars: [vv('index', index), vv('value', value), ...(i ? [i] : [])] });
@@ -548,7 +548,7 @@ export default {
       listings: LISTINGS, labels: { pseudo: 'pseudocode', java: 'Java', cpp: 'C++' } },
     { type: 'cells',     id: 'cells', title: 'The array' },
     { type: 'callstack', id: 'stack', title: 'Function calls' },
-    { type: 'cells',     id: 'size',  title: 'count / capacity', compact: true },
+    { type: 'cells',     id: 'size',  title: 'Variables', compact: true },
   ],
 
   initialTrace: 'correct',

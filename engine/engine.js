@@ -28,6 +28,38 @@ const RENDERERS = {
 const MAX_STEPS = 5000;
 const AUTOPLAY_MS = 900;
 
+/* Panel body sizing policy -- DATA, one row per size-class, NOT code at the call
+ * site. layoutStage reads floor/ceiling from here instead of hardcoding 15 / 2 /
+ * half-stage / 2-frames in four separate branches (which is how the "size to
+ * content" rule drifted and regressed one panel at a time). Each row:
+ *   floorRows : minimum body height, in content rows (× the panel's line height)
+ *   ceiling   : height maximum -- null (none), 'listing' (never more rows than the
+ *               code has), 'halfStage' (≤ half the stage), or a COUNT {frames:N}/{rows:N}
+ *   scroll    : true if content past the HEIGHT ceiling scrolls rather than being cut
+ *   width     : how the panel claims WIDTH, in resolution priority --
+ *                 'natural' : its content's full width, NEVER compressed or
+ *                             horizontally scrolled (structure, strips, callstack)
+ *                 'content' : the code's longest line (measured across ALL language
+ *                             tabs, plus a small allowance) is both its FLOOR and its
+ *                             CEILING -- floored at `minCh` characters when that line
+ *                             is longer, capped there when the column is wider, so the
+ *                             panel never grows past its widest line and leftover
+ *                             width stays empty to its right, like the code's height
+ *                             ceiling leaves empty rows below it (code)
+ *                 'column'  : matches the width of the column it sits in (stream)
+ * A count ceiling ({frames:N}/{rows:N}) is applied generically in _panelContentH.
+ * Width is resolved by one pass too (see the WIDTH phase in layoutStage): the
+ * natural panels claim their width first, code fills what remains. Adding a panel
+ * type -- or a ceiling/width rule to one -- is a NEW ROW here, not a new branch.
+ * (AUTHORING.md "Panel sizing policy".) */
+const SIZE_POLICY = {
+  code:      { floorRows: 15, ceiling: 'listing',     width: 'content', minCh: 60 }, // ≥15 rows; width = longest line (≥60 chars floor, capped there ceiling), leftover empty
+  callstack: { floorRows: 2,  ceiling: { frames: 2 }, scroll: true, width: 'natural' }, // ≤2 frames; natural width
+  stream:    { floorRows: 2,  ceiling: { rows: 8 },   scroll: true, width: 'column' },  // ≤8 rows; matches its column
+  structure: { floorRows: 2,  ceiling: 'halfStage',   scroll: true, width: 'natural' }, // ≤half stage (v-scroll ok); natural width, never h-scrolls
+  strip:     { floorRows: 2,  ceiling: null,          width: 'natural' },  // exact content; natural width
+};
+
 // Default student-facing panel titles per renderer (used when a panel declares
 // no `title`). The CALLSTACK renderer displays as "Function calls" -- the
 // internal name stays CALLSTACK everywhere in code and docs.
@@ -80,85 +112,550 @@ export class Engine {
     this.trace = name;
     this.steps = this.materialise(name);
     this.i = 0;
-    this.reserveHeights();
-    this.fitCodePanels();
+    this.layoutStage();
     this.render();
   }
 
   /**
-   * Size each CODE panel to as many WHOLE lines as fit in its column, floored at
-   * --code-lines (15 -- the Canvas-iframe minimum, never go below it) and capped
-   * at the listing's own length (never show a slot past the last line; a shorter
-   * listing pads to the floor). The last visible line is always whole.
+   * THE LAYOUT PASS. Resolves every panel's size AND its column ONCE -- on load
+   * and on a real window resize -- then holds. This is the master invariant:
+   * nothing on screen moves because a step advanced. See AUTHORING.md "Panels
+   * flow across both columns", "The structure region has a ceiling",
+   * "Bookkeeping panels get a 2-row floor".
    *
-   * Resolved ONCE from the viewport -- on load and on a real window resize -- then
-   * held constant. It must NOT respond to content: not as the step advances, as
-   * frames push/pop, or as the language tab changes. A content-driven height is
-   * the reflow bug fixed in STREAM/CALLSTACK. Measured by letting the body fill
-   * its cell (it scrolls, so the listing's own length can't inflate the cell),
-   * reading the available height, then pinning a whole-line height.
+   * Resolution order (this is what makes the ceiling bite):
+   *   1. Bookkeeping panels (callstack, stream, compact strips) size to content
+   *      with a 2-row FLOOR so none collapses to a sliver.
+   *   2. The structure region (the CELLS/NODES panels showing the data structure)
+   *      takes what it needs up to a CEILING of half the stage height, its panes
+   *      side by side; a pane that overflows scrolls and follows its active cell.
+   *   3. The code panel takes a 15-line FLOOR in the left column.
+   *   4. Any leftover slack goes to the CODE panel -- the only panel that always
+   *      has more listing it could usefully show.
+   *
+   * Placement: the code panel anchors the top of the LEFT column; the structure
+   * region sits at the top of the RIGHT column; bookkeeping panels flow down the
+   * right column and the balancing overflow continues beneath the code panel in
+   * the left, keeping declaration (reading) order within each column.
    */
-  fitCodePanels() {
+  layoutStage() {
     const cs = getComputedStyle(this.root);
-    const lineH  = parseFloat(cs.getPropertyValue('--code-line-h')) || 20.6;
-    const floorL = parseFloat(cs.getPropertyValue('--code-lines'))  || 15;
-    const padV   = parseFloat(cs.getPropertyValue('--body-pad'))     || 22;
-    for (const [, p] of this.panels) {
-      if (p.spec.type !== 'code') continue;
-      const panel = p.el, body = panel.querySelector('.pac-panel-body');
-      if (!body) continue;
-      const maxLen = Math.max(1, ...Object.values(p.spec.listings ?? {}).map(l => l.length));
-      // Measure the column height available to this panel by letting the body
-      // fill its grid cell. The listing itself is HIDDEN during the measure, so
-      // its length cannot inflate the cell -- the cell is sized purely by the
-      // other column (the reserved panels), which is exactly the height the code
-      // should match. Then restore and pin a whole-line height.
-      const code = body.querySelector('.pac-code');
-      const savedAlign = panel.style.alignSelf, savedFlex = body.style.flex, savedDisp = code ? code.style.display : '';
-      if (code) code.style.display = 'none';
-      panel.style.alignSelf = 'stretch';
-      body.style.height = 'auto';
-      body.style.flex = '1';
-      void body.offsetHeight;                                  // force reflow
-      const avail = body.clientHeight;                         // cell inner height (content-box + padding)
-      const fit = Math.floor((avail - padV) / lineH);          // whole lines that fit
-      const lines = Math.max(floorL, Math.min(maxLen, fit));
-      if (code) code.style.display = savedDisp;
-      panel.style.alignSelf = savedAlign;
-      body.style.flex = savedFlex;
-      // The body FILLS the column (its bottom lines up with the other column);
-      // the listing is clipped to `lines` WHOLE lines, so the last line is never
-      // a sliver and the sub-line remainder is blank space below it, not a gap.
-      body.style.height = `${Math.round(avail)}px`;
-      if (code) code.style.maxHeight = `${Math.round(lines * lineH)}px`;
-    }
-  }
+    const gap     = parseFloat(cs.getPropertyValue('--gap')) || 14;
+    const lineH   = parseFloat(cs.getPropertyValue('--code-line-h')) || 20.6;
+    const bodyPad = parseFloat(cs.getPropertyValue('--body-pad')) || 22;
+    const BORDER  = 2;                          // a panel's 1px top + bottom border
+    // Floor/ceiling values come from SIZE_POLICY (data), never inline literals.
+    const floorPx = cls => SIZE_POLICY[cls].floorRows * lineH + bodyPad;
 
-  /**
-   * Reserve every panel's height ONCE, from the maximum content it holds across
-   * the ENTIRE step sequence, so a step that is empty or shallow renders as
-   * reserved empty space rather than a smaller panel. Nothing below any panel
-   * moves as steps advance -- no reflow, ever. Measured up front by rendering
-   * each step's data for the panel and taking the tallest, then pinning the
-   * body's min-height. Panels that manage their own fixed viewport (CODE = 15
-   * lines, STREAM = 3 lines) are skipped -- their height is already constant.
-   * This is the general cure for the height-change bug class (collapsed empty
-   * cells, the parked-marker lane, an accumulating STREAM, a growing CALLSTACK).
-   * See AUTHORING.md "Stable layout".
-   */
-  reserveHeights() {
-    for (const [id, p] of this.panels) {
-      if (p.spec.type === 'code' || p.spec.type === 'stream') continue;
-      const bodyEl = p.el.querySelector('.pac-panel-body');
-      if (!bodyEl) continue;
-      bodyEl.style.minHeight = '';                 // reset before measuring
-      let maxH = 0;
+    const items     = [...this.panels.values()];
+    const code      = items.find(p => p.kind === 'code');
+    const structure = items.filter(p => p.kind === 'structure');
+    const book      = items.filter(p => p.kind === 'book');
+
+    const H = this._availableStageHeight();
+    const stageW = this.stage.clientWidth;
+
+    // PASS 1 -- natural WIDTH. Read with the panel forced to `max-content`, as wide
+    // as the content wants with nothing wrapping. HEIGHT is deferred to pass 2,
+    // because a panel capped narrower than this (below) may WRAP, and its wrapped
+    // height -- not this unwrapped one -- is what must be reserved (else it grows
+    // mid-trace, breaking the master invariant).
+    const measureW = p => {
+      const body = p.el.querySelector('.pac-panel-body');
+      body.style.minHeight = ''; body.style.height = ''; p.el.style.width = '';
+      const codeEl = body.querySelector('.pac-code');
+      if (codeEl) codeEl.style.maxHeight = '';
+      const id = p.spec.id ?? p.spec.type;
+      let mW = 0;
       for (const step of this.steps) {
         p.ctx.anchors.clear();
-        p.renderer.render(bodyEl, step.panels?.[id], p.ctx, { lang: this.lang, step });
-        if (bodyEl.scrollHeight > maxH) maxH = bodyEl.scrollHeight;
+        p.el.style.width = 'max-content';
+        p.renderer.render(body, step.panels?.[id], p.ctx, { lang: this.lang, step });
+        // getBoundingClientRect + ceil, not offsetWidth: offsetWidth ROUNDS DOWN a
+        // sub-pixel width, so the pinned panel ends up a pixel short of its content
+        // and the last cell wraps. Ceiling the true width keeps everything on one
+        // row.
+        mW = Math.max(mW, Math.ceil(p.el.getBoundingClientRect().width));
       }
-      bodyEl.style.minHeight = `${maxH}px`;
+      p.el.style.width = '';
+      p.headerH  = p.el.querySelector('.pac-panel-head').offsetHeight;
+      p.contentW = mW;
+    };
+    for (const p of [...structure, ...book]) measureW(p);
+    if (code) code.headerH = code.el.querySelector('.pac-panel-head').offsetHeight;
+
+    // The code panel is rendered once here to capture: its WIDEST line (so short
+    // lines are shown in full without demanding more), the ACTUAL line height
+    // (font-size x line-height = 20.625, a sub-pixel value the --code-line-h token
+    // only approximates; that 0.025px/line drift is what clips the last line once
+    // the panel is a dozen lines tall), the font's CHAR width, and the line-number
+    // gutter -- so the code's width floor is a real character count, not a guess.
+    let codeLineH = lineH, codeCharW = 7.5, codeGutterW = 40, codeWidestW = 0;
+    if (code) {
+      const bodyEl = code.el.querySelector('.pac-panel-body');
+      // Measure at max-content so the WIDEST LINE is read, not the empty column the
+      // code currently sits in. scrollWidth on a wide panel clamps UP to the panel's
+      // clientWidth -- reporting blank space as content (item "natural width means
+      // content's width"). Pinning max-content makes clientWidth hug the widest line.
+      //
+      // First CLEAR the width bounds this same pass set LAST time (min-width,
+      // max-width on the panel; the fixed body height and the listing's max-height):
+      // a stale max-width would clamp `max-content` back to the previous layout's
+      // width, so every language would measure that same clamped value instead of
+      // its own longest line, and the cross-language max below would be wrong on
+      // every re-layout after the first (e.g. a language-tab switch).
+      code.el.style.minWidth = '';
+      code.el.style.maxWidth = '';
+      bodyEl.style.height = ''; bodyEl.style.minHeight = '';
+      const codeElReset = bodyEl.querySelector('.pac-code');
+      if (codeElReset) codeElReset.style.maxHeight = '';
+      code.el.style.width = 'max-content';
+      // The widest line is measured across EVERY language tab, not just the current
+      // one (master invariant): switching pseudocode/Java/C++ must not change the
+      // panel's width. pseudo may be 9 short lines while Java has a longer one -- the
+      // panel reserves the widest across all, so no variant wraps and the width never
+      // jumps on a tab switch.
+      const listings = code.spec.listings ?? {};
+      const langs = Object.keys(listings).length ? Object.keys(listings) : [this.lang];
+      for (const lang of langs) {
+        code.ctx.anchors.clear();
+        code.renderer.render(bodyEl, { line: null }, code.ctx, { lang, step: this.steps[0] });
+        const cel = bodyEl.querySelector('.pac-code');
+        if (cel) codeWidestW = Math.max(codeWidestW, cel.scrollWidth + bodyPad + BORDER);
+      }
+      // Re-render the CURRENT language for the per-line metrics below (line height,
+      // char width, gutter) and leave the panel showing what the student will see.
+      code.ctx.anchors.clear();
+      code.renderer.render(bodyEl, { line: null }, code.ctx, { lang: this.lang, step: this.steps[0] });
+      code.el.style.width = '';
+      const codeEl = bodyEl.querySelector('.pac-code');
+      const lineEl = codeEl?.querySelector('.pac-code-line');
+      if (lineEl) codeLineH = lineEl.getBoundingClientRect().height || lineH;
+      // char width from any non-empty text span (monospace, so uniform).
+      const txt = codeEl && [...codeEl.querySelectorAll('.pac-code-line')]
+        .map(l => l.querySelector('span:not(.pac-code-num)')).find(s => s && s.textContent.length);
+      if (txt) codeCharW = txt.getBoundingClientRect().width / txt.textContent.length;
+      const num = codeEl?.querySelector('.pac-code-num');
+      if (num) codeGutterW = num.getBoundingClientRect().width + (parseFloat(getComputedStyle(num).marginRight) || 12);
+    }
+    // Code's CEILING width (item "code needs a width ceiling"): its widest line plus
+    // a small right-hand allowance so the last glyph never touches the border. This
+    // is the MAX the panel ever takes -- like the 'listing' height ceiling caps its
+    // rows, this caps its columns, so on a wide stage the panel is exactly as wide as
+    // its longest line and the leftover stays EMPTY to its right (not distributed,
+    // not handed to the structure -- that would undo item 39).
+    const codeContentW = code ? Math.round(codeWidestW + Math.ceil(codeCharW)) : 0;
+    // Code's FLOOR width: its widest line uncompressed, but never DEMANDING more than
+    // `minCh` characters -- a short listing needs only its own width (structure gets
+    // the rest); a listing with lines longer than minCh is held at minCh and scrolls,
+    // because the structure has width priority. min(widest line, minCh chars + gutter).
+    const codeMinCh = code ? SIZE_POLICY.code.minCh * codeCharW + codeGutterW + bodyPad + BORDER : 0;
+    const codeMinW  = code ? Math.round(Math.min(codeContentW, codeMinCh)) : 0;
+
+    // The code panel shows min(listing length, lines that fit) -- the 15-line
+    // FLOOR applies ONLY when the listing is longer than 15 (AUTHORING.md "CODE:
+    // 15 lines is the FLOOR"). A 9-line listing yields a 9-ROW panel: the floor
+    // never pads a short listing with blank rows.
+    //
+    // `listing length` is the CURRENTLY DISPLAYED language's line count, NOT the
+    // max across languages: recursion's pseudo listing is 9 lines even though its
+    // Java variant is 12, and it must render 9 rows, not 12 with 3 blank. Switching
+    // the language tab re-runs layoutStage (setLanguage), so a longer variant grows
+    // the panel then -- a deliberate user action, never a mid-trace change. The
+    // panel WIDTH still measures across all languages (below), so a long line in any
+    // variant never wraps and the width does not jump on switch; only the row count
+    // tracks the visible listing.
+    const curListing = code ? (code.spec.listings?.[this.lang] ?? Object.values(code.spec.listings ?? {})[0] ?? []) : [];
+    const maxLen   = code ? Math.max(1, curListing.length) : 0;
+    const codeFloorLines = Math.min(SIZE_POLICY.code.floorRows, maxLen);
+
+    const outer = (p, bodyH) => p.headerH + bodyH + BORDER;
+    const sum   = a => a.reduce((s, h) => s + h, 0);
+
+    // WIDTH priority (SIZE_POLICY.width): the natural panels -- structure, strips,
+    // callstack -- claim their FULL content width; the code takes what remains, down
+    // to its `minCh` floor. A structure panel is never compressed and never
+    // horizontally scrolled: a scrolled data structure teaches nothing. So no
+    // right-column budget caps them any more -- each `natural` panel is applied at
+    // its own contentW below, and the code (flex, min-width codeMinW) absorbs the
+    // rest. If the natural panels genuinely need more than `stageW - codeMinW - gap`,
+    // that is a CONTENT problem (the animation is too wide), reported at the end of
+    // this pass -- not a compression to hide.
+
+    // PASS 2 -- content HEIGHT at each panel's NATURAL width (the width it will get).
+    // Measuring at the applied width matters because a strip could wrap if narrowed,
+    // but nothing is narrowed now, so a strip stays one row and reserves that height.
+    const measureH = p => {
+      const body = p.el.querySelector('.pac-panel-body');
+      const id = p.spec.id ?? p.spec.type;
+      let mH = 0;
+      for (const step of this.steps) {
+        p.ctx.anchors.clear();
+        p.el.style.width = `${Math.round(p.contentW)}px`;   // its natural width
+        p.renderer.render(body, step.panels?.[id], p.ctx, { lang: this.lang, step });
+        mH = Math.max(mH, this._panelContentH(p, body));
+      }
+      p.el.style.width = '';
+      body.style.minHeight = ''; body.style.height = '';
+      p.contentH = mH;
+    };
+    for (const p of [...structure, ...book]) measureH(p);
+
+    // Structure region orientation (rule 5): panes sit side by side unless that
+    // would push the code below its char floor; then they stack vertically (their
+    // natural widths still honoured -- a stacked pane is full width). Resolved once.
+    const structW = structure.length ? sum(structure.map(p => p.contentW)) + gap * (structure.length - 1) : 0;
+    const stacked = structure.length > 1 && (structW + gap + codeMinW > stageW);
+    // The region's natural WIDTH: the panes side by side, or the widest pane stacked.
+    const regionW = structure.length ? (stacked ? Math.max(...structure.map(p => p.contentW)) : structW) : 0;
+
+    // WIDTH MUST FIT THE ROW (item "no panel off the viewport, ever"). The two
+    // side-by-side columns need the code's char floor on the left and the WIDEST
+    // non-code panel on the right, plus one gap. If that sum exceeds the stage the
+    // row cannot fit -- and a panel shoved off the right edge (or overlapping its
+    // neighbour) is strictly worse than a taller page -- so the layout collapses
+    // to a SINGLE column: code full width, then the structure region, then the
+    // bookkeeping panels, each stacked below the last. Nothing overlaps and no
+    // right edge leaves the viewport. Resolved once, at load/resize -- never a
+    // mid-trace change (this is the fallback item 36 named: "either the row stacks
+    // vertically, or the animation is redesigned; it is never resolved by letting
+    // a panel overflow the viewport").
+    const widestOther = Math.max(0, regionW, ...book.map(p => p.contentW));
+    const singleCol   = !!code && (widestOther + gap + codeMinW > stageW);
+    // In a single column a multi-pane structure must stack vertically too (each
+    // pane full width, one above the next) -- side by side would only re-create
+    // the overflow the single column exists to avoid.
+    const regionStacked = stacked || (singleCol && structure.length > 1);
+
+    // (2) structure region -- each pane floored (2 rows) then capped at its ceiling
+    // (SIZE_POLICY.structure = 'halfStage'), scrolling beyond. Values from the table.
+    const ceiling = SIZE_POLICY.structure.ceiling === 'halfStage'
+      ? Math.max(140, Math.floor(H / 2)) : Infinity;
+    const paneH   = p => Math.min(Math.max(outer(p, p.contentH), outer(p, floorPx('structure'))), ceiling);
+    let regionH = 0;
+    if (structure.length) {
+      regionH = regionStacked
+        ? sum(structure.map(paneH)) + gap * (structure.length - 1)
+        : Math.max(...structure.map(paneH));
+    }
+
+    // (1) bookkeeping floors -- each panel's own floor from the table (2 rows).
+    for (const p of book) p.outerH = outer(p, Math.max(p.contentH, floorPx(this._sizeClass(p))));
+
+    // (3) code floor -- min(15, listing length) whole lines, measured (ceil so the
+    // last line's sub-pixel remainder is inside the box, never clipped). A short
+    // listing floors at its own length, not 15 (item "15-line FLOOR is min").
+    const codeFloor = code ? outer(code, Math.ceil(codeFloorLines * codeLineH) + bodyPad) : 0;
+
+    // Balance HEIGHT: right column = [region, book[0..k)], left = [code,
+    // book[k..)]. Pick the split k (keeping declaration order) that minimises the
+    // taller column, so the stage is as short as the content allows -- and, among
+    // splits that tie on stage height, the one whose two columns are the CLOSEST in
+    // height, so their bottom edges land as together as the panels allow (item
+    // "bottom alignment after the height fixes"). No panel is stretched to force it;
+    // any residual is empty space at the shorter column's foot (item "no panel
+    // stretches to fill").
+    // Code's whole-panel height. In a single column it shows its FULL listing
+    // (vertical space is not the constraint there); side by side it floors at
+    // min(15, length) and grows to absorb the left column's slack (resolved in the
+    // code-fit block below). Its single-column height feeds the stage total.
+    const codeSingleH = code ? outer(code, Math.ceil(maxLen * codeLineH) + bodyPad) : 0;
+
+    const bh = book.map(p => p.outerH);
+    const colH = (base, arr, hasBase) => {
+      const n = (hasBase ? 1 : 0) + arr.length;
+      return base + sum(arr) + gap * Math.max(0, n - 1);
+    };
+    let bestK = 0, bestStage = Infinity, bestGap = Infinity;
+    for (let k = 0; k <= book.length; k++) {
+      const right = colH(regionH, bh.slice(0, k), regionH > 0);
+      const left  = colH(codeFloor, bh.slice(k), !!code);
+      const stage = Math.max(right, left);
+      const diff  = Math.abs(right - left);
+      if (stage < bestStage - 0.5 || (stage <= bestStage + 0.5 && diff < bestGap)) {
+        bestStage = stage; bestGap = diff; bestK = k;
+      }
+    }
+
+    let stageH;
+    if (singleCol) {
+      // ONE column: code, then the structure region, then every bookkeeping panel,
+      // top to bottom in declaration order. The right column is emptied and hidden
+      // so no gap is reserved beside it. The page grows taller; nothing overflows.
+      this.colRight.style.display = 'none';
+      if (structure.length) this.colLeft.appendChild(this.structureRegion);
+      for (const p of book) this.colLeft.appendChild(p.el);
+      bestK = 0;                                     // no book panel lives in the right column
+      const parts = [];
+      if (code) parts.push(codeSingleH);
+      if (structure.length) parts.push(regionH);
+      for (const p of book) parts.push(p.outerH);
+      stageH = sum(parts) + gap * Math.max(0, parts.length - 1);
+    } else {
+      this.colRight.style.display = '';
+      // Restore the structure region to the top of the RIGHT column (a prior
+      // single-column layout, from a narrower resize, may have moved it left).
+      if (structure.length) this.colRight.insertBefore(this.structureRegion, this.colRight.firstChild);
+      // Place bookkeeping panels into their columns (structure stays in the region,
+      // code stays at the top of the left column).
+      for (const p of book.slice(0, bestK)) this.colRight.appendChild(p.el);
+      for (const p of book.slice(bestK))    this.colLeft.appendChild(p.el);
+      stageH = Math.min(bestStage, H);
+    }
+
+    // ---- apply HEIGHTS ----
+    // Every body is now `flex: none` by DEFAULT (styles.css) -- no code sets flex
+    // inline anymore. So every panel body is given an EXPLICIT height and cannot
+    // stretch: the flex:1 default that used to inflate whichever panel had column
+    // space below it is gone, and with it the per-panel `flex:none` suppressions
+    // that were only there to fight it (items 19/23/24/30). overflow:auto still
+    // scrolls a body whose content exceeds its height (callstack, a capped tree).
+    //
+    // NOTE on verifying these heights (items 37/40/41): `.pac-col` is
+    // `align-items: stretch` on the stage, so BOTH columns' *elements* measure the
+    // full stage height regardless of how much content each holds -- the shorter
+    // column's box is stretched to match the taller one. Any future height check
+    // must therefore compare the resolved panel heights against the column's
+    // CONTENT height (last panel's bottom minus first panel's top), NOT the column
+    // element's height, or it will "find" a phantom discrepancy equal to the
+    // shorter column's foot gap. `verifyHeights()` below does exactly this.
+    //
+    // WHY the two columns end at different heights (item 43): the residual foot gap
+    // is ROW QUANTIZATION, not imbalance and not an error. Every panel is sized as
+    // an INTEGER number of rows x that panel type's row height, plus fixed chrome
+    // (header + border + padding) -- and the row heights differ by type: code lines
+    // (~20.6px), output lines, callstack frames, and cell rows are all different.
+    // Two columns each holding "as many whole rows as fit" therefore sum to
+    // different pixel totals; there is no shared grid they could land on together.
+    // Forcing the ends to align would mean giving some panel a FRACTIONAL row -- the
+    // partial-line clipping deliberately removed in items 21 and 29. Whole rows and
+    // equal column ends cannot both hold, and whole rows wins: the leftover pixels
+    // stay as empty space at the shorter column's foot (item 24), never a sliver of
+    // a clipped line. This is expected and correct -- do not "fix" it.
+    this.stage.style.height = `${Math.round(stageH)}px`;
+    if (structure.length) {
+      this.structureRegion.toggleAttribute('data-stacked', regionStacked);
+      this.structureRegion.style.height = regionStacked ? '' : `${Math.round(regionH)}px`;
+      // Each pane fills the height it is allotted (its capped paneH when stacked,
+      // the shared region height side by side); content past it scrolls.
+      for (const p of structure) {
+        const allot = regionStacked ? paneH(p) : regionH;
+        p.el.querySelector('.pac-panel-body').style.height = `${Math.round(allot - p.headerH - BORDER)}px`;
+      }
+    }
+    // Every bookkeeping panel is a fixed height derived from its own content
+    // (p.contentH, resolved once in _panelContentH: the stream's emitted row count,
+    // the callstack's capped frame count, a strip's measured rows).
+    for (const p of book) {
+      const body = p.el.querySelector('.pac-panel-body');
+      body.style.height = `${Math.round(p.outerH - p.headerH - BORDER)}px`;
+    }
+
+    // ---- apply WIDTHS from SIZE_POLICY.width, one rule per class, no per-panel
+    // branches. 'natural' panels (structure, strips, callstack) take their full
+    // content width and left-align -- never compressed, never horizontally scrolled.
+    // 'column' (stream) fills its column via CSS. 'content' (code) is bounded on BOTH
+    // sides: min-width >= codeMinW (the char floor) and max-width = codeContentW (its
+    // widest line + allowance), so it stretches to fill its column but never past its
+    // longest line -- leftover column width stays empty to its right, mirroring the
+    // empty rows the height ceiling leaves below it. ----
+    for (const p of [...structure, ...book]) {
+      const w = SIZE_POLICY[this._sizeClass(p)].width;
+      p.el.style.width = w === 'column' ? '' : `${Math.round(p.contentW)}px`;
+    }
+    if (code) {
+      code.el.style.minWidth = `${codeMinW}px`;
+      code.el.style.maxWidth = `${codeContentW}px`;
+    }
+    // STREAM reads as a continuation of the code beneath it, so when it sits in the
+    // SAME column it matches the code's width -- capped at codeContentW too, never
+    // wider than the code it continues. (A stream balanced into the other column
+    // keeps its own column width; it is not tied to the code there.) This is the
+    // 'column' rule refined by placement, not a per-animation clamp.
+    if (code) for (const p of book) {
+      if (p.spec.type === 'stream' && p.el.parentElement === code.el.parentElement) {
+        p.el.style.maxWidth = `${codeContentW}px`;
+      } else if (p.spec.type === 'stream') {
+        p.el.style.maxWidth = '';
+      }
+    }
+
+    // CONTENT-PROBLEM check (item "the animation is too wide"): the single-column
+    // fallback already rescues any row that will not fit side by side -- it stacks
+    // instead of overflowing. So the ONE case left that no layout can fix is a
+    // LONE panel wider than the whole stage: it overflows even at full width, on
+    // its own row. That means the animation itself is too wide (too many cells,
+    // too long a code line) and must be redesigned -- never silently compressed.
+    const widest = Math.max(codeMinW,
+      ...structure.map(p => p.contentW), ...book.map(p => p.contentW));
+    if (widest > stageW + 1) {
+      console.warn(`[pac] "${this.spec?.title ?? ''}" has a panel ${Math.round(widest)}px wide, `
+        + `past the ${Math.round(stageW)}px stage -- it overflows even at full width. Redesign the `
+        + `animation (fewer cells, shorter lines, or a split view) -- panels are not compressed.`);
+    }
+
+    // (4) code height. In a SINGLE column it shows its FULL listing -- vertical
+    // space is not the constraint, so there is nothing to clip. Side by side it
+    // absorbs the left column's leftover slack, up to the number of lines it HAS:
+    // as many whole lines as fit, floored at min(15, length), never more than the
+    // listing's length (a short listing shows in full, no blank rows; a long one
+    // shows >= 15 and as many more as fit). Any slack beyond that stays empty at
+    // the column's foot -- the body is sized to the lines shown, never stretched.
+    if (code) {
+      let lines;
+      if (singleCol) {
+        lines = maxLen;
+      } else {
+        const leftBook = book.slice(bestK);
+        const leftUsed = sum(leftBook.map(p => p.outerH)) + gap * leftBook.length;
+        const avail    = Math.max(codeFloor, Math.round(stageH - leftUsed));
+        const fit      = Math.floor((avail - code.headerH - BORDER - bodyPad) / codeLineH);
+        lines = Math.max(codeFloorLines, Math.min(maxLen, fit));
+      }
+      // viewH is the whole-line height (ceil so no line is a sliver -- "whole lines
+      // only"); the body is exactly that plus its padding, nothing more.
+      const viewH  = Math.ceil(lines * codeLineH);
+      const body   = code.el.querySelector('.pac-panel-body');
+      body.style.height = `${viewH + bodyPad}px`;
+      const codeEl = body.querySelector('.pac-code');
+      if (codeEl) codeEl.style.maxHeight = `${viewH}px`;
+    }
+
+    // Height-accounting regression check (opt-in). Set `window.__PAC_VERIFY = true`
+    // before load to have every layout pass assert its column arithmetic; leave it
+    // off and call `pac.verifyHeights()` from the console on demand.
+    if (typeof window !== 'undefined' && window.__PAC_VERIFY) this.verifyHeights();
+  }
+
+  /** Height-accounting regression check (items 37/40/41). For every VISIBLE column
+   *  it compares `Σ(resolved panel heights + declared inter-panel gaps)` against the
+   *  column's CONTENT height, and asserts they are equal (Δ = 0). A non-zero Δ is a
+   *  real bug -- a gap, border, or header height counted in the resolve path but not
+   *  the render path (or vice versa). It is NOT the per-animation foot gap between
+   *  the two columns: that is genuine column imbalance (the shorter column ends
+   *  higher, by design -- item 24), and this check does not see it because it never
+   *  compares one column against the other.
+   *
+   *  Content height is `last panel bottom − first panel top`, NOT the `.pac-col`
+   *  element height: the column is `align-items: stretch`, so its element always
+   *  measures the full stage height and comparing against it would manufacture a
+   *  phantom discrepancy (see the NOTE in layoutStage). This is the Σ-vs-measured
+   *  table that closed the item 37 investigation in one pass; kept callable so the
+   *  next size question is one command, not an investigation.
+   *
+   *  Prints a table and returns the rows. `Δ` (`delta`) must be 0 for every row. */
+  verifyHeights() {
+    const gap  = parseFloat(getComputedStyle(this.root).getPropertyValue('--gap')) || 14;
+    const cols = [this.colLeft, this.colRight].filter(c => c && c.style.display !== 'none');
+    const rows = cols.map(col => {
+      const kids    = [...col.children].filter(el => el.getBoundingClientRect().height > 0);
+      const heights = kids.map(el => Math.round(el.getBoundingClientRect().height));
+      const summed  = Math.round(heights.reduce((a, h) => a + h, 0) + gap * Math.max(0, kids.length - 1));
+      const content = kids.length
+        ? Math.round(kids[kids.length - 1].getBoundingClientRect().bottom - kids[0].getBoundingClientRect().top)
+        : 0;
+      return { column: col.dataset.side, panels: kids.length, heights: heights.join('+'),
+               summed, content, delta: summed - content };
+    });
+    const bad = rows.filter(r => r.delta !== 0);
+    console.log(`[pac] height accounting -- "${this.spec?.title ?? ''}" (Δ must be 0):`);
+    console.table?.(rows) ?? console.log(rows);
+    if (bad.length) {
+      console.error(`[pac] HEIGHT ACCOUNTING BUG in "${this.spec?.title ?? ''}": `
+        + bad.map(r => `${r.column} Δ=${r.delta}px`).join(', ')
+        + ' -- a gap, border, or header is counted in one path but not the other.');
+    }
+    return rows;
+  }
+
+  /** Height the stage may occupy: the root's inner height minus the fixed footer
+   *  chrome (title, subtitle, open-window link, controls, narration, note) and
+   *  the stage's own margins. The ceiling for the layout; the stage usually hugs
+   *  a shorter balanced height and only reaches this on a short viewport. */
+  _availableStageHeight() {
+    const root = this.root, rp = getComputedStyle(root);
+    let avail = root.clientHeight - parseFloat(rp.paddingTop) - parseFloat(rp.paddingBottom);
+    for (const el of root.children) {
+      if (el === this.stage) continue;
+      const c = getComputedStyle(el);
+      if (c.display === 'none') continue;
+      avail -= el.offsetHeight + parseFloat(c.marginTop) + parseFloat(c.marginBottom);
+    }
+    const sm = getComputedStyle(this.stage);
+    avail -= parseFloat(sm.marginTop) + parseFloat(sm.marginBottom);
+    return Math.max(200, avail);
+  }
+
+  /** Map a panel to its SIZE_POLICY row. One classifier, so every floor/ceiling
+   *  lookup keys off the same rule. */
+  _sizeClass(p) {
+    const t = p.spec.type;
+    if (t === 'code' || t === 'callstack' || t === 'stream') return t;
+    return p.kind === 'structure' ? 'structure' : 'strip';
+  }
+
+  /** The single place a non-code panel's content height is resolved. A COUNT
+   *  ceiling in SIZE_POLICY ({frames:N} or {rows:N}) is applied GENERICALLY here:
+   *  if the panel renders more than N rows, cap the body at the Nth row's bottom
+   *  and let the rest scroll (overflow:auto), newest in view. This is one code
+   *  path for the CALLSTACK (frames) and the STREAM (output rows) alike -- adding
+   *  a count ceiling to a panel type is a table row, not a branch. Without such a
+   *  ceiling the body is its full rendered height (scrollHeight): a strip's cells,
+   *  a structure's SVG/boxes (whose halfStage ceiling is applied later in paneH),
+   *  or a stream shorter than its ceiling. flex:none keeps that from stretching.
+   *  (The code panel resolves its own height in the fill block, from its line
+   *  count and the column slack it alone absorbs -- the reference implementation.) */
+  _panelContentH(p, body) {
+    const ceil = SIZE_POLICY[this._sizeClass(p)].ceiling;
+    const N = ceil && (ceil.frames ?? ceil.rows);              // a count ceiling, if any
+    if (N != null) {
+      const sel = ceil.frames != null ? '.pac-frame' : '.pac-stream-line';
+      const rows = [...body.querySelectorAll(sel)];
+      if (rows.length > N) {                                    // past the ceiling: cap at N, scroll beyond
+        const padB = parseFloat(getComputedStyle(body).paddingBottom) || 11;
+        const top  = body.getBoundingClientRect().top;
+        return Math.round(rows[N - 1].getBoundingClientRect().bottom - top + padB);
+      }
+    }
+    return body.scrollHeight;                                   // under any ceiling / none: rendered content
+  }
+
+  /** A structure pane that overflows its capped panel -- or a CALLSTACK past its
+   *  frame ceiling -- scrolls to keep its ACTIVE element in view: the cell being
+   *  modified, the running (top) frame, or the active tree node. Scrolls in BOTH
+   *  axes (a wide call tree overflows horizontally), the same "follow the
+   *  highlight" the CODE panel has, so a student never hunts for it. When nothing
+   *  is active (e.g. step 0), a tree centres on its ROOT so the origin of execution
+   *  -- what the opening note points at -- is visible from the start. A panel that
+   *  fits does nothing. */
+  _followActive() {
+    for (const [, p] of this.panels) {
+      // Structure panes, the callstack, and any cells panel (an array may scroll
+      // horizontally when narrowed) follow their active element; the stream
+      // self-scrolls to its newest line in its own renderer.
+      if (p.kind !== 'structure' && p.spec.type !== 'callstack' && p.spec.type !== 'cells') continue;
+      const body = p.el.querySelector('.pac-panel-body');
+      if (!body) continue;
+      const overY = body.scrollHeight > body.clientHeight + 1;
+      const overX = body.scrollWidth  > body.clientWidth  + 1;
+      if (!overX && !overY) continue;
+      let target = body.querySelector('[data-role="active"], [data-role="compared"], [data-active="true"], .pac-marker');
+      // Nothing active in a tree (step 0): centre on the root (first node), so the
+      // student sees where execution is about to start, never a clipped-off root.
+      if (!target && p.spec.type === 'nodes') target = body.querySelector('.pac-node');
+      if (!target) continue;
+      const br = body.getBoundingClientRect(), tr = target.getBoundingClientRect();
+      const margin = 24;
+      if (overY) {
+        const off = tr.top - br.top;
+        if (off < margin || off > body.clientHeight - margin - tr.height)
+          body.scrollTop += off - (body.clientHeight - tr.height) / 2;
+      }
+      if (overX) {
+        const off = tr.left - br.left;
+        if (off < margin || off > body.clientWidth - margin - tr.width)
+          body.scrollLeft += off - (body.clientWidth - tr.width) / 2;
+      }
     }
   }
 
@@ -240,19 +737,22 @@ export class Engine {
     this.metricsEl= this.root.querySelector('.pac-metrics');
     this.progress = this.root.querySelector('.pac-progress');
 
-    if (s.columns) this.stage.dataset.cols = s.columns;
-
-    // A multi-row layout (more than the default two grid rows -- e.g. the race
-    // comparison's code / queue / strip stack per column) declares its own row
-    // proportions via `spec.stageRows` (a CSS grid-template-rows value). The
-    // stage then relaxes its two-row bound and fills the viewport above the
-    // pinned footer instead, still shrinking on a short viewport so the note is
-    // never pushed off screen (see AUTHORING.md "Stable layout"). Absent, the
-    // default bounded two-row grid is unchanged.
-    if (s.stageRows) {
-      this.stage.dataset.multirow = '';
-      this.stage.style.gridTemplateRows = s.stageRows;
-    }
+    // Two columns that panels FLOW across (AUTHORING.md "Panels flow across both
+    // columns"). The code panel anchors the top of the LEFT column at its 15-line
+    // floor; structure panels sit side by side in a height-capped region at the
+    // top of the RIGHT column; bookkeeping panels flow down the right column and
+    // the balancing overflow continues beneath the code panel in the left.
+    // layoutStage() measures and places everything ONCE (the master invariant).
+    // `columns`, `stageRows`, `tall`, and `full` are legacy grid hints, now
+    // ignored -- placement is derived from each panel's kind.
+    this.colLeft  = document.createElement('div');
+    this.colRight = document.createElement('div');
+    this.colLeft.className  = 'pac-col'; this.colLeft.dataset.side  = 'left';
+    this.colRight.className = 'pac-col'; this.colRight.dataset.side = 'right';
+    this.structureRegion = document.createElement('div');
+    this.structureRegion.className = 'pac-structure';
+    this.colRight.appendChild(this.structureRegion);
+    this.stage.append(this.colLeft, this.colRight);
 
     // Beginner profile is enforced here, not left to authorial restraint.
     const panels = (s.panels ?? []).slice();
@@ -260,21 +760,20 @@ export class Engine {
       console.warn(`beginner profile caps panels at 3; dropping ${panels.length - 3}`);
       panels.length = 3;
     }
+    // `standard` has a SOFT ceiling of 6 (AUTHORING.md "Panel count"): not
+    // enforced, but a 7th panel should be justified -- try merging related state
+    // into one panel or cutting one that isn't earning its place first.
+    if ((s.profile ?? 'standard') === 'standard' && panels.length > 6) {
+      console.warn(`standard profile: ${panels.length} panels exceeds the soft ceiling of 6 — consider merging or cutting a panel`);
+    }
 
     for (const p of panels) {
       const el = document.createElement('section');
       el.className = 'pac-panel';
-      el.dataset.type = p.type;          // lets CSS give accumulating panels (STREAM) a stable, scrolling cell
-      // A panel holding very little content (a two-value count/capacity strip)
-      // opts out of stretching to fill its tall grid cell: `compact: true` makes
-      // it top-align and size to content. See AUTHORING.md "Stable layout".
+      el.dataset.type = p.type;
       if (p.compact) el.dataset.compact = '';
-      // A full-width panel spans every column (grid-column: 1 / -1) -- e.g. a
-      // shared preamble sitting above a two-column comparison.
-      if (p.full) el.dataset.full = '';
-      // A tall panel spans every row of the first column (grid-row: 1 / -1) --
-      // e.g. a code listing beside a stack of smaller panels in the other column.
-      if (p.tall) el.dataset.tall = '';
+      const kind = panelKind(p);
+      el.dataset.kind = kind;
       // Default DISPLAY title per renderer when a panel gives none. The internal
       // renderer name stays CALLSTACK; only the student-facing label reads
       // "Function calls" (so it is not confused with an actual stack data
@@ -283,7 +782,11 @@ export class Engine {
       el.innerHTML = `<div class="pac-panel-head"><span>${title}</span>
                         <span class="pac-panel-tools"></span></div>
                       <div class="pac-panel-body"></div>`;
-      this.stage.appendChild(el);
+      // Initial column by kind: code -> left, structure -> the shared region,
+      // book -> right. layoutStage() moves the balancing overflow to the left.
+      (kind === 'code' ? this.colLeft
+        : kind === 'structure' ? this.structureRegion
+        : this.colRight).appendChild(el);
       const r = RENDERERS[p.type];
       if (!r) throw new Error(`unknown panel type "${p.type}"`);
       const ctx = {
@@ -294,7 +797,7 @@ export class Engine {
       };
       r.mount?.(el.querySelector('.pac-panel-body'), p, ctx,
                 el.querySelector('.pac-panel-tools'));
-      this.panels.set(p.id ?? p.type, { spec: p, el, renderer: r, ctx });
+      this.panels.set(p.id ?? p.type, { spec: p, el, renderer: r, ctx, kind });
     }
 
     this.overlay = new Overlay(this.stage);
@@ -312,12 +815,11 @@ export class Engine {
       if (e.key === 'ArrowLeft')  this.prev();
     });
 
-    // The CODE line count follows the VIEWPORT: recompute on a real window
-    // resize (debounced), never on a content change. This is the only thing that
-    // re-fits the panel; steps/frames/tabs leave it constant.
+    // The layout follows the VIEWPORT: re-resolve on a real window resize
+    // (debounced), never on a content change. steps/frames/tabs leave it constant.
     window.addEventListener('resize', () => {
       clearTimeout(this._fitTimer);
-      this._fitTimer = setTimeout(() => { this.fitCodePanels(); this.render(); }, 120);
+      this._fitTimer = setTimeout(() => { this.layoutStage(); this.render(); }, 120);
     });
   }
 
@@ -348,7 +850,11 @@ export class Engine {
     }
   }
 
-  setLanguage(lang) { this.lang = lang; this.render(); }
+  // Switching language relayouts (not just re-renders): a shorter/longer listing
+  // resizes the code panel to its new row count (item "code sizes to its own
+  // content"). This is a user action, like a resize -- the master invariant only
+  // forbids size changes as STEPS advance, which still holds within a language.
+  setLanguage(lang) { this.lang = lang; this.layoutStage(); this.render(); }
 
   /* ---------- render ---------- */
 
@@ -383,6 +889,7 @@ export class Engine {
                         data, p.ctx, { lang: this.lang, step });
     }
 
+    this._followActive();
     this.overlay.draw(step.arrows ?? [], this.panels);
 
     // Narration and notes are both SEGMENTED content: a plain string, or an
@@ -435,6 +942,30 @@ function take(gen, max) {
   return out;
 }
 
+/**
+ * How a panel is placed and sized by layoutStage (AUTHORING.md "Panels flow
+ * across both columns"):
+ *   - 'code'      -- the listing; anchors the top of the left column, 15-line floor.
+ *   - 'structure' -- a CELLS/NODES/CHART view of the data structure being watched;
+ *                    shares the height-capped region, side by side, follows active.
+ *   - 'book'      -- bookkeeping (callstack, stream, a compact strip): known-max
+ *                    content, 2-row floor, flows and balances across the columns.
+ * A panel may force its class with `structure: true|false`; otherwise a non-compact
+ * CELLS/NODES/CHART panel is structure and everything else is bookkeeping.
+ */
+function panelKind(p) {
+  if (p.type === 'code') return 'code';
+  if (p.structure === true)  return 'structure';
+  if (p.structure === false) return 'book';
+  if (p.type === 'callstack' || p.type === 'stream' || p.compact) return 'book';
+  // NODES/CHART draw the whole structure and default to structure; a CELLS panel
+  // is more often an auxiliary strip (pointer variables, an invariant readout)
+  // than the structure itself, so it defaults to bookkeeping and opts in with
+  // `structure: true` (the array/stack it IS the structure of).
+  if (p.type === 'nodes' || p.type === 'chart') return 'structure';
+  return 'book';
+}
+
 /** Restart a one-shot CSS pulse: drop the class, force reflow, re-add. */
 function flash(el, cls) {
   el.classList.remove(cls);
@@ -481,5 +1012,9 @@ function renderSegments(el, content) {
 
 /** Mount an animation from its content module. */
 export function mount(spec, el = document.getElementById('pac')) {
-  return new Engine(el, spec);
+  const eng = new Engine(el, spec);
+  // Expose the instance for console-driven debugging -- e.g. `pac.verifyHeights()`
+  // to print the column height-accounting table (items 37/40/41). Last mount wins.
+  if (typeof window !== 'undefined') window.pac = eng;
+  return eng;
 }

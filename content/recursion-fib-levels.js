@@ -98,10 +98,10 @@ function makeTrace() {
     const state = new Map(nodes.map(n => [n.id, 'pending']));
     const out = [];
     let trapShown = false;
+    let divergeShown = false;   // narrate level != depth once, where it first happens
 
     const snap = (activeId, line, tag, narrate, extra = {}) => {
       const node = byId.get(activeId);
-      const sum = node.n + node.level;
       return {
         tag, narrate, line,
         panels: {
@@ -115,14 +115,19 @@ function makeTrace() {
             })),
           },
           out: { lines: out.map((l, k) => ({ ...l, isNew: k === out.length - 1 })) },
+          // Variables holds only true variables -- n, level, depth, N -- as four
+          // boxes on one row. `n + level` is a derived expression, not a variable,
+          // so it does NOT live here; the invariant n + level = N is taught in the
+          // step-0 note and in the narration at the step where level and depth
+          // first diverge. The tree already prints level and depth on every node,
+          // so the evidence is on screen -- the words point at it.
           inv: {
-            render: 'row',
+            render: 'box',
             cells: [
-              { label: 'n',         value: node.n },
-              { label: 'level',     value: node.level },
-              { label: 'depth',     value: node.depth },
-              { label: 'n + level', value: sum, role: sum === N ? 'ok' : 'error' },
-              { label: 'N',         value: N },
+              { label: 'n',     value: node.n },
+              { label: 'level', value: node.level },
+              { label: 'depth', value: node.depth },
+              { label: 'N',     value: N },
             ],
           },
         },
@@ -135,8 +140,18 @@ function makeTrace() {
 
       state.set(id, 'entering');
       out.push({ text: `Entering level ${node.level}`, indent: node.level, dir: 'out' });
-      yield snap(id, L.enter, 'enter',
-        `fib(${node.n}) begins. It prints "Entering level ${node.level}" indented ${node.level} space${node.level === 1 ? '' : 's'}.`);
+      // At the FIRST node where level and depth disagree, name both numbers off the
+      // screen -- this divergence IS the misconception (students read level as the
+      // recursion depth). n + level still equals N, which is the invariant.
+      let enterNarr =
+        `fib(${node.n}) begins. It prints "Entering level ${node.level}" indented ${node.level} space${node.level === 1 ? '' : 's'}.`;
+      if (!divergeShown && node.level !== node.depth) {
+        divergeShown = true;
+        enterNarr += ` Look at this node: level is ${node.level} but depth is ${node.depth} — they have `
+          + `diverged. level is NOT the recursion depth. And n + level is ${node.n} + ${node.level} = `
+          + `${node.n + node.level}, still equal to N.`;
+      }
+      yield snap(id, L.enter, 'enter', enterNarr);
       state.set(id, 'active');
 
       if (node.n <= 1) {
@@ -185,17 +200,18 @@ function makeTrace() {
 
     // Step 0 (required): the initial state, before anything executes -- no line
     // highlighted. The whole call tree is laid out (every node pending), the
-    // program output is empty, and the invariant panel shows the starting call
-    // fib(4, 0). The setup note lives here.
-    // Step 0 note primes the student to watch the n/level relationship WITHOUT
-    // stating the invariant equation -- that reveal is the payoff on the final
-    // step. See AUTHORING.md "Steps vs. notes".
+    // program output is empty, and the Variables strip shows the starting call
+    // fib(4, 0). The setup note lives here, and STATES the invariant plainly (the
+    // `n + level` readout was removed from the Variables strip -- a derived
+    // expression is not a variable -- so the invariant is taught in words here and
+    // in the divergence narration, pointing at the level/depth the tree shows on
+    // every node).
     yield snap('c0', null, 'init',
       'Before the first call. The call tree is laid out but nothing has run yet; we are about to evaluate fib(4, 0).',
       { note:
-        'We trace fib(4, 0). As this runs, watch how n and level change together at each call. ' +
-        'Crucially, level is NOT the recursion depth; both are shown on every node so you can see ' +
-        'them diverge.' });
+        'We trace fib(4, 0). The invariant is n + level = 4: at every node, n plus level equals N, the ' +
+        'starting value of n. That is why each call raises level by exactly as much as it drops n. And ' +
+        'level is NOT the recursion depth — both are printed on every node, and you will watch them diverge.' });
 
     yield* visit('c0');
   };
@@ -212,8 +228,10 @@ export default {
     { type: 'code',   id: 'code', title: 'fib(n, level)',
       listings: LISTINGS, labels: { pseudo: 'pseudocode', java: 'Java', cpp: 'C++' } },
     { type: 'nodes',  id: 'tree', title: 'Call tree' },
+    { type: 'cells',  id: 'inv',  title: 'Variables', compact: true },
+    // STREAM is declared LAST so the column flow puts it beneath the code panel
+    // (it is what the program EMITS, reading as a continuation of the code).
     { type: 'stream', id: 'out',  title: 'Program output' },
-    { type: 'cells',  id: 'inv',  title: 'Invariant' },
   ],
 
   initialTrace: 'correct',
