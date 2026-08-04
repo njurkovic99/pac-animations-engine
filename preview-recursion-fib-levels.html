@@ -1496,15 +1496,16 @@ const AUTOPLAY_MS = 900;
  * content" rule drifted and regressed one panel at a time). Each row:
  *   floorRows : minimum body height, in content rows (× the panel's line height)
  *   ceiling   : maximum -- null (none), 'listing' (never more rows than the code
- *               has), 'halfStage' (≤ half the stage), or {frames:N}
+ *               has), 'halfStage' (≤ half the stage), or a COUNT {frames:N}/{rows:N}
  *   scroll    : true if content past the ceiling scrolls rather than being cut
- * Adding a panel type is a NEW ROW here, not a new branch. See _sizeClass, which
- * maps a panel to its class, and _panelContentH / the height phase, which apply
- * these uniformly. (AUTHORING.md "Panel sizing policy".) */
+ * A count ceiling ({frames:N}/{rows:N}) is applied generically in _panelContentH:
+ * cap the body at N rendered rows, scroll the rest, newest in view. Adding a panel
+ * type -- or a ceiling to one -- is a NEW ROW here, not a new branch. See
+ * _sizeClass and _panelContentH. (AUTHORING.md "Panel sizing policy".) */
 const SIZE_POLICY = {
   code:      { floorRows: 15, ceiling: 'listing'                 },  // ≥15 rows, never more than the listing; absorbs column slack
   callstack: { floorRows: 2,  ceiling: { frames: 2 }, scroll: true }, // ≤2 frames, scroll beyond
-  stream:    { floorRows: 2,  ceiling: null                      },  // exactly its emitted lines
+  stream:    { floorRows: 2,  ceiling: { rows: 8 },   scroll: true }, // ≤8 output rows, scroll beyond (newest line in view)
   structure: { floorRows: 2,  ceiling: 'halfStage',   scroll: true }, // ≤half the stage, scroll beyond
   strip:     { floorRows: 2,  ceiling: null                      },  // exact content
 };
@@ -1853,40 +1854,30 @@ class Engine {
     return p.kind === 'structure' ? 'structure' : 'strip';
   }
 
-  /** The single place a panel's content height is resolved -- every non-code panel
-   *  (structure and bookkeeping) goes through here, so "size to your own content"
-   *  lives in ONE function instead of being re-derived per panel. Each kind is
-   *  derived from an integer COUNT of its own rows, not a raw pixel, the same
-   *  content-derived calc the code panel uses (rows x line-height + padding):
-   *   - STREAM: its EMITTED line count. The trace fixes it (fib emits 18), so the
-   *     panel is exactly that many rows, from step 0, and never grows.
-   *   - CALLSTACK: its frame count, capped at SIZE_POLICY.callstack's frame ceiling
-   *     (a deep stack has no natural bound, so past the ceiling it scrolls).
-   *   - CELLS / NODES (a strip, an array, a tree): irregular content (cell boxes, an
-   *     SVG), so their genuine rendered height IS the content -- scrollHeight. This
-   *     is content, not stretch: the body is pinned flex:none, so nothing inflates
-   *     it beyond what it renders.
-   *  (The code panel resolves its own height in the fill block, from its line count
-   *  and the column slack it alone absorbs -- the reference implementation.) */
+  /** The single place a non-code panel's content height is resolved. A COUNT
+   *  ceiling in SIZE_POLICY ({frames:N} or {rows:N}) is applied GENERICALLY here:
+   *  if the panel renders more than N rows, cap the body at the Nth row's bottom
+   *  and let the rest scroll (overflow:auto), newest in view. This is one code
+   *  path for the CALLSTACK (frames) and the STREAM (output rows) alike -- adding
+   *  a count ceiling to a panel type is a table row, not a branch. Without such a
+   *  ceiling the body is its full rendered height (scrollHeight): a strip's cells,
+   *  a structure's SVG/boxes (whose halfStage ceiling is applied later in paneH),
+   *  or a stream shorter than its ceiling. flex:none keeps that from stretching.
+   *  (The code panel resolves its own height in the fill block, from its line
+   *  count and the column slack it alone absorbs -- the reference implementation.) */
   _panelContentH(p, body) {
-    const cs = getComputedStyle(body);
-    const pad = (parseFloat(cs.paddingTop) || 11) + (parseFloat(cs.paddingBottom) || 11);
-    if (p.spec.type === 'stream') {
-      const lines = [...body.querySelectorAll('.pac-stream-line')];
-      if (!lines.length) return body.scrollHeight;              // step 0: nothing emitted
-      const lineH = lines[0].getBoundingClientRect().height || 21;
-      return Math.ceil(lines.length * lineH) + pad;              // rows x line-height + padding
-    }
-    if (p.spec.type === 'callstack') {
-      const cap = SIZE_POLICY.callstack.ceiling.frames;           // from the policy table
-      const frames = [...body.querySelectorAll('.pac-frame')];
-      if (frames.length > cap) {
-        const top = body.getBoundingClientRect().top;
-        return Math.round(frames[cap - 1].getBoundingClientRect().bottom - top
-          + (parseFloat(cs.paddingBottom) || 11));
+    const ceil = SIZE_POLICY[this._sizeClass(p)].ceiling;
+    const N = ceil && (ceil.frames ?? ceil.rows);              // a count ceiling, if any
+    if (N != null) {
+      const sel = ceil.frames != null ? '.pac-frame' : '.pac-stream-line';
+      const rows = [...body.querySelectorAll(sel)];
+      if (rows.length > N) {                                    // past the ceiling: cap at N, scroll beyond
+        const padB = parseFloat(getComputedStyle(body).paddingBottom) || 11;
+        const top  = body.getBoundingClientRect().top;
+        return Math.round(rows[N - 1].getBoundingClientRect().bottom - top + padB);
       }
     }
-    return body.scrollHeight;
+    return body.scrollHeight;                                   // under any ceiling / none: rendered content
   }
 
   /** A structure pane that overflows its capped panel -- or a CALLSTACK past its

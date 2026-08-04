@@ -668,13 +668,18 @@ branch:
 | class | floor | ceiling | past ceiling |
 |---|---|---|---|
 | code | 15 rows | listing length (never more rows than the code has) | absorbs column slack |
-| callstack | 2 rows | 2 frames | scrolls |
-| stream | 2 rows | none (exactly its emitted lines) | — |
-| structure | 2 rows | ½ the stage | scrolls |
+| callstack | 2 rows | 2 frames | scrolls, running frame in view |
+| stream | 2 rows | 8 rows | scrolls, newest line in view |
+| structure | 2 rows | ½ the stage | scrolls, active element in view |
 | strip (cells) | 2 rows | none (exact content) | — |
 
 The 2-row floor keeps a panel from collapsing to a sliver; the floor is on the
-content area (title + padding + ≥2 content rows).
+content area (title + padding + ≥2 content rows). A **count** ceiling (2 frames, 8
+rows) caps the body at that many rendered rows and scrolls the rest — one generic
+mechanism, so `stream: {rows: 8}` was a one-line table change, not new behaviour.
+The STREAM's ceiling exists because output is bounded but can still be large (fib
+emits 18 lines); 8 rows shows a run of output as a block at a fraction of the cost,
+and the newest line — the one the current step just printed — stays in view.
 
 ### STREAM is declared last
 
