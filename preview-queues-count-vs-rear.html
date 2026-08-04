@@ -1849,6 +1849,15 @@ class Engine {
     // space below it is gone, and with it the per-panel `flex:none` suppressions
     // that were only there to fight it (items 19/23/24/30). overflow:auto still
     // scrolls a body whose content exceeds its height (callstack, a capped tree).
+    //
+    // NOTE on verifying these heights (items 37/40/41): `.pac-col` is
+    // `align-items: stretch` on the stage, so BOTH columns' *elements* measure the
+    // full stage height regardless of how much content each holds -- the shorter
+    // column's box is stretched to match the taller one. Any future height check
+    // must therefore compare the resolved panel heights against the column's
+    // CONTENT height (last panel's bottom minus first panel's top), NOT the column
+    // element's height, or it will "find" a phantom discrepancy equal to the
+    // shorter column's foot gap. `verifyHeights()` below does exactly this.
     this.stage.style.height = `${Math.round(stageH)}px`;
     if (structure.length) {
       this.structureRegion.toggleAttribute('data-stacked', regionStacked);
@@ -1920,6 +1929,52 @@ class Engine {
       const codeEl = body.querySelector('.pac-code');
       if (codeEl) codeEl.style.maxHeight = `${viewH}px`;
     }
+
+    // Height-accounting regression check (opt-in). Set `window.__PAC_VERIFY = true`
+    // before load to have every layout pass assert its column arithmetic; leave it
+    // off and call `pac.verifyHeights()` from the console on demand.
+    if (typeof window !== 'undefined' && window.__PAC_VERIFY) this.verifyHeights();
+  }
+
+  /** Height-accounting regression check (items 37/40/41). For every VISIBLE column
+   *  it compares `Σ(resolved panel heights + declared inter-panel gaps)` against the
+   *  column's CONTENT height, and asserts they are equal (Δ = 0). A non-zero Δ is a
+   *  real bug -- a gap, border, or header height counted in the resolve path but not
+   *  the render path (or vice versa). It is NOT the per-animation foot gap between
+   *  the two columns: that is genuine column imbalance (the shorter column ends
+   *  higher, by design -- item 24), and this check does not see it because it never
+   *  compares one column against the other.
+   *
+   *  Content height is `last panel bottom − first panel top`, NOT the `.pac-col`
+   *  element height: the column is `align-items: stretch`, so its element always
+   *  measures the full stage height and comparing against it would manufacture a
+   *  phantom discrepancy (see the NOTE in layoutStage). This is the Σ-vs-measured
+   *  table that closed the item 37 investigation in one pass; kept callable so the
+   *  next size question is one command, not an investigation.
+   *
+   *  Prints a table and returns the rows. `Δ` (`delta`) must be 0 for every row. */
+  verifyHeights() {
+    const gap  = parseFloat(getComputedStyle(this.root).getPropertyValue('--gap')) || 14;
+    const cols = [this.colLeft, this.colRight].filter(c => c && c.style.display !== 'none');
+    const rows = cols.map(col => {
+      const kids    = [...col.children].filter(el => el.getBoundingClientRect().height > 0);
+      const heights = kids.map(el => Math.round(el.getBoundingClientRect().height));
+      const summed  = Math.round(heights.reduce((a, h) => a + h, 0) + gap * Math.max(0, kids.length - 1));
+      const content = kids.length
+        ? Math.round(kids[kids.length - 1].getBoundingClientRect().bottom - kids[0].getBoundingClientRect().top)
+        : 0;
+      return { column: col.dataset.side, panels: kids.length, heights: heights.join('+'),
+               summed, content, delta: summed - content };
+    });
+    const bad = rows.filter(r => r.delta !== 0);
+    console.log(`[pac] height accounting -- "${this.spec?.title ?? ''}" (Δ must be 0):`);
+    console.table?.(rows) ?? console.log(rows);
+    if (bad.length) {
+      console.error(`[pac] HEIGHT ACCOUNTING BUG in "${this.spec?.title ?? ''}": `
+        + bad.map(r => `${r.column} Δ=${r.delta}px`).join(', ')
+        + ' -- a gap, border, or header is counted in one path but not the other.');
+    }
+    return rows;
   }
 
   /** Height the stage may occupy: the root's inner height minus the fixed footer
@@ -2366,7 +2421,11 @@ function renderSegments(el, content) {
 
 /** Mount an animation from its content module. */
 function mountAnimation(spec, el = document.getElementById('pac')) {
-  return new Engine(el, spec);
+  const eng = new Engine(el, spec);
+  // Expose the instance for console-driven debugging -- e.g. `pac.verifyHeights()`
+  // to print the column height-accounting table (items 37/40/41). Last mount wins.
+  if (typeof window !== 'undefined') window.pac = eng;
+  return eng;
 }
 
 /* ds — A2 "A queue in an array" (front + rear, built from empty)
