@@ -189,8 +189,16 @@ export class Engine {
     if (code) {
       const codeEl = code.el.querySelector('.pac-panel-body .pac-code');
       code.ctx.anchors.clear();
+      // Measure at max-content so the WIDEST LINE is read, not the empty column
+      // the code currently sits in. scrollWidth on a wide panel clamps UP to the
+      // panel's clientWidth -- reporting blank space as content (item "natural
+      // width means content's width"). Pinning max-content makes clientWidth hug
+      // the widest line, so codeWidestW is the true content width, stable across
+      // viewport sizes and never inflated by slack.
+      code.el.style.width = 'max-content';
       code.renderer.render(code.el.querySelector('.pac-panel-body'), { line: null }, code.ctx, { lang: this.lang, step: this.steps[0] });
       if (codeEl) codeWidestW = codeEl.scrollWidth + bodyPad + BORDER;
+      code.el.style.width = '';
       const lineEl = codeEl?.querySelector('.pac-code-line');
       if (lineEl) codeLineH = lineEl.getBoundingClientRect().height || lineH;
       // char width from any non-empty text span (monospace, so uniform).
@@ -265,6 +273,24 @@ export class Engine {
     // The region's natural WIDTH: the panes side by side, or the widest pane stacked.
     const regionW = structure.length ? (stacked ? Math.max(...structure.map(p => p.contentW)) : structW) : 0;
 
+    // WIDTH MUST FIT THE ROW (item "no panel off the viewport, ever"). The two
+    // side-by-side columns need the code's char floor on the left and the WIDEST
+    // non-code panel on the right, plus one gap. If that sum exceeds the stage the
+    // row cannot fit -- and a panel shoved off the right edge (or overlapping its
+    // neighbour) is strictly worse than a taller page -- so the layout collapses
+    // to a SINGLE column: code full width, then the structure region, then the
+    // bookkeeping panels, each stacked below the last. Nothing overlaps and no
+    // right edge leaves the viewport. Resolved once, at load/resize -- never a
+    // mid-trace change (this is the fallback item 36 named: "either the row stacks
+    // vertically, or the animation is redesigned; it is never resolved by letting
+    // a panel overflow the viewport").
+    const widestOther = Math.max(0, regionW, ...book.map(p => p.contentW));
+    const singleCol   = !!code && (widestOther + gap + codeMinW > stageW);
+    // In a single column a multi-pane structure must stack vertically too (each
+    // pane full width, one above the next) -- side by side would only re-create
+    // the overflow the single column exists to avoid.
+    const regionStacked = stacked || (singleCol && structure.length > 1);
+
     // (2) structure region -- each pane floored (2 rows) then capped at its ceiling
     // (SIZE_POLICY.structure = 'halfStage'), scrolling beyond. Values from the table.
     const ceiling = SIZE_POLICY.structure.ceiling === 'halfStage'
@@ -272,7 +298,7 @@ export class Engine {
     const paneH   = p => Math.min(Math.max(outer(p, p.contentH), outer(p, floorPx('structure'))), ceiling);
     let regionH = 0;
     if (structure.length) {
-      regionH = stacked
+      regionH = regionStacked
         ? sum(structure.map(paneH)) + gap * (structure.length - 1)
         : Math.max(...structure.map(paneH));
     }
@@ -293,6 +319,12 @@ export class Engine {
     // "bottom alignment after the height fixes"). No panel is stretched to force it;
     // any residual is empty space at the shorter column's foot (item "no panel
     // stretches to fill").
+    // Code's whole-panel height. In a single column it shows its FULL listing
+    // (vertical space is not the constraint there); side by side it floors at
+    // min(15, length) and grows to absorb the left column's slack (resolved in the
+    // code-fit block below). Its single-column height feeds the stage total.
+    const codeSingleH = code ? outer(code, Math.ceil(maxLen * codeLineH) + bodyPad) : 0;
+
     const bh = book.map(p => p.outerH);
     const colH = (base, arr, hasBase) => {
       const n = (hasBase ? 1 : 0) + arr.length;
@@ -308,12 +340,32 @@ export class Engine {
         bestStage = stage; bestGap = diff; bestK = k;
       }
     }
-    const stageH = Math.min(bestStage, H);
 
-    // Place bookkeeping panels into their columns (structure stays in the region,
-    // code stays at the top of the left column).
-    for (const p of book.slice(0, bestK)) this.colRight.appendChild(p.el);
-    for (const p of book.slice(bestK))    this.colLeft.appendChild(p.el);
+    let stageH;
+    if (singleCol) {
+      // ONE column: code, then the structure region, then every bookkeeping panel,
+      // top to bottom in declaration order. The right column is emptied and hidden
+      // so no gap is reserved beside it. The page grows taller; nothing overflows.
+      this.colRight.style.display = 'none';
+      if (structure.length) this.colLeft.appendChild(this.structureRegion);
+      for (const p of book) this.colLeft.appendChild(p.el);
+      bestK = 0;                                     // no book panel lives in the right column
+      const parts = [];
+      if (code) parts.push(codeSingleH);
+      if (structure.length) parts.push(regionH);
+      for (const p of book) parts.push(p.outerH);
+      stageH = sum(parts) + gap * Math.max(0, parts.length - 1);
+    } else {
+      this.colRight.style.display = '';
+      // Restore the structure region to the top of the RIGHT column (a prior
+      // single-column layout, from a narrower resize, may have moved it left).
+      if (structure.length) this.colRight.insertBefore(this.structureRegion, this.colRight.firstChild);
+      // Place bookkeeping panels into their columns (structure stays in the region,
+      // code stays at the top of the left column).
+      for (const p of book.slice(0, bestK)) this.colRight.appendChild(p.el);
+      for (const p of book.slice(bestK))    this.colLeft.appendChild(p.el);
+      stageH = Math.min(bestStage, H);
+    }
 
     // ---- apply HEIGHTS ----
     // Every body is now `flex: none` by DEFAULT (styles.css) -- no code sets flex
@@ -324,12 +376,12 @@ export class Engine {
     // scrolls a body whose content exceeds its height (callstack, a capped tree).
     this.stage.style.height = `${Math.round(stageH)}px`;
     if (structure.length) {
-      this.structureRegion.toggleAttribute('data-stacked', stacked);
-      this.structureRegion.style.height = stacked ? '' : `${Math.round(regionH)}px`;
+      this.structureRegion.toggleAttribute('data-stacked', regionStacked);
+      this.structureRegion.style.height = regionStacked ? '' : `${Math.round(regionH)}px`;
       // Each pane fills the height it is allotted (its capped paneH when stacked,
       // the shared region height side by side); content past it scrolls.
       for (const p of structure) {
-        const allot = stacked ? paneH(p) : regionH;
+        const allot = regionStacked ? paneH(p) : regionH;
         p.el.querySelector('.pac-panel-body').style.height = `${Math.round(allot - p.headerH - BORDER)}px`;
       }
     }
@@ -353,41 +405,42 @@ export class Engine {
     }
     if (code) code.el.style.minWidth = `${codeMinW}px`;
 
-    // CONTENT-PROBLEM check (item "the animation is too wide"): the natural panels
-    // in the RIGHT column plus the code's char floor plus the gap must fit the
-    // stage. If they do not, the structure is too wide to show uncompressed and the
-    // ANIMATION must be redesigned (fewer cells, split view) -- we do NOT shrink the
-    // structure. Report it; never silently compress. (No current animation trips it.)
-    const rightNatural = Math.max(0, regionW,
-      ...book.slice(0, bestK).map(p => p.contentW));
-    if (code && rightNatural + codeMinW + gap > stageW + 1) {
-      console.warn(`[pac] "${this.spec?.title ?? ''}" is too wide: the structure/`
-        + `bookkeeping needs ${Math.round(rightNatural)}px and the code floor ${codeMinW}px `
-        + `(+${gap}px gap) exceed the ${Math.round(stageW)}px stage. Redesign the animation `
-        + `(fewer cells, a different layout, or a split view) -- the structure is not compressed.`);
+    // CONTENT-PROBLEM check (item "the animation is too wide"): the single-column
+    // fallback already rescues any row that will not fit side by side -- it stacks
+    // instead of overflowing. So the ONE case left that no layout can fix is a
+    // LONE panel wider than the whole stage: it overflows even at full width, on
+    // its own row. That means the animation itself is too wide (too many cells,
+    // too long a code line) and must be redesigned -- never silently compressed.
+    const widest = Math.max(codeMinW,
+      ...structure.map(p => p.contentW), ...book.map(p => p.contentW));
+    if (widest > stageW + 1) {
+      console.warn(`[pac] "${this.spec?.title ?? ''}" has a panel ${Math.round(widest)}px wide, `
+        + `past the ${Math.round(stageW)}px stage -- it overflows even at full width. Redesign the `
+        + `animation (fewer cells, shorter lines, or a split view) -- panels are not compressed.`);
     }
 
-    // (4) code absorbs the left column's leftover slack -- but only up to the
-    // number of lines it actually HAS. It shows as many whole lines as fit the
-    // available height, floored at 15 (the Canvas minimum) and never more than the
-    // listing's length, so a short listing does not stretch into a tall panel of
-    // empty rows. Any slack beyond that stays as empty column space below it.
+    // (4) code height. In a SINGLE column it shows its FULL listing -- vertical
+    // space is not the constraint, so there is nothing to clip. Side by side it
+    // absorbs the left column's leftover slack, up to the number of lines it HAS:
+    // as many whole lines as fit, floored at min(15, length), never more than the
+    // listing's length (a short listing shows in full, no blank rows; a long one
+    // shows >= 15 and as many more as fit). Any slack beyond that stays empty at
+    // the column's foot -- the body is sized to the lines shown, never stretched.
     if (code) {
-      const leftBook = book.slice(bestK);
-      const leftUsed = sum(leftBook.map(p => p.outerH)) + gap * leftBook.length;
-      const avail   = Math.max(codeFloor, Math.round(stageH - leftUsed));
-      // The code is the ONE panel that absorbs the left column's slack, and only
-      // up to its listing's length (item "no panel stretches to fill"). It shows
-      // min(listing length, lines that fit), floored at min(15, listing length) --
-      // a short listing shows in full (no blank rows), a long one shows >= 15 and
-      // as many more as fit. Any space still left after that stays EMPTY at the
-      // bottom of the column; the body is sized to the lines shown, never stretched.
-      const fit     = Math.floor((avail - code.headerH - BORDER - bodyPad) / codeLineH);
-      const lines   = Math.max(codeFloorLines, Math.min(maxLen, fit));
+      let lines;
+      if (singleCol) {
+        lines = maxLen;
+      } else {
+        const leftBook = book.slice(bestK);
+        const leftUsed = sum(leftBook.map(p => p.outerH)) + gap * leftBook.length;
+        const avail    = Math.max(codeFloor, Math.round(stageH - leftUsed));
+        const fit      = Math.floor((avail - code.headerH - BORDER - bodyPad) / codeLineH);
+        lines = Math.max(codeFloorLines, Math.min(maxLen, fit));
+      }
       // viewH is the whole-line height (ceil so no line is a sliver -- "whole lines
       // only"); the body is exactly that plus its padding, nothing more.
-      const viewH   = Math.ceil(lines * codeLineH);
-      const body    = code.el.querySelector('.pac-panel-body');
+      const viewH  = Math.ceil(lines * codeLineH);
+      const body   = code.el.querySelector('.pac-panel-body');
       body.style.height = `${viewH + bodyPad}px`;
       const codeEl = body.querySelector('.pac-code');
       if (codeEl) codeEl.style.maxHeight = `${viewH}px`;

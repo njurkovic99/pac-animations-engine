@@ -625,8 +625,21 @@ see it at all, unlike *scrolled* content which is always reachable. So:
 - **The sum of a row's panel widths, plus gaps, never exceeds the stage width**,
   resolved on load. This is now achieved by giving the **structure** width priority
   and letting the code take what remains (see "Width rules") — not by capping the
-  structure. A structure never scrolls horizontally; if it will not fit beside the
-  code minimum, that is the too-wide content problem, reported not accommodated.
+  structure. A structure never scrolls horizontally.
+- **When the row cannot fit side by side, it stacks — it never overflows.** If the
+  widest non-code panel plus the code's char floor plus a gap exceed the stage, the
+  two columns **collapse to one**: the code goes full width, then the structure
+  region, then the bookkeeping panels, each stacked below the last. The page grows
+  taller (always reachable), and no panel is pushed off the right edge or left
+  overlapping its neighbour — off-screen is strictly worse than a taller page. This
+  is resolved once, on load/resize, never mid-trace. The only case that no layout
+  can rescue is a **single** panel wider than the whole stage (it overflows even at
+  full width, on its own row); that is the too-wide content problem, reported not
+  accommodated.
+- **A panel claims the width of its content, not the space around it.** The width a
+  panel reserves is measured at `max-content` — its widest rendered row — so a panel
+  never demands blank space it will render empty (the code's floor is its widest
+  *line*, not the wide empty column it happens to sit in).
 - A **call tree** (or any NODES diagram) renders at its natural pixel size. It never
   scrolls **horizontally**; it may scroll **vertically** only if it is deeper than
   half the stage. It is never scaled to an unreadable smear or clipped at an edge. At
@@ -717,16 +730,22 @@ never, and never merely because the code took width it did not need.)
 4. `'column'` — **STREAM** matches the width of the column it sits in, so beneath the
    code it reads as one column.
 
-**If steps 1–3 cannot be satisfied** — the structure genuinely needs more than
-`stageW − codeMin − gap` — that is NOT a layout problem to accommodate by compressing
-the structure. It means the **animation is too wide** and must be redesigned (fewer
-cells, a different layout, a split view). The engine `console.warn`s it rather than
-shrinking the structure. (No current animation trips this at the 1920×1080 target.)
+**If steps 1–3 cannot be satisfied side by side** — the widest non-code panel plus
+`codeMin` plus a gap exceed the stage — the row **collapses to a single column**
+(code full width, then the structure region, then the bookkeeping panels, stacked
+top to bottom). Nothing is compressed and nothing overflows; the page just grows
+taller. This is the resize-time fallback, resolved once on load, never mid-trace.
 
-**Narrow viewports.** Two structure panels that will not fit side by side **stack
-vertically** (each still at its natural width) rather than compress. A single wide
-structure is never shrunk — if it will not fit beside the code minimum, that is the
-too-wide content problem above, reported not accommodated.
+**Narrow viewports.** Two structure panels that will not fit side by side first
+**stack vertically within their region** (each still at its natural width); if the
+region is still too wide beside the code, the whole row collapses to the single
+column above. A structure is never shrunk.
+
+**The one unfixable case** — a **single** panel wider than the whole stage, which
+overflows even at full width on its own row — is NOT a layout problem to accommodate.
+It means the **animation is too wide** and must be redesigned (fewer cells, shorter
+lines, a split view). The engine `console.warn`s it rather than compressing.
+(No current animation trips this at the 1920×1080 target.)
 
 ## Panel count — a soft ceiling for `standard`
 
