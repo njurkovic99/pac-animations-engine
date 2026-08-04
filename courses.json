@@ -16,6 +16,10 @@
         "animations": [
           { "file": "stacks-paren-scanner", "backs": "A3", "built": true }
         ] },
+      { "topic": "Stacks — Evaluating a Postfix Expression",
+        "animations": [
+          { "file": "stacks-postfix-eval", "backs": "A4", "built": true }
+        ] },
       { "topic": "2.5 Recursion; 4.2.3 Implementing Recursion",
         "animations": [
           { "file": "recursion-factorial-stack",  "backs": null },
