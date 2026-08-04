@@ -1750,21 +1750,18 @@ class Engine {
         for (const p of structure) p.el.querySelector('.pac-panel-body').style.minHeight = '';
       }
     }
+    // EVERY bookkeeping panel gets a FIXED height with flex:none, derived from its
+    // own content (p.contentH, resolved once in _panelContentH). flex:none is not
+    // optional: the CSS default is `.pac-panel-body { flex: 1 }`, and a body left
+    // with that flex-grow will STRETCH to fill whatever column space is below it --
+    // the single mechanism behind every "panel grew instead of sizing to content"
+    // regression. Pinning flex:none on all of them removes the hazard in one place;
+    // the height each gets is what _panelContentH computed (the stream's emitted
+    // row count, the callstack's capped frame count, a strip's measured rows).
     for (const p of book) {
       const body = p.el.querySelector('.pac-panel-body');
       const bodyH = `${Math.round(p.outerH - p.headerH - BORDER)}px`;
-      // The CALLSTACK and the STREAM get a FIXED height with flex:none (a
-      // min-height alone lets the body's flex:1 grab leftover column space and
-      // STRETCH -- item "no panel stretches"). The difference is only in the height
-      // each is given: the CALLSTACK is capped at its 2-frame ceiling and scrolls
-      // past it; the STREAM is sized to its FULL content -- the trace fixes the
-      // output line count (fib emits 18), so the panel is exactly that many rows,
-      // derived from the content, and never scrolls or stretches (item "STREAM
-      // sizes to exactly its emitted rows"). Other bookkeeping has a bounded
-      // maximum, so a min-height reservation is enough.
-      if (p.spec.type === 'callstack' || p.spec.type === 'stream') {
-        body.style.height = bodyH; body.style.flex = 'none'; body.style.minHeight = '';
-      } else { body.style.minHeight = bodyH; body.style.height = ''; body.style.flex = ''; }
+      body.style.height = bodyH; body.style.flex = 'none'; body.style.minHeight = '';
     }
 
     // ---- apply WIDTHS (rules 1-3): every non-code panel takes its own natural
@@ -1824,20 +1821,36 @@ class Engine {
     return Math.max(200, avail);
   }
 
-  /** The content height to RESERVE for a panel this step. Most panels -- the STREAM
-   *  included -- reserve their FULL content: an animation's output is bounded by its
-   *  trace (fib emits exactly 18 lines), so the panel sizes to that many rows and is
-   *  fixed from step 0, derived from the content, never from the space available or
-   *  an arbitrary cap. The one exception is the CALLSTACK, whose depth has no natural
-   *  upper bound (a deep recursion is ten frames), so it is capped at
-   *  CALLSTACK_CEILING frames and scrolls past it. */
+  /** The single place a panel's content height is resolved -- every non-code panel
+   *  (structure and bookkeeping) goes through here, so "size to your own content"
+   *  lives in ONE function instead of being re-derived per panel. Each kind is
+   *  derived from an integer COUNT of its own rows, not a raw pixel, the same
+   *  content-derived calc the code panel uses (rows x line-height + padding):
+   *   - STREAM: its EMITTED line count. The trace fixes it (fib emits 18), so the
+   *     panel is exactly that many rows, from step 0, and never grows.
+   *   - CALLSTACK: its frame count, capped at CALLSTACK_CEILING (a deep stack has no
+   *     natural bound, so past the ceiling it scrolls).
+   *   - CELLS / NODES (a strip, an array, a tree): irregular content (cell boxes, an
+   *     SVG), so their genuine rendered height IS the content -- scrollHeight. This
+   *     is content, not stretch: the body is pinned flex:none, so nothing inflates
+   *     it beyond what it renders.
+   *  (The code panel resolves its own height in the fill block, from its line count
+   *  and the column slack it alone absorbs -- the reference implementation.) */
   _panelContentH(p, body) {
+    const cs = getComputedStyle(body);
+    const pad = (parseFloat(cs.paddingTop) || 11) + (parseFloat(cs.paddingBottom) || 11);
+    if (p.spec.type === 'stream') {
+      const lines = [...body.querySelectorAll('.pac-stream-line')];
+      if (!lines.length) return body.scrollHeight;              // step 0: nothing emitted
+      const lineH = lines[0].getBoundingClientRect().height || 21;
+      return Math.ceil(lines.length * lineH) + pad;              // rows x line-height + padding
+    }
     if (p.spec.type === 'callstack') {
       const frames = [...body.querySelectorAll('.pac-frame')];
       if (frames.length > CALLSTACK_CEILING) {
-        const padB = parseFloat(getComputedStyle(body).paddingBottom) || 11;
-        const top  = body.getBoundingClientRect().top;
-        return Math.round(frames[CALLSTACK_CEILING - 1].getBoundingClientRect().bottom - top + padB);
+        const top = body.getBoundingClientRect().top;
+        return Math.round(frames[CALLSTACK_CEILING - 1].getBoundingClientRect().bottom - top
+          + (parseFloat(cs.paddingBottom) || 11));
       }
     }
     return body.scrollHeight;
