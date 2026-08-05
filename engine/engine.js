@@ -394,15 +394,23 @@ export class Engine {
       this.colLeft.style.display = 'none';
       this.colRight.style.display = 'none';
       this.rowStack.style.display = '';
-      // One packing block per placed element, in declaration order. Every structure
-      // panel travels as the single structureRegion block (structures still sit side
-      // by side within it, exactly as in the two-column region).
+      // One packing block per PANEL, in declaration order. Each structure is its own
+      // block (so two structures share a row only if they genuinely fit; otherwise
+      // each lands on its own row). Every block carries a natural height `h` and a
+      // `floor` it can shrink to when the stage would otherwise overflow: the code to
+      // its 15-line floor (scrolling beyond), a structure to a fraction of the stage
+      // (scrolling vertically, active element kept in view), a book panel not at all.
+      const structFloor = Math.max(160, Math.floor(H / 4));
       const blocks = [];
-      let structDone = false;
       for (const p of this.panels.values()) {
-        if (p.kind === 'code')           blocks.push({ el: code.el, w: codeContentW, h: codeSingleH, code: true });
-        else if (p.kind === 'structure') { if (!structDone) { blocks.push({ el: this.structureRegion, w: regionW, h: regionH, region: true }); structDone = true; } }
-        else                             blocks.push({ el: p.el, w: p.contentW, h: p.outerH, book: p });
+        if (p.kind === 'code') {
+          blocks.push({ el: code.el, w: codeContentW, h: codeSingleH, floor: codeFloor, kind: 'code' });
+        } else if (p.kind === 'structure') {
+          const nat = outer(p, p.contentH);
+          blocks.push({ el: p.el, w: p.contentW, h: nat, floor: Math.min(nat, structFloor), kind: 'structure', p });
+        } else {
+          blocks.push({ el: p.el, w: p.contentW, h: p.outerH, floor: p.outerH, kind: 'book', p });
+        }
       }
       // First-fit into rows bounded by the stage width.
       const rows = [];
@@ -412,10 +420,32 @@ export class Engine {
         row.w += blk.w + (row.blocks.length ? gap : 0);
         row.blocks.push(blk);
       }
-      for (const row of rows) row.h = Math.max(...row.blocks.map(b => b.h));
+      for (const row of rows) {
+        row.h     = Math.max(...row.blocks.map(b => b.h));
+        row.floor = Math.max(...row.blocks.map(b => b.floor));
+      }
+      // If the rows overflow the available stage height, shrink so the footer
+      // (controls + note) stays on screen -- losing the note off-screen is the one
+      // failure the layout must prevent. Code rows give back to their floor first
+      // (the code scrolls beyond its 15 lines), then structure rows give back,
+      // tallest first (they scroll vertically; _followActive keeps the active node in
+      // view). Book rows never shrink. Structures never scroll HORIZONTALLY.
+      const gapsTotal = gap * Math.max(0, rows.length - 1);
+      let over = sum(rows.map(r => r.h)) + gapsTotal - H;
+      const isCode = r => r.blocks.some(b => b.kind === 'code');
+      const isStruct = r => r.blocks.some(b => b.kind === 'structure');
+      if (over > 0) for (const row of rows) {
+        if (over <= 0) break;
+        if (!isCode(row)) continue;
+        const give = Math.min(over, row.h - row.floor); row.h -= give; over -= give;
+      }
+      if (over > 0) for (const row of rows.filter(r => isStruct(r) && !isCode(r)).sort((a, b) => b.h - a.h)) {
+        if (over <= 0) break;
+        const give = Math.min(over, row.h - row.floor); row.h -= give; over -= give;
+      }
 
-      // Rebuild the row DOM: appendChild MOVES each element into its row (out of any
-      // stale row from a prior pass), then the now-empty stale rows are dropped.
+      // Rebuild the row DOM: appendChild MOVES each element into its row (out of the
+      // structure region or a stale row), then the now-empty stale rows are dropped.
       const rowEls = rows.map(row => {
         const rd = document.createElement('div');
         rd.className = 'pac-row';
@@ -425,34 +455,23 @@ export class Engine {
       [...this.rowStack.children].forEach(c => c.remove());
       rowEls.forEach(rd => this.rowStack.appendChild(rd));
 
-      // Widths (natural, never compressed) + heights (stretched to the row height so
-      // tops and bottoms align, the same rule the structure region already uses).
-      for (const row of rows) {
-        for (const blk of row.blocks) {
-          if (blk.region) {
-            this.structureRegion.toggleAttribute('data-stacked', regionStacked);
-            this.structureRegion.style.height = `${Math.round(row.h)}px`;
-            this.structureRegion.style.width  = `${Math.round(regionW)}px`;
-            for (const p of structure) {
-              const allot = regionStacked ? paneH(p) : row.h;
-              p.el.style.width = `${Math.round(p.contentW)}px`;
-              p.el.querySelector('.pac-panel-body').style.height = `${Math.round(allot - p.headerH - BORDER)}px`;
-            }
-          } else if (blk.code) {
-            code.el.style.minWidth = ''; code.el.style.maxWidth = '';
-            code.el.style.width = `${Math.round(codeContentW)}px`;   // full listing, its own width
-            const body = code.el.querySelector('.pac-panel-body');
-            body.style.height = `${Math.round(row.h - code.headerH - BORDER)}px`;
-            const codeEl = body.querySelector('.pac-code');
-            if (codeEl) codeEl.style.maxHeight = `${Math.ceil(maxLen * codeLineH)}px`;
-          } else {
-            const p = blk.book;
-            p.el.style.width = SIZE_POLICY[this._sizeClass(p)].width === 'column' ? '' : `${Math.round(p.contentW)}px`;
-            p.el.querySelector('.pac-panel-body').style.height = `${Math.round(row.h - p.headerH - BORDER)}px`;
-          }
+      // Widths (natural, never compressed) + heights (stretched to the row height,
+      // tops and bottoms aligned). A shrunk code shows as many whole lines as fit and
+      // scrolls; a shrunk structure scrolls vertically.
+      for (const row of rows) for (const blk of row.blocks) {
+        if (blk.kind === 'code') {
+          code.el.style.minWidth = ''; code.el.style.maxWidth = '';
+          code.el.style.width = `${Math.round(codeContentW)}px`;
+          const body = code.el.querySelector('.pac-panel-body');
+          body.style.height = `${Math.round(row.h - code.headerH - BORDER)}px`;
+          const codeEl = body.querySelector('.pac-code');
+          if (codeEl) codeEl.style.maxHeight = `${Math.max(codeLineH, Math.floor((row.h - code.headerH - BORDER - bodyPad) / codeLineH) * codeLineH)}px`;
+        } else {
+          blk.el.style.width = SIZE_POLICY[this._sizeClass(blk.p)].width === 'column' ? '' : `${Math.round(blk.p.contentW)}px`;
+          blk.el.querySelector('.pac-panel-body').style.height = `${Math.round(row.h - blk.p.headerH - BORDER)}px`;
         }
       }
-      this.stage.style.height = `${Math.round(sum(rows.map(r => r.h)) + gap * Math.max(0, rows.length - 1))}px`;
+      this.stage.style.height = `${Math.round(Math.min(sum(rows.map(r => r.h)) + gapsTotal, H))}px`;
 
       // CONTENT-PROBLEM check: a lone block wider than the whole stage overflows even
       // on its own row -- genuinely too wide (redesign, never compress). Unreachable
@@ -473,8 +492,10 @@ export class Engine {
     {
       this.colRight.style.display = '';
       // Restore the structure region to the top of the RIGHT column (a prior
-      // row-packed layout, from a narrower resize, may have moved it).
+      // row-packed layout, from a narrower resize, may have moved code and pulled the
+      // structure panels out of the region into row divs).
       if (code && code.el.parentElement !== this.colLeft) this.colLeft.insertBefore(code.el, this.colLeft.firstChild);
+      for (const p of structure) this.structureRegion.appendChild(p.el);   // back into the region, in declaration order
       if (structure.length) this.colRight.insertBefore(this.structureRegion, this.colRight.firstChild);
       // Place bookkeeping panels into their columns (structure stays in the region,
       // code stays at the top of the left column).

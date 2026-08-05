@@ -692,6 +692,17 @@ order is unchanged; this changes only WHERE a panel lands. (This packing only en
 when a structure cannot fit beside the code; every narrower animation keeps the plain
 two-column flow, unchanged.)
 
+Because packing uses width to save height, a *second* structure often lands beside the
+code rather than on its own row: the full quicksort adds a recursion tree, and the tree
+(narrow) packs beside the code while the array keeps its own row — so the whole tree is
+visible without vertical scrolling, which stacking it under the array could not manage.
+When the packed rows still exceed the viewport height, the same resolution order as the
+two-column layout applies, so the **controls and note stay on screen** (the one failure
+the layout must prevent): the code gives its extra rows back to the 15-line floor and
+scrolls; then structures give height back and **scroll vertically** (never horizontally),
+the active node kept in view. Books never shrink. A short viewport therefore shows less
+and scrolls more, but never loses the note or overflows the width.
+
 Structure panels sharing a row sit adjacent, each at its own natural width, sharing
 the row's height (so tops and bottoms align). They do not split the row evenly and
 they do not stretch. Two views of one structure — the heap's tree and its array — must
