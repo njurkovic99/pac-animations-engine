@@ -160,13 +160,18 @@ function* trace() {
   };
 
   /* The compact Variables strip: pivot, i, j. `hot` gives the changing box the
-   * blue fill. Each shows the placeholder before it holds a meaningful value. */
+   * blue fill. Each shows the placeholder before it holds a meaningful value. i
+   * and j show the value they currently point at alongside the index — "3 (13)" —
+   * so a marker far out on the 13-cell row is tied to the number the narration is
+   * talking about; the pivot box already shows its value, so all three read the
+   * same way. (i and j never leave [0..12] in this trace, so a[i]/a[j] are always
+   * in range.) */
   const varsPanel = hot => ({
     render: 'box',
     cells: [
-      { label: 'pivot', value: pivot == null ? '' : pivot, role: pivot == null ? 'empty' : (hot === 'pivot' ? 'active' : undefined) },
-      { label: 'i',     value: i == null ? '' : i,         role: i == null ? 'empty' : (hot === 'i' ? 'active' : undefined) },
-      { label: 'j',     value: j == null ? '' : j,         role: j == null ? 'empty' : (hot === 'j' ? 'active' : undefined) },
+      { label: 'pivot', value: pivot == null ? '' : pivot,          role: pivot == null ? 'empty' : (hot === 'pivot' ? 'active' : undefined) },
+      { label: 'i',     value: i == null ? '' : `${i} (${a[i]})`,   role: i == null ? 'empty' : (hot === 'i' ? 'active' : undefined) },
+      { label: 'j',     value: j == null ? '' : `${j} (${a[j]})`,   role: j == null ? 'empty' : (hot === 'j' ? 'active' : undefined) },
     ],
   });
 
@@ -210,9 +215,14 @@ function* trace() {
   }
 
   /* Lines 8 + 9 — i < j is true, so the two wrong-side values trade (one step,
-   * both cells change). */
+   * both cells change). The pair takes the blue ACTIVITY fill on the line-8 test
+   * (a visual antecedent for the swap), keeps it through the exchange on line 9,
+   * and releases it on the next step. Fill = activity, not membership — the pivot
+   * keeps its amber outline (membership channel) untouched. On the phase-4 step
+   * where i < j is FALSE (handled separately, below), neither cell gets the fill,
+   * and that absence is itself the signal that nothing will be swapped. */
   function* swapIJ(narrate, note) {
-    yield snap({ line: 8, tag: 'test',
+    yield snap({ line: 8, tag: 'test', active: [i, j],
       narrate: `i is ${i}, j is ${j}. i is left of j, so their two values are on the wrong sides — swap them.` });
     const vi = a[i], vj = a[j];
     a[i] = vj; a[j] = vi;

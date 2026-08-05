@@ -164,6 +164,16 @@ body {
 .pac-structure[data-stacked] { flex-direction: column; align-items: flex-start; }
 .pac-structure > .pac-panel { flex: 0 0 auto; }
 
+/* The ROW STACK: the wide-structure placement (a structure too wide to sit beside
+ * the code). Rows flow top to bottom; within a row panels sit left to right at
+ * their natural widths and SHARE the row's height (align-items: stretch -> tops and
+ * bottoms aligned, the same rule the structure region uses). Leftover width at a
+ * row's right stays empty. Hidden until the engine switches to this layout. */
+.pac-col[data-side="rows"] { flex: 1 1 auto; align-self: stretch; }
+.pac-row { display: flex; flex-direction: row; gap: var(--gap); align-items: stretch; min-width: 0; }
+.pac-row > .pac-panel,
+.pac-row > .pac-structure { flex: 0 0 auto; }
+
 /* ---- panel chrome ---- */
 .pac-panel {
   background: var(--panel);

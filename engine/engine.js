@@ -377,24 +377,104 @@ export class Engine {
       }
     }
 
-    let stageH;
+    // WIDE-STRUCTURE ROW PACKING (AUTHORING.md "a panel that fits in remaining
+    // width uses it"). When a structure is too wide to sit beside the code, the old
+    // fallback stacked EVERYTHING in one column -- so a small bookkeeping panel was
+    // pushed below the wide structure even though it would have fit in the empty
+    // width beside the code. Instead, pack panels into rows by FIRST FIT, in
+    // declaration order: each panel lands in the earliest row with room for it, and
+    // only a panel that fits nowhere opens a new row. A panel that had to break (the
+    // wide structure) does not drag later panels down with it -- they are re-tested
+    // against the space actually available, so a small panel returns to the code's
+    // row. Panels sharing a row share that row's height (tops and bottoms aligned)
+    // and take their natural width; leftover width at a row's right stays empty. The
+    // two-column layout (the `else` below) is unchanged -- only this path packs, and
+    // only animations whose structure cannot fit beside the code ever reach it.
     if (singleCol) {
-      // ONE column: code, then the structure region, then every bookkeeping panel,
-      // top to bottom in declaration order. The right column is emptied and hidden
-      // so no gap is reserved beside it. The page grows taller; nothing overflows.
+      this.colLeft.style.display = 'none';
       this.colRight.style.display = 'none';
-      if (structure.length) this.colLeft.appendChild(this.structureRegion);
-      for (const p of book) this.colLeft.appendChild(p.el);
-      bestK = 0;                                     // no book panel lives in the right column
-      const parts = [];
-      if (code) parts.push(codeSingleH);
-      if (structure.length) parts.push(regionH);
-      for (const p of book) parts.push(p.outerH);
-      stageH = sum(parts) + gap * Math.max(0, parts.length - 1);
-    } else {
+      this.rowStack.style.display = '';
+      // One packing block per placed element, in declaration order. Every structure
+      // panel travels as the single structureRegion block (structures still sit side
+      // by side within it, exactly as in the two-column region).
+      const blocks = [];
+      let structDone = false;
+      for (const p of this.panels.values()) {
+        if (p.kind === 'code')           blocks.push({ el: code.el, w: codeContentW, h: codeSingleH, code: true });
+        else if (p.kind === 'structure') { if (!structDone) { blocks.push({ el: this.structureRegion, w: regionW, h: regionH, region: true }); structDone = true; } }
+        else                             blocks.push({ el: p.el, w: p.contentW, h: p.outerH, book: p });
+      }
+      // First-fit into rows bounded by the stage width.
+      const rows = [];
+      for (const blk of blocks) {
+        let row = rows.find(r => r.w + blk.w + (r.blocks.length ? gap : 0) <= stageW + 0.5);
+        if (!row) { row = { blocks: [], w: 0 }; rows.push(row); }
+        row.w += blk.w + (row.blocks.length ? gap : 0);
+        row.blocks.push(blk);
+      }
+      for (const row of rows) row.h = Math.max(...row.blocks.map(b => b.h));
+
+      // Rebuild the row DOM: appendChild MOVES each element into its row (out of any
+      // stale row from a prior pass), then the now-empty stale rows are dropped.
+      const rowEls = rows.map(row => {
+        const rd = document.createElement('div');
+        rd.className = 'pac-row';
+        for (const blk of row.blocks) rd.appendChild(blk.el);
+        return rd;
+      });
+      [...this.rowStack.children].forEach(c => c.remove());
+      rowEls.forEach(rd => this.rowStack.appendChild(rd));
+
+      // Widths (natural, never compressed) + heights (stretched to the row height so
+      // tops and bottoms align, the same rule the structure region already uses).
+      for (const row of rows) {
+        for (const blk of row.blocks) {
+          if (blk.region) {
+            this.structureRegion.toggleAttribute('data-stacked', regionStacked);
+            this.structureRegion.style.height = `${Math.round(row.h)}px`;
+            this.structureRegion.style.width  = `${Math.round(regionW)}px`;
+            for (const p of structure) {
+              const allot = regionStacked ? paneH(p) : row.h;
+              p.el.style.width = `${Math.round(p.contentW)}px`;
+              p.el.querySelector('.pac-panel-body').style.height = `${Math.round(allot - p.headerH - BORDER)}px`;
+            }
+          } else if (blk.code) {
+            code.el.style.minWidth = ''; code.el.style.maxWidth = '';
+            code.el.style.width = `${Math.round(codeContentW)}px`;   // full listing, its own width
+            const body = code.el.querySelector('.pac-panel-body');
+            body.style.height = `${Math.round(row.h - code.headerH - BORDER)}px`;
+            const codeEl = body.querySelector('.pac-code');
+            if (codeEl) codeEl.style.maxHeight = `${Math.ceil(maxLen * codeLineH)}px`;
+          } else {
+            const p = blk.book;
+            p.el.style.width = SIZE_POLICY[this._sizeClass(p)].width === 'column' ? '' : `${Math.round(p.contentW)}px`;
+            p.el.querySelector('.pac-panel-body').style.height = `${Math.round(row.h - p.headerH - BORDER)}px`;
+          }
+        }
+      }
+      this.stage.style.height = `${Math.round(sum(rows.map(r => r.h)) + gap * Math.max(0, rows.length - 1))}px`;
+
+      // CONTENT-PROBLEM check: a lone block wider than the whole stage overflows even
+      // on its own row -- genuinely too wide (redesign, never compress). Unreachable
+      // at the design width; the 13-cell array fits the 1172px stage with room.
+      const widest = Math.max(codeMinW, ...blocks.map(b => b.w));
+      if (widest > stageW + 1) {
+        console.warn(`[pac] "${this.spec?.title ?? ''}" has a panel ${Math.round(widest)}px wide, `
+          + `past the ${Math.round(stageW)}px stage -- redesign (fewer cells, shorter lines, split view).`);
+      }
+      if (typeof window !== 'undefined' && window.__PAC_VERIFY) this.verifyHeights();
+      return;
+    }
+
+    // ---- narrow two-column layout (unchanged) ----
+    this.colLeft.style.display = '';
+    this.rowStack.style.display = 'none';
+    let stageH;
+    {
       this.colRight.style.display = '';
       // Restore the structure region to the top of the RIGHT column (a prior
-      // single-column layout, from a narrower resize, may have moved it left).
+      // row-packed layout, from a narrower resize, may have moved it).
+      if (code && code.el.parentElement !== this.colLeft) this.colLeft.insertBefore(code.el, this.colLeft.firstChild);
       if (structure.length) this.colRight.insertBefore(this.structureRegion, this.colRight.firstChild);
       // Place bookkeeping panels into their columns (structure stays in the region,
       // code stays at the top of the left column).
@@ -546,7 +626,10 @@ export class Engine {
    *  Prints a table and returns the rows. `Δ` (`delta`) must be 0 for every row. */
   verifyHeights() {
     const gap  = parseFloat(getComputedStyle(this.root).getPropertyValue('--gap')) || 14;
-    const cols = [this.colLeft, this.colRight].filter(c => c && c.style.display !== 'none');
+    // In the wide-structure layout the rowStack is the visible container and its
+    // children are ROW divs; each row's height is the max of its panels, and the
+    // per-column Σ-vs-content check applies to it exactly as to a column of panels.
+    const cols = [this.colLeft, this.colRight, this.rowStack].filter(c => c && c.style.display !== 'none');
     const rows = cols.map(col => {
       const kids    = [...col.children].filter(el => el.getBoundingClientRect().height > 0);
       const heights = kids.map(el => Math.round(el.getBoundingClientRect().height));
@@ -752,7 +835,16 @@ export class Engine {
     this.structureRegion = document.createElement('div');
     this.structureRegion.className = 'pac-structure';
     this.colRight.appendChild(this.structureRegion);
-    this.stage.append(this.colLeft, this.colRight);
+    // A THIRD placement container, hidden by default: the row stack, used only when
+    // a structure is too wide to sit beside the code (layoutStage's wide-structure
+    // path). It flows panels into rows that PACK horizontally -- a small panel fills
+    // the width a wide structure left empty rather than being pushed below it
+    // (AUTHORING.md "a panel that fits in remaining width uses it"). The two-column
+    // layout above is unchanged; only the old single-column fallback now packs.
+    this.rowStack = document.createElement('div');
+    this.rowStack.className = 'pac-col pac-rowstack'; this.rowStack.dataset.side = 'rows';
+    this.rowStack.style.display = 'none';
+    this.stage.append(this.colLeft, this.colRight, this.rowStack);
 
     // Beginner profile is enforced here, not left to authorial restraint.
     const panels = (s.panels ?? []).slice();

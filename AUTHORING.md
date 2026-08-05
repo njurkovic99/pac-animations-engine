@@ -654,9 +654,23 @@ scrolled structure teaches nothing.
 - **The sum of a row's widths plus gaps never exceeds the viewport.** No panel may be
   positioned partly outside it. Off-screen content is unreachable, which is strictly
   worse than any amount of wasted space.
-- If a structure genuinely cannot fit beside the code minimum, **the animation is too
-  wide and must be redesigned** — fewer cells, a different layout, a split view. It is
-  never resolved by shrinking the structure or letting a panel overflow.
+- If a structure genuinely cannot fit beside the code minimum, it takes **its own
+  full-width row**, and the remaining panels pack into the rows above and below it —
+  see the packing rule next. Only a *lone* panel wider than the whole stage is the
+  "animation is too wide, redesign it" case (fewer cells, a different layout, a split
+  view); it is never resolved by shrinking a structure or letting a panel overflow.
+
+**A panel that fits in the width remaining on a row uses it — the flow packs, it does
+not only move down.** When a wide structure claims its own row, a small bookkeeping
+panel is NOT dragged below it if it would have fit in the empty width beside the code.
+Panels are placed in declaration (reading) order by **first fit**: each lands in the
+earliest row with room for it; only a panel that fits nowhere opens a new row. So a
+13-cell array (`sorting-quicksort-partition`, the widest structure the engine draws)
+resolves to *row 1: code · Variables*, *row 2: the array* — the Variables strip sits
+beside the code in the space the array left empty, not stranded below it. Declaration
+order is unchanged; this changes only WHERE a panel lands. (This packing only engages
+when a structure cannot fit beside the code; every narrower animation keeps the plain
+two-column flow, unchanged.)
 
 Structure panels sharing a row sit adjacent, each at its own natural width, sharing
 the row's height (so tops and bottoms align). They do not split the row evenly and
