@@ -235,16 +235,25 @@ Pseudocode canonical; Java and C++ as toggles.
 | 8 | Algorithm analysis | `complexity-growth-curves` | **G** | — |
 | 9 | Quicksort partition | `sorting-quicksort-partition` | S | **A6 (KEY)** |
 | 10 | Heap — validity | `heap-is-this-valid` | **P** | — |
-| 11 | Heapsort — array ↔ tree | `sorting-heapsort-dual` | S | A7 |
-| 12 | Timing vs n | `sorting-timing-chart` | **G** | **A7** |
-| 13 | Hashing — probing, chaining, **coalesced** | `hashing-collision-strategies` | S | **A8** |
-| 14 | Pointers — 8-bit address model | `pointers-address-model` | **M** | — |
-| 15 | Linked list — insert, trailing pointer | `lists-insert-alpha` | **M** | **A9** |
-| 16 | Doubly linked — four-line insertion | `lists-doubly-insert-order` | **P** | **A10** |
-| 17 | BST — insert, traverse, delete | `trees-bst-operations` | S | **A11** |
-| 18 | Tree height | `trees-recursive-height` | T | **A12** |
-| 19 | Graphs — matrix ↔ list | `graphs-representations` | S | **A13** |
-| 20 | Graph traversal | `graphs-bfs-dfs` | S | — |
+| 11 | Heapsort — **build the heap** (part 1 of 2) | `sorting-heapify` | S | A7 (part 1) |
+| 12 | Heapsort — array ↔ tree, extract & sink (part 2 of 2) | `sorting-heapsort-dual` | S | A7 (part 2) |
+| 13 | Timing vs n | `sorting-timing-chart` | **G** | **A7** |
+| 14 | Hashing — probing, chaining, **coalesced** | `hashing-collision-strategies` | S | **A8** |
+| 15 | Pointers — 8-bit address model | `pointers-address-model` | **M** | — |
+| 16 | Linked list — insert, trailing pointer | `lists-insert-alpha` | **M** | **A9** |
+| 17 | Doubly linked — four-line insertion | `lists-doubly-insert-order` | **P** | **A10** |
+| 18 | BST — insert, traverse, delete | `trees-bst-operations` | S | **A11** |
+| 19 | Tree height | `trees-recursive-height` | T | **A12** |
+| 20 | Graphs — matrix ↔ list | `graphs-representations` | S | **A13** |
+| 21 | Graph traversal | `graphs-bfs-dfs` | S | — |
+
+**Heapsort split (A7).** Heapsort was one animation (`sorting-heapsort-dual`); it
+ran too long, so building the max heap is split off into `sorting-heapify` (part
+1, row 11). Part 2 (`sorting-heapsort-dual`, row 12) starts exactly where part 1
+ends — the heap array `[9,6,8,4,1,2]` — and does the repeated extract-and-sink,
+where the `sorted` green region grows from the right. Part 1 uses **no green
+fill**: heapify settles nothing into its final sorted position (the root only
+holds the largest value). Both share the tree ↔ array dual view.
 
 ---
 
