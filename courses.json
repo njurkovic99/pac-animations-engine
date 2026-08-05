@@ -26,6 +26,10 @@
           { "file": "recursion-fib-levels",       "backs": "A5", "built": true },
           { "file": "recursion-hanoi",            "backs": null }
         ] },
+      { "topic": "Sorting — Quicksort Partition",
+        "animations": [
+          { "file": "sorting-quicksort-partition", "backs": "A6", "built": true }
+        ] },
       { "topic": "4.1.5 Doubly Linked Lists",
         "animations": [
           { "file": "lists-doubly-insert-order",  "backs": "A10", "built": true }

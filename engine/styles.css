@@ -19,6 +19,7 @@
 
   /* semantic state */
   --ok:            #4caf82;
+  --ok-soft:       rgba(76, 175, 130, 0.22);   /* green FILL: a value in its final sorted position */
   --warn:          #e0a33a;
   --error:         #e2564a;
   --highlight:     #d4a13c;
@@ -163,6 +164,16 @@ body {
 .pac-structure:empty { display: none; }
 .pac-structure[data-stacked] { flex-direction: column; align-items: flex-start; }
 .pac-structure > .pac-panel { flex: 0 0 auto; }
+
+/* The ROW STACK: the wide-structure placement (a structure too wide to sit beside
+ * the code). Rows flow top to bottom; within a row panels sit left to right at
+ * their natural widths and SHARE the row's height (align-items: stretch -> tops and
+ * bottoms aligned, the same rule the structure region uses). Leftover width at a
+ * row's right stays empty. Hidden until the engine switches to this layout. */
+.pac-col[data-side="rows"] { flex: 1 1 auto; align-self: stretch; }
+.pac-row { display: flex; flex-direction: row; gap: var(--gap); align-items: stretch; min-width: 0; }
+.pac-row > .pac-panel,
+.pac-row > .pac-structure { flex: 0 0 auto; }
 
 /* ---- panel chrome ---- */
 .pac-panel {
@@ -381,6 +392,13 @@ body {
 .pac-cell[data-role="active"]   { border-color: var(--accent); background: var(--accent-soft); }
 .pac-cell[data-role="compared"] { border-color: var(--highlight); }
 .pac-cell[data-role="ok"]       { border-color: var(--ok); }
+/* sorted: a value in its FINAL sorted position -- permanent, never released. Green
+ * FILL (a distinct channel from the green OUTLINE that marks a stable structure
+ * member): outline = membership, fill = state. Mutually exclusive with the blue
+ * activity fill -- a settled value is not being acted on -- so a cell that becomes
+ * `sorted` drops any `active` fill on the same step. A finished sort ends with every
+ * cell green. (AUTHORING.md "sorted = green fill". Sorting animations only.) */
+.pac-cell[data-role="sorted"]   { border-color: var(--ok); background: var(--ok-soft); }
 .pac-cell[data-role="error"]    { border-color: var(--error); color: var(--error); }
 /* empty: indeterminate storage -- an unwritten array cell OR an unassigned
  * standalone variable (one glyph for both). Same box and dimensions as a member,

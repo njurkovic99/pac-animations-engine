@@ -172,10 +172,30 @@ Roles, grouped by meaning:
 | this-step activity | `active`, `compared`, `swapped`, `probe` |
 | outcome | `sorted`, `ok`, `error` |
 
+Treatments that are implemented in `engine/styles.css` (verify here before using a
+role): `member` (full border), `stale` (greyed, no border), `empty` (dashed border +
+placeholder glyph), `active` (blue FILL — a cell being acted on this step),
+`compared` (amber outline — read/compared this step, or a displaced value like a
+partition pivot), `ok` (green outline), `error` (red border + text), and `sorted`
+(green FILL — a value in its **final sorted position**, permanent, never released).
+`swapped` and `probe` have no distinct treatment; use `active` for a swap and
+`compared` for a probe until one is genuinely needed.
+
+**`sorted` vs `ok`, and the two green channels.** `sorted` is green *fill*; a stable
+structure member (a linked-list node linked in) is green *outline*. Different channels
+— outline = membership, fill = activity/state — so a cell can carry both if ever
+needed, and there is no ambiguity. Green fill and blue fill are **mutually exclusive**:
+a value in its final place is not being acted on, so a cell taking `sorted` drops any
+`active` fill on the same step. Every sorting animation uses `sorted` for its settled
+region (heapsort grows it from the right, bubble/selection from the end, insertion from
+the left); a finished sort ends with every cell green. Do not invent a different
+treatment for a settled region.
+
 > **Open item:** `AUTHORING.md` and `PANEL-INVENTORY.md` historically listed two
 > different, non-overlapping role sets. The table above is the union as understood
-> after `queues-count-vs-rear`. Verify against `engine/` and correct both docs. Do
-> not add a role without checking whether an existing one already means it.
+> after `queues-count-vs-rear`, with treatments reconciled against `engine/` after
+> `sorting-quicksort-partition`. Do not add a role without checking whether an
+> existing one already means it.
 
 Serves arrays, sorting bars, hash buckets, matrices, memory blocks, variable
 tables, stack frames, vtables. Full rendering rules in Part 5.
@@ -654,9 +674,34 @@ scrolled structure teaches nothing.
 - **The sum of a row's widths plus gaps never exceeds the viewport.** No panel may be
   positioned partly outside it. Off-screen content is unreachable, which is strictly
   worse than any amount of wasted space.
-- If a structure genuinely cannot fit beside the code minimum, **the animation is too
-  wide and must be redesigned** — fewer cells, a different layout, a split view. It is
-  never resolved by shrinking the structure or letting a panel overflow.
+- If a structure genuinely cannot fit beside the code minimum, it takes **its own
+  full-width row**, and the remaining panels pack into the rows above and below it —
+  see the packing rule next. Only a *lone* panel wider than the whole stage is the
+  "animation is too wide, redesign it" case (fewer cells, a different layout, a split
+  view); it is never resolved by shrinking a structure or letting a panel overflow.
+
+**A panel that fits in the width remaining on a row uses it — the flow packs, it does
+not only move down.** When a wide structure claims its own row, a small bookkeeping
+panel is NOT dragged below it if it would have fit in the empty width beside the code.
+Panels are placed in declaration (reading) order by **first fit**: each lands in the
+earliest row with room for it; only a panel that fits nowhere opens a new row. So a
+13-cell array (`sorting-quicksort-partition`, the widest structure the engine draws)
+resolves to *row 1: code · Variables*, *row 2: the array* — the Variables strip sits
+beside the code in the space the array left empty, not stranded below it. Declaration
+order is unchanged; this changes only WHERE a panel lands. (This packing only engages
+when a structure cannot fit beside the code; every narrower animation keeps the plain
+two-column flow, unchanged.)
+
+Because packing uses width to save height, a *second* structure often lands beside the
+code rather than on its own row: the full quicksort adds a recursion tree, and the tree
+(narrow) packs beside the code while the array keeps its own row — so the whole tree is
+visible without vertical scrolling, which stacking it under the array could not manage.
+When the packed rows still exceed the viewport height, the same resolution order as the
+two-column layout applies, so the **controls and note stay on screen** (the one failure
+the layout must prevent): the code gives its extra rows back to the 15-line floor and
+scrolls; then structures give height back and **scroll vertically** (never horizontally),
+the active node kept in view. Books never shrink. A short viewport therefore shows less
+and scrolls more, but never loses the note or overflows the width.
 
 Structure panels sharing a row sit adjacent, each at its own natural width, sharing
 the row's height (so tops and bottoms align). They do not split the row evenly and
