@@ -55,11 +55,19 @@ export function render(body, data, ctx) {
   // Marked mode: a `box` grid with index-pointer markers below the cell row.
   const markers = mode === 'box' && data?.markers ? data.markers : null;
   if (markers) { wrap.dataset.marked = ''; } else { delete wrap.dataset.marked; }
-  // A single-marker array uses narrower columns (there is never a pair of markers
-  // to sit side by side under one cell), so a short array fits more panels beside
-  // it. Two-or-more-marker arrays keep the wider column so front + rear on the
-  // same cell never overlap.
-  if (markers && markers.length <= 1) { wrap.dataset.single = ''; } else { delete wrap.dataset.single; }
+  // The marker LANE has one fixed ROW per declared marker, in a stable order, and
+  // markers on the same (or adjacent) cell STACK VERTICALLY rather than sitting
+  // side by side (AUTHORING.md "The index pointer" — this supersedes the old
+  // side-by-side rule, written when two markers was the maximum). Two consequences
+  // that kill a whole class of jitter: a marker always occupies the SAME row for
+  // the entire animation (whether or not others share its cell), and — crucially —
+  // CELL SPACING NO LONGER DEPENDS ON MARKER COUNT, because each row holds at most
+  // one caret under its cell. `order` is the fixed row assignment: the labels in
+  // the order they first appear across the whole trace. `curr` is this step's
+  // label -> index. (Fixes A7 item 53.)
+  const order = markers ? markerOrder(ctx) : null;
+  const curr = {};
+  if (markers) for (const m of markers) curr[m.label] = m.index;
 
   // A row label names the whole row once, to the LEFT of the cells (marked mode).
   if (markers && data.rowLabel) {
@@ -69,31 +77,37 @@ export function render(body, data, ctx) {
     wrap.appendChild(name);
   }
 
-  // Parked markers (index < 0): they point at nothing yet, so they sit to the
-  // left of cell [0], dimmed, still labelled. The parked zone is a full cell
+  // Parked markers (index < 0 or null): they point at nothing yet, so they sit to
+  // the left of cell [0], dimmed, still labelled. The parked zone is a full cell
   // column with an INVISIBLE box and index band above its marker track, so those
   // bands reserve the exact same heights as a real cell -- the marker lane then
   // begins at the same y here as over any cell. A marker moving from -1 onto a
-  // cell therefore travels laterally only, never vertically.
+  // cell therefore travels laterally only, never vertically, AND stays in its own
+  // fixed row while doing so.
   // The parked lane is ALWAYS present in marked mode (not only when a marker is
   // currently parked), so the cells never shift left as a marker leaves the -1
   // sentinel and the panel's width never changes across steps -- the width
   // analogue of the master invariant. Its box and index bands are invisible (they
-  // only reserve height); the marker track holds any parked markers, or nothing.
-  const parked = markers ? markers.filter(m => m.index == null || m.index < 0) : [];
+  // only reserve height); the marker track is the same fixed-row lane as every
+  // cell's, holding a caret in each row whose marker is currently parked.
   if (markers) {
     const col = document.createElement('div');
     col.className = 'pac-cell-col pac-cell-parked';
+    // The parked lane's WIDTH is reserved ONCE from the whole trace, not hugged to
+    // the current step: if any marker EVER parks, hold room for the widest parked
+    // label on every step (markers right-aligned, hugging cell [0]); if none ever
+    // parks, the lane collapses to nothing. Either way the width is constant, so a
+    // marker parking or leaving -1 never shifts cell [0] -- the same jitter the
+    // vertical stacking removed on the cell side, removed here on the parked side.
+    const parkW = parkedReserve(ctx);
+    col.style.width = col.style.minWidth = parkW ? `${parkW}px` : '0px';
     const box = document.createElement('div');
     box.className = 'pac-cell';
     box.innerHTML = '<span class="pac-cell-value">—</span>';   // reserves the box band height
     const index = document.createElement('div');
     index.className = 'pac-cell-index';
     index.textContent = '[0]';                                 // reserves the index band height
-    const track = document.createElement('div');
-    track.className = 'pac-cell-markers';
-    for (const m of parked) track.appendChild(marker(m));
-    col.append(box, index, track);
+    col.append(box, index, markerLane(order, curr, 'parked'));
     wrap.appendChild(col);
   }
 
@@ -121,10 +135,11 @@ export function render(body, data, ctx) {
 
     if (!markers) { wrap.appendChild(cell); return; }
 
-    // Marked mode: wrap the box in a column with a bracketed index label and a
-    // marker track. The index label sits BELOW the box; markers whose index
-    // equals this cell's position sit side by side beneath it, each caret over
-    // its own labelled variable name.
+    // Marked mode: wrap the box in a column with a bracketed index label and the
+    // fixed-row marker lane. The index label sits BELOW the box; the lane below it
+    // reserves one row per declared marker, and this cell's row k holds a caret
+    // only when marker `order[k]` currently points here -- so two markers that
+    // land on this cell occupy two DIFFERENT rows (stacked), never widening it.
     const col = document.createElement('div');
     col.className = 'pac-cell-col';
     col.appendChild(cell);
@@ -134,12 +149,7 @@ export function render(body, data, ctx) {
     index.textContent = `[${c.label != null ? c.label : idx}]`;
     col.appendChild(index);
 
-    const track = document.createElement('div');
-    track.className = 'pac-cell-markers';
-    for (const m of markers) {
-      if (m.index === idx) track.appendChild(marker(m));
-    }
-    col.appendChild(track);
+    col.appendChild(markerLane(order, curr, idx));
     wrap.appendChild(col);
   });
 }
@@ -151,6 +161,67 @@ function marker(m) {
   mk.innerHTML = `<span class="pac-marker-caret">&#9650;</span>` +
                  `<span class="pac-marker-label">${esc(m.label)}</span>`;
   return mk;
+}
+
+/* The fixed row assignment for a panel's markers: every label the trace EVER
+ * shows, in first-appearance order, so each marker keeps one row for the whole
+ * animation. Computed once from the full step list (via ctx.engine.steps) and
+ * cached on the ctx -- the renderer sees one step at a time, but the lane's row
+ * count and order must be resolved over ALL of them (master invariant: the lane
+ * is as tall as the marker count from load, and never reflows). */
+function markerOrder(ctx) {
+  if (ctx._markerOrder) return ctx._markerOrder;
+  const id = ctx.spec?.id ?? ctx.spec?.type;
+  const steps = ctx.engine?.steps ?? [];
+  const seen = [];
+  for (const s of steps) {
+    const ms = s.panels?.[id]?.markers;
+    if (!ms) continue;
+    for (const m of ms) if (!seen.includes(m.label)) seen.push(m.label);
+  }
+  return (ctx._markerOrder = seen);
+}
+
+/* The parked lane's reserved width (px), resolved once over the whole trace: 0 if
+ * no marker ever parks (index null / negative) -- the lane then takes no space
+ * left of cell [0] -- else enough for the widest label that ever parks, plus its
+ * caret, so the reserved width is constant across every step. Cached on the ctx. */
+function parkedReserve(ctx) {
+  if (ctx._parkW != null) return ctx._parkW;
+  const id = ctx.spec?.id ?? ctx.spec?.type;
+  const steps = ctx.engine?.steps ?? [];
+  let maxLen = 0;
+  for (const s of steps) {
+    const ms = s.panels?.[id]?.markers;
+    if (!ms) continue;
+    for (const m of ms) if (m.index == null || m.index < 0) maxLen = Math.max(maxLen, String(m.label).length);
+  }
+  return (ctx._parkW = maxLen ? Math.ceil(maxLen * 6.6 + 12) : 0);
+}
+
+/* One cell's (or the parked lane's) marker track: a vertical stack of one ROW per
+ * declared marker, in `order`. A row holds this marker's caret only when it
+ * currently points at this column -- `colIdx` is a cell index, or 'parked' for
+ * the negative-sentinel lane left of [0]. Every other row is empty but keeps its
+ * height, so the lane is the same height over every cell and on every step, and a
+ * marker moving between cells (or on/off the parked lane) travels purely
+ * horizontally within its own row. Cell width is therefore independent of how
+ * many markers point at the cell. */
+function markerLane(order, curr, colIdx) {
+  const lane = document.createElement('div');
+  lane.className = 'pac-cell-markers';
+  for (const label of order) {
+    const row = document.createElement('div');
+    row.className = 'pac-marker-row';
+    const has = Object.prototype.hasOwnProperty.call(curr, label);
+    const idx = curr[label];
+    const here = colIdx === 'parked'
+      ? (has && (idx == null || idx < 0))
+      : (has && idx === colIdx);
+    if (here) row.appendChild(marker({ label, index: idx }));
+    lane.appendChild(row);
+  }
+  return lane;
 }
 
 /* VERTICAL stack column (render: 'column'). Cell [0] is at the BOTTOM and the

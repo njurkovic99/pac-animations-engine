@@ -566,7 +566,7 @@ important structural rule in this document, and it was learned the expensive way
 | Panel | Floor | Ceiling | Beyond ceiling |
 |---|---|---|---|
 | CODE | 15 rows; ~60 chars wide | listing length; longest line | scroll |
-| CALLSTACK | 2 rows | 2 frames | scroll, active frame in view |
+| CALLSTACK | 2 rows | 3 frames | scroll, active frame in view |
 | STREAM | 2 rows | 8 rows | scroll, newest line in view |
 | structure (CELLS/NODES) | content | half the stage (height only) | scroll vertically; **never horizontally** |
 | strips | 2 rows | exact content | — |
@@ -801,13 +801,23 @@ raw array into a data structure.**
 - **A marker means a stored variable.** There is no "derived" or "computed" style. If a
   value is not stored by the representation shown, it gets no marker — its absence is
   information.
-- **Two markers on one cell** render side by side, overlapping neither each other, the
-  index label above, nor the neighbouring labels. Common (a one-element queue has
-  `front == rear`), not an edge case.
+- **Markers stack VERTICALLY — one fixed row per marker, never side by side.** The lane
+  below the cells has one row per *declared* marker, in a fixed order (the order the
+  labels first appear across the trace), resolved once at load. A marker keeps its row for
+  the whole animation whether or not others share its cell, so two markers landing on one
+  cell (a one-element queue's `front == rear`; heapsort's `root`/`child`) occupy two rows,
+  stacked, not two carets competing for width. **Cell spacing is independent of marker
+  count** — this is the point: a cell is the same width and position no matter how many
+  markers point at it, so nothing shifts between steps. The lane is as tall as the marker
+  count for the whole animation (some rows empty at any given cell) — the same reserve-the-
+  maximum trade as STREAM's rows. (This *supersedes* the earlier side-by-side rule, written
+  when two markers was the maximum case; four — quicksort's `l`/`i`/`j`/`r` — broke it.)
 - **A marker at a sentinel index** (-1, meaning "points at nothing") parks left of cell
-  `[0]`, dimmed, label still visible. It must read as "not pointing yet," not as missing.
-  It shares the marker lane with pointing markers, so leaving the sentinel is a purely
-  lateral move.
+  `[0]`, dimmed, label still visible, in its own fixed row. It must read as "not pointing
+  yet," not as missing. It shares the marker lane with pointing markers, so leaving the
+  sentinel is a purely lateral move within its row. The parked lane reserves a constant
+  width (sized once from the widest label that ever parks, or nothing if none does), so a
+  marker parking or leaving -1 never shifts cell `[0]`.
 
 Inherited by the stack animations (`top`), binary search (`low`/`mid`/`high`), and the
 sorting animations (`i`/`j`).

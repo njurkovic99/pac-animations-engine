@@ -54,7 +54,7 @@ const AUTOPLAY_MS = 900;
  * (AUTHORING.md "Panel sizing policy".) */
 const SIZE_POLICY = {
   code:      { floorRows: 15, ceiling: 'listing',     width: 'content', minCh: 60 }, // ≥15 rows; width = longest line (≥60 chars floor, capped there ceiling), leftover empty
-  callstack: { floorRows: 2,  ceiling: { frames: 2 }, scroll: true, width: 'natural' }, // ≤2 frames; natural width
+  callstack: { floorRows: 2,  ceiling: { frames: 3 }, scroll: true, width: 'natural' }, // ≤3 frames; natural width. 3 covers main→sort→siftDown (and every animation built so far); deeper recursion scrolls, active frame in view
   stream:    { floorRows: 2,  ceiling: { rows: 8 },   scroll: true, width: 'column' },  // ≤8 rows; matches its column
   structure: { floorRows: 2,  ceiling: 'halfStage',   scroll: true, width: 'natural' }, // ≤half stage (v-scroll ok); natural width, never h-scrolls
   strip:     { floorRows: 2,  ceiling: null,          width: 'natural' },  // exact content; natural width
