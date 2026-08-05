@@ -172,10 +172,30 @@ Roles, grouped by meaning:
 | this-step activity | `active`, `compared`, `swapped`, `probe` |
 | outcome | `sorted`, `ok`, `error` |
 
+Treatments that are implemented in `engine/styles.css` (verify here before using a
+role): `member` (full border), `stale` (greyed, no border), `empty` (dashed border +
+placeholder glyph), `active` (blue FILL — a cell being acted on this step),
+`compared` (amber outline — read/compared this step, or a displaced value like a
+partition pivot), `ok` (green outline), `error` (red border + text), and `sorted`
+(green FILL — a value in its **final sorted position**, permanent, never released).
+`swapped` and `probe` have no distinct treatment; use `active` for a swap and
+`compared` for a probe until one is genuinely needed.
+
+**`sorted` vs `ok`, and the two green channels.** `sorted` is green *fill*; a stable
+structure member (a linked-list node linked in) is green *outline*. Different channels
+— outline = membership, fill = activity/state — so a cell can carry both if ever
+needed, and there is no ambiguity. Green fill and blue fill are **mutually exclusive**:
+a value in its final place is not being acted on, so a cell taking `sorted` drops any
+`active` fill on the same step. Every sorting animation uses `sorted` for its settled
+region (heapsort grows it from the right, bubble/selection from the end, insertion from
+the left); a finished sort ends with every cell green. Do not invent a different
+treatment for a settled region.
+
 > **Open item:** `AUTHORING.md` and `PANEL-INVENTORY.md` historically listed two
 > different, non-overlapping role sets. The table above is the union as understood
-> after `queues-count-vs-rear`. Verify against `engine/` and correct both docs. Do
-> not add a role without checking whether an existing one already means it.
+> after `queues-count-vs-rear`, with treatments reconciled against `engine/` after
+> `sorting-quicksort-partition`. Do not add a role without checking whether an
+> existing one already means it.
 
 Serves arrays, sorting bars, hash buckets, matrices, memory blocks, variable
 tables, stack frames, vtables. Full rendering rules in Part 5.

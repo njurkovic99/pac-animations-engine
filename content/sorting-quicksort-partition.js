@@ -137,9 +137,11 @@ function* trace() {
   /* The array as a marked CELLS row: one value per cell, [0]..[12] beneath, and
    * the four markers l, i, j, r. l and r are always present (so the marker count
    * never drops below 2 and the column width never changes); i and j appear once
-   * set. Role priority per cell: a cell swapped THIS step (active/blue) wins, then
-   * the placed pivot (ok/green), then the compared amber outline shared by the
-   * pivot and the cell being scanned this step. */
+   * set. Role priority per cell: the placed pivot (`sorted`, green FILL) wins and
+   * is permanent — a settled value is never "active", so green beats blue; then a
+   * cell swapped THIS step (`active`, blue fill); then the amber `compared` outline
+   * shared by the pivot (displaced, not where it belongs) and the cell being
+   * scanned this step. */
   const arrayPanel = ({ compared = null, active = [] }) => {
     const markers = [{ label: 'l', index: L }];
     if (i != null) markers.push({ label: 'i', index: i });
@@ -149,8 +151,8 @@ function* trace() {
       render: 'box',
       rowLabel: 'a',
       cells: a.map((v, idx) => {
+        if (idx === sortedCell)   return { value: v, role: 'sorted' };
         if (active.includes(idx)) return { value: v, role: 'active' };
-        if (idx === sortedCell)   return { value: v, role: 'ok' };
         if (idx === compared)     return { value: v, role: 'compared' };
         if (idx === pivotCell)    return { value: v, role: 'compared' };
         return { value: v };
@@ -278,9 +280,9 @@ function* trace() {
   {
     const vl = a[L], vj = a[j];
     a[L] = vj; a[j] = vl;                              // 8 -> index 6, 6 -> index 0
-    pivotCell = null; sortedCell = j;                 // the pivot leaves [0]; [6] is placed for good
+    pivotCell = null; sortedCell = j;                 // the pivot leaves [0] (amber); [6] flips to green FILL for good
     yield snap({ line: 10, tag: 'swap', note: PLACED_NOTE, active: [L],
-      narrate: 'The pivot trades places with a[j]. 8 lands at index 6.' });
+      narrate: 'The pivot trades places with a[j]. 8 is now green — this is its final position in the sorted array, and nothing will move it again.' });
   }
 
   /* ================= RETURN — line 11 ================================= */
