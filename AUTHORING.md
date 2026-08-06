@@ -801,23 +801,24 @@ raw array into a data structure.**
 - **A marker means a stored variable.** There is no "derived" or "computed" style. If a
   value is not stored by the representation shown, it gets no marker — its absence is
   information.
-- **Markers stack VERTICALLY — one fixed row per marker, never side by side.** The lane
-  below the cells has one row per *declared* marker, in a fixed order (the order the
-  labels first appear across the trace), resolved once at load. A marker keeps its row for
-  the whole animation whether or not others share its cell, so two markers landing on one
-  cell (a one-element queue's `front == rear`; heapsort's `root`/`child`) occupy two rows,
-  stacked, not two carets competing for width. **Cell spacing is independent of marker
-  count** — this is the point: a cell is the same width and position no matter how many
-  markers point at it, so nothing shifts between steps. The lane is as tall as the marker
-  count for the whole animation (some rows empty at any given cell) — the same reserve-the-
-  maximum trade as STREAM's rows. (This *supersedes* the earlier side-by-side rule, written
-  when two markers was the maximum case; four — quicksort's `l`/`i`/`j`/`r` — broke it.)
+- **Two markers on one cell** render side by side, overlapping neither each other, the
+  index label above, nor the neighbouring labels. Common (a one-element queue has
+  `front == rear`; heapsort clusters `root`/`child`/`end`), not an edge case. **The cell
+  column is sized ONCE, at load, for the maximum number of markers that ever share a single
+  cell anywhere in the trace, then held constant** — so a second (or third) marker landing
+  on a cell never widens it and no cell shifts between steps. Same rule as every other
+  dimension: resolve the max over the whole trace, once, then hold. An array whose markers
+  never collide keeps a normal column; one that reaches two (queues, heapify, quicksort) is
+  sized for two from step 0; one that reaches three (heapsort-dual) is sized for three. (An
+  earlier revision tried stacking markers vertically to avoid the widening; it read badly —
+  the carets drifted too far from the cells they point at — so side-by-side with a
+  once-sized column is the rule.)
 - **A marker at a sentinel index** (-1, meaning "points at nothing") parks left of cell
-  `[0]`, dimmed, label still visible, in its own fixed row. It must read as "not pointing
-  yet," not as missing. It shares the marker lane with pointing markers, so leaving the
-  sentinel is a purely lateral move within its row. The parked lane reserves a constant
-  width (sized once from the widest label that ever parks, or nothing if none does), so a
-  marker parking or leaving -1 never shifts cell `[0]`.
+  `[0]`, dimmed, label still visible. It must read as "not pointing yet," not as missing.
+  It shares the marker lane with pointing markers, so leaving the sentinel is a purely
+  lateral move. The parked lane reserves a constant width too (sized once for the most
+  markers ever parked at the same time, or nothing if none ever park), so a marker parking
+  or leaving -1 never shifts cell `[0]`.
 
 Inherited by the stack animations (`top`), binary search (`low`/`mid`/`high`), and the
 sorting animations (`i`/`j`).

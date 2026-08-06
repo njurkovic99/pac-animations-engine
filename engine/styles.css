@@ -444,14 +444,15 @@ body {
  * gives the panel a natural single-row width, so a structure pane holding it is
  * sized to fit all its cells side by side. */
 .pac-cells[data-marked] { align-items: start; gap: 8px; flex-wrap: nowrap; }
-/* A cell column is a FIXED width, independent of how many markers point at the
- * cell: markers stack VERTICALLY (one per row) instead of sitting side by side,
- * so a cell never widens to fit a cluster of carets and the cells never shift
- * between steps. The width need only hold ONE caret + its label ("child",
- * "front", "start" — the widest box-mode labels), so 56px suffices for every
- * marked array. (There is no longer a `data-single` narrowing: one caret per row
- * means the column width is the same whether one marker or four are declared.) */
-.pac-cell-col { display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 56px; }
+/* A cell column is a FIXED width, sized once (--cell-col-min, set by the renderer
+ * from the busiest cell in the whole trace) to hold that many markers side by side.
+ * Because every column reserves that width whether or not it currently holds a
+ * cluster, a second marker landing on a cell never widens it, and no cell shifts
+ * between steps. Markers on one cell sit side by side, centred under the cell. */
+.pac-cell-col {
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  min-width: var(--cell-col-min, 56px);
+}
 .pac-cell-col .pac-cell { min-width: 44px; padding: 3px 9px; }
 /* The row's name (e.g. "contents"), once at the left, aligned with the cell
  * boxes so it reads as the array's label. */
@@ -461,18 +462,11 @@ body {
 }
 /* Bracketed index labels: [0] [1] … mark position as an INDEX, not a value. */
 .pac-cell-index { font-size: 10.5px; color: var(--text-dim); font-family: var(--mono); }
-/* The marker lane: a VERTICAL stack of fixed-height rows, one per declared
- * marker, so every marker keeps its own row for the whole animation and two
- * markers on one cell stack rather than competing for width. Each row is the same
- * height whether or not it currently holds a caret, so the lane's height is the
- * marker count from load and never reflows. */
+/* The marker lane: markers side by side, centred under the cell (the column's
+ * fixed width holds the busiest cell's cluster, so this never widens the column). */
 .pac-cell-markers {
-  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  display: flex; justify-content: center; gap: 6px;
   margin-top: 2px; white-space: nowrap;
-}
-.pac-marker-row {
-  height: 24px;                 /* caret (~13px) + label (~12px); constant per row */
-  display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
 }
 .pac-marker { display: flex; flex-direction: column; align-items: center; line-height: 1.15; }
 .pac-marker-caret { color: var(--accent); font-size: 11px; }
@@ -483,14 +477,13 @@ body {
 /* Parked markers (index < 0): a cell column to the left of cell [0] whose box and
  * index bands are INVISIBLE (they only reserve height), so its marker track lines
  * up with every cell's marker track. The markers are dimmed so they read as
- * "pointing at nothing yet" rather than missing. */
-/* The parked lane's width is reserved once (inline, from the trace); its markers
- * right-align so a parked caret hugs cell [0] rather than floating at the far left
- * of the reserved band. When nothing ever parks the reserved width is 0 and the
- * lane takes no space. */
-.pac-cell-parked { margin-right: 2px; align-items: flex-end; }
-.pac-cell-parked .pac-cell { min-width: 0; }
-.pac-cell-parked .pac-cell-markers { align-items: flex-end; }
+ * "pointing at nothing yet" rather than missing. Its width is reserved once
+ * (--parked-min, from the trace's max simultaneously-parked markers), constant
+ * across steps; 0 when nothing ever parks, so the lane then takes no space. */
+.pac-cell-parked {
+  margin-right: 2px;
+  min-width: var(--parked-min, 0px); width: var(--parked-min, 0px);
+}
 .pac-cell-parked .pac-cell,
 .pac-cell-parked .pac-cell-index { visibility: hidden; }
 /* The invisible box + index only reserve HEIGHT (so the parked marker track lines
