@@ -566,7 +566,7 @@ important structural rule in this document, and it was learned the expensive way
 | Panel | Floor | Ceiling | Beyond ceiling |
 |---|---|---|---|
 | CODE | 15 rows; ~60 chars wide | listing length; longest line | scroll |
-| CALLSTACK | 2 rows | 2 frames | scroll, active frame in view |
+| CALLSTACK | 2 rows | 3 frames | scroll, active frame in view |
 | STREAM | 2 rows | 8 rows | scroll, newest line in view |
 | structure (CELLS/NODES) | content | half the stage (height only) | scroll vertically; **never horizontally** |
 | strips | 2 rows | exact content | — |
@@ -803,11 +803,22 @@ raw array into a data structure.**
   information.
 - **Two markers on one cell** render side by side, overlapping neither each other, the
   index label above, nor the neighbouring labels. Common (a one-element queue has
-  `front == rear`), not an edge case.
+  `front == rear`; heapsort clusters `root`/`child`/`end`), not an edge case. **The cell
+  column is sized ONCE, at load, for the maximum number of markers that ever share a single
+  cell anywhere in the trace, then held constant** — so a second (or third) marker landing
+  on a cell never widens it and no cell shifts between steps. Same rule as every other
+  dimension: resolve the max over the whole trace, once, then hold. An array whose markers
+  never collide keeps a normal column; one that reaches two (queues, heapify, quicksort) is
+  sized for two from step 0; one that reaches three (heapsort-dual) is sized for three. (An
+  earlier revision tried stacking markers vertically to avoid the widening; it read badly —
+  the carets drifted too far from the cells they point at — so side-by-side with a
+  once-sized column is the rule.)
 - **A marker at a sentinel index** (-1, meaning "points at nothing") parks left of cell
   `[0]`, dimmed, label still visible. It must read as "not pointing yet," not as missing.
   It shares the marker lane with pointing markers, so leaving the sentinel is a purely
-  lateral move.
+  lateral move. The parked lane reserves a constant width too (sized once for the most
+  markers ever parked at the same time, or nothing if none ever park), so a marker parking
+  or leaving -1 never shifts cell `[0]`.
 
 Inherited by the stack animations (`top`), binary search (`low`/`mid`/`high`), and the
 sorting animations (`i`/`j`).

@@ -444,15 +444,16 @@ body {
  * gives the panel a natural single-row width, so a structure pane holding it is
  * sized to fit all its cells side by side. */
 .pac-cells[data-marked] { align-items: start; gap: 8px; flex-wrap: nowrap; }
-/* Columns are wide enough that TWO labelled markers (front + rear on the same
- * cell) sit side by side without overlapping each other or the neighbouring
- * cells' labels. */
-.pac-cell-col { display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 72px; }
+/* A cell column is a FIXED width, sized once (--cell-col-min, set by the renderer
+ * from the busiest cell in the whole trace) to hold that many markers side by side.
+ * Because every column reserves that width whether or not it currently holds a
+ * cluster, a second marker landing on a cell never widens it, and no cell shifts
+ * between steps. Markers on one cell sit side by side, centred under the cell. */
+.pac-cell-col {
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  min-width: var(--cell-col-min, 56px);
+}
 .pac-cell-col .pac-cell { min-width: 44px; padding: 3px 9px; }
-/* A single-marker array needs no room for a second caret under a cell, so its
- * columns are narrower -- letting a short array (e.g. the expression) sit beside
- * another structure panel. */
-.pac-cells[data-marked][data-single] .pac-cell-col { min-width: 52px; }
 /* The row's name (e.g. "contents"), once at the left, aligned with the cell
  * boxes so it reads as the array's label. */
 .pac-cells-name {
@@ -461,6 +462,8 @@ body {
 }
 /* Bracketed index labels: [0] [1] … mark position as an INDEX, not a value. */
 .pac-cell-index { font-size: 10.5px; color: var(--text-dim); font-family: var(--mono); }
+/* The marker lane: markers side by side, centred under the cell (the column's
+ * fixed width holds the busiest cell's cluster, so this never widens the column). */
 .pac-cell-markers {
   display: flex; justify-content: center; gap: 6px;
   margin-top: 2px; white-space: nowrap;
@@ -474,15 +477,13 @@ body {
 /* Parked markers (index < 0): a cell column to the left of cell [0] whose box and
  * index bands are INVISIBLE (they only reserve height), so its marker track lines
  * up with every cell's marker track. The markers are dimmed so they read as
- * "pointing at nothing yet" rather than missing. */
-.pac-cell-parked { min-width: auto; margin-right: 2px; }
-/* Hug the parked marker, not a full cell column. The single-marker rule above
- * (`[data-single] .pac-cell-col { min-width: 52px }`) is more specific than
- * `.pac-cell-parked` and was widening the parked lane to a full 52px column when
- * its content (the parked "ix" caret + label) is ~13px -- the dead space left of
- * cell [0]. This selector out-specifies it so the lane hugs the marker. */
-.pac-cells[data-marked][data-single] .pac-cell-col.pac-cell-parked { min-width: auto; }
-.pac-cell-parked .pac-cell { min-width: 0; }
+ * "pointing at nothing yet" rather than missing. Its width is reserved once
+ * (--parked-min, from the trace's max simultaneously-parked markers), constant
+ * across steps; 0 when nothing ever parks, so the lane then takes no space. */
+.pac-cell-parked {
+  margin-right: 2px;
+  min-width: var(--parked-min, 0px); width: var(--parked-min, 0px);
+}
 .pac-cell-parked .pac-cell,
 .pac-cell-parked .pac-cell-index { visibility: hidden; }
 /* The invisible box + index only reserve HEIGHT (so the parked marker track lines
@@ -559,6 +560,16 @@ body {
   justify-content: flex-start;    /* frames top-align; no empty void above them */
   gap: 5px;
 }
+/* Reserve the scrollbar gutter on the callstack body ALWAYS, whether or not the
+ * stack is currently deep enough to scroll. A frame is a single nowrap line
+ * stretched to the body width; if a vertical scrollbar appeared (deep recursion,
+ * past the 3-frame ceiling) and stole width that the panel's measured max-content
+ * did not reserve, the widest frame would overflow -- its border cutting through
+ * "= 1)" and the closing paren landing outside the box. Reserving the gutter up
+ * front means the measured width already includes it, so the frame's inner width
+ * never loses to a scrollbar: rendered text width <= box inner width, by
+ * construction, in every frame -- shallow or deep. (Fixes A7 item 51.) */
+.pac-panel[data-type="callstack"] .pac-panel-body { scrollbar-gutter: stable; }
 .pac-frame {
   border: 1px solid var(--border);
   border-radius: var(--radius);

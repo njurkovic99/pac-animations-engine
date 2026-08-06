@@ -23,6 +23,7 @@
 
   /* semantic state */
   --ok:            #4caf82;
+  --ok-soft:       rgba(76, 175, 130, 0.22);   /* green FILL: a value in its final sorted position */
   --warn:          #e0a33a;
   --error:         #e2564a;
   --highlight:     #d4a13c;
@@ -167,6 +168,16 @@ body {
 .pac-structure:empty { display: none; }
 .pac-structure[data-stacked] { flex-direction: column; align-items: flex-start; }
 .pac-structure > .pac-panel { flex: 0 0 auto; }
+
+/* The ROW STACK: the wide-structure placement (a structure too wide to sit beside
+ * the code). Rows flow top to bottom; within a row panels sit left to right at
+ * their natural widths and SHARE the row's height (align-items: stretch -> tops and
+ * bottoms aligned, the same rule the structure region uses). Leftover width at a
+ * row's right stays empty. Hidden until the engine switches to this layout. */
+.pac-col[data-side="rows"] { flex: 1 1 auto; align-self: stretch; }
+.pac-row { display: flex; flex-direction: row; gap: var(--gap); align-items: stretch; min-width: 0; }
+.pac-row > .pac-panel,
+.pac-row > .pac-structure { flex: 0 0 auto; }
 
 /* ---- panel chrome ---- */
 .pac-panel {
@@ -385,6 +396,13 @@ body {
 .pac-cell[data-role="active"]   { border-color: var(--accent); background: var(--accent-soft); }
 .pac-cell[data-role="compared"] { border-color: var(--highlight); }
 .pac-cell[data-role="ok"]       { border-color: var(--ok); }
+/* sorted: a value in its FINAL sorted position -- permanent, never released. Green
+ * FILL (a distinct channel from the green OUTLINE that marks a stable structure
+ * member): outline = membership, fill = state. Mutually exclusive with the blue
+ * activity fill -- a settled value is not being acted on -- so a cell that becomes
+ * `sorted` drops any `active` fill on the same step. A finished sort ends with every
+ * cell green. (AUTHORING.md "sorted = green fill". Sorting animations only.) */
+.pac-cell[data-role="sorted"]   { border-color: var(--ok); background: var(--ok-soft); }
 .pac-cell[data-role="error"]    { border-color: var(--error); color: var(--error); }
 /* empty: indeterminate storage -- an unwritten array cell OR an unassigned
  * standalone variable (one glyph for both). Same box and dimensions as a member,
@@ -430,15 +448,16 @@ body {
  * gives the panel a natural single-row width, so a structure pane holding it is
  * sized to fit all its cells side by side. */
 .pac-cells[data-marked] { align-items: start; gap: 8px; flex-wrap: nowrap; }
-/* Columns are wide enough that TWO labelled markers (front + rear on the same
- * cell) sit side by side without overlapping each other or the neighbouring
- * cells' labels. */
-.pac-cell-col { display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 72px; }
+/* A cell column is a FIXED width, sized once (--cell-col-min, set by the renderer
+ * from the busiest cell in the whole trace) to hold that many markers side by side.
+ * Because every column reserves that width whether or not it currently holds a
+ * cluster, a second marker landing on a cell never widens it, and no cell shifts
+ * between steps. Markers on one cell sit side by side, centred under the cell. */
+.pac-cell-col {
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  min-width: var(--cell-col-min, 56px);
+}
 .pac-cell-col .pac-cell { min-width: 44px; padding: 3px 9px; }
-/* A single-marker array needs no room for a second caret under a cell, so its
- * columns are narrower -- letting a short array (e.g. the expression) sit beside
- * another structure panel. */
-.pac-cells[data-marked][data-single] .pac-cell-col { min-width: 52px; }
 /* The row's name (e.g. "contents"), once at the left, aligned with the cell
  * boxes so it reads as the array's label. */
 .pac-cells-name {
@@ -447,6 +466,8 @@ body {
 }
 /* Bracketed index labels: [0] [1] … mark position as an INDEX, not a value. */
 .pac-cell-index { font-size: 10.5px; color: var(--text-dim); font-family: var(--mono); }
+/* The marker lane: markers side by side, centred under the cell (the column's
+ * fixed width holds the busiest cell's cluster, so this never widens the column). */
 .pac-cell-markers {
   display: flex; justify-content: center; gap: 6px;
   margin-top: 2px; white-space: nowrap;
@@ -460,15 +481,13 @@ body {
 /* Parked markers (index < 0): a cell column to the left of cell [0] whose box and
  * index bands are INVISIBLE (they only reserve height), so its marker track lines
  * up with every cell's marker track. The markers are dimmed so they read as
- * "pointing at nothing yet" rather than missing. */
-.pac-cell-parked { min-width: auto; margin-right: 2px; }
-/* Hug the parked marker, not a full cell column. The single-marker rule above
- * (`[data-single] .pac-cell-col { min-width: 52px }`) is more specific than
- * `.pac-cell-parked` and was widening the parked lane to a full 52px column when
- * its content (the parked "ix" caret + label) is ~13px -- the dead space left of
- * cell [0]. This selector out-specifies it so the lane hugs the marker. */
-.pac-cells[data-marked][data-single] .pac-cell-col.pac-cell-parked { min-width: auto; }
-.pac-cell-parked .pac-cell { min-width: 0; }
+ * "pointing at nothing yet" rather than missing. Its width is reserved once
+ * (--parked-min, from the trace's max simultaneously-parked markers), constant
+ * across steps; 0 when nothing ever parks, so the lane then takes no space. */
+.pac-cell-parked {
+  margin-right: 2px;
+  min-width: var(--parked-min, 0px); width: var(--parked-min, 0px);
+}
 .pac-cell-parked .pac-cell,
 .pac-cell-parked .pac-cell-index { visibility: hidden; }
 /* The invisible box + index only reserve HEIGHT (so the parked marker track lines
@@ -545,6 +564,16 @@ body {
   justify-content: flex-start;    /* frames top-align; no empty void above them */
   gap: 5px;
 }
+/* Reserve the scrollbar gutter on the callstack body ALWAYS, whether or not the
+ * stack is currently deep enough to scroll. A frame is a single nowrap line
+ * stretched to the body width; if a vertical scrollbar appeared (deep recursion,
+ * past the 3-frame ceiling) and stole width that the panel's measured max-content
+ * did not reserve, the widest frame would overflow -- its border cutting through
+ * "= 1)" and the closing paren landing outside the box. Reserving the gutter up
+ * front means the measured width already includes it, so the frame's inner width
+ * never loses to a scrollbar: rendered text width <= box inner width, by
+ * construction, in every frame -- shallow or deep. (Fixes A7 item 51.) */
+.pac-panel[data-type="callstack"] .pac-panel-body { scrollbar-gutter: stable; }
 .pac-frame {
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -825,11 +854,22 @@ function render(body, data, ctx) {
   // Marked mode: a `box` grid with index-pointer markers below the cell row.
   const markers = mode === 'box' && data?.markers ? data.markers : null;
   if (markers) { wrap.dataset.marked = ''; } else { delete wrap.dataset.marked; }
-  // A single-marker array uses narrower columns (there is never a pair of markers
-  // to sit side by side under one cell), so a short array fits more panels beside
-  // it. Two-or-more-marker arrays keep the wider column so front + rear on the
-  // same cell never overlap.
-  if (markers && markers.length <= 1) { wrap.dataset.single = ''; } else { delete wrap.dataset.single; }
+  // Markers on the same cell sit SIDE BY SIDE (AUTHORING.md "The index pointer"),
+  // each caret directly under its cell. The jitter that used to come with that --
+  // a cell widening when a second marker landed on it, shifting every later cell --
+  // is killed by sizing the cell column ONCE, at load, for the MAXIMUM number of
+  // markers that ever share a single cell ANYWHERE in the trace (`markerReserve`),
+  // then holding it constant. An array whose markers never collide keeps a normal
+  // column; one that reaches two (queues' front/rear) is sized for two from step 0;
+  // one that reaches three (heapsort's root/child/end) is sized for three. Same
+  // rule as every other dimension: resolve the max over the whole trace, once, then
+  // hold -- so no cell ever moves. (A7 item 54, superseding the vertical stacking
+  // of item 53.)
+  if (markers) {
+    const r = markerReserve(ctx);
+    wrap.style.setProperty('--cell-col-min', `${r.cell}px`);
+    wrap.style.setProperty('--parked-min', `${r.parked}px`);
+  }
 
   // A row label names the whole row once, to the LEFT of the cells (marked mode).
   if (markers && data.rowLabel) {
@@ -839,19 +879,19 @@ function render(body, data, ctx) {
     wrap.appendChild(name);
   }
 
-  // Parked markers (index < 0): they point at nothing yet, so they sit to the
-  // left of cell [0], dimmed, still labelled. The parked zone is a full cell
-  // column with an INVISIBLE box and index band above its marker track, so those
-  // bands reserve the exact same heights as a real cell -- the marker lane then
-  // begins at the same y here as over any cell. A marker moving from -1 onto a
+  // Parked markers (index < 0 or null): they point at nothing yet, so they sit to
+  // the left of cell [0], dimmed, still labelled, side by side. The parked zone is
+  // a full cell column with an INVISIBLE box and index band above its marker track,
+  // so those bands reserve the exact same heights as a real cell -- the marker lane
+  // then begins at the same y here as over any cell. A marker moving from -1 onto a
   // cell therefore travels laterally only, never vertically.
   // The parked lane is ALWAYS present in marked mode (not only when a marker is
-  // currently parked), so the cells never shift left as a marker leaves the -1
-  // sentinel and the panel's width never changes across steps -- the width
-  // analogue of the master invariant. Its box and index bands are invisible (they
-  // only reserve height); the marker track holds any parked markers, or nothing.
-  const parked = markers ? markers.filter(m => m.index == null || m.index < 0) : [];
+  // currently parked), and its width is reserved ONCE for the most markers ever
+  // parked at the same time (0 if none ever park), so the cells never shift left as
+  // a marker leaves the -1 sentinel and the panel's width never changes across
+  // steps -- the width analogue of the master invariant.
   if (markers) {
+    const parked = markers.filter(m => m.index == null || m.index < 0);
     const col = document.createElement('div');
     col.className = 'pac-cell-col pac-cell-parked';
     const box = document.createElement('div');
@@ -892,9 +932,11 @@ function render(body, data, ctx) {
     if (!markers) { wrap.appendChild(cell); return; }
 
     // Marked mode: wrap the box in a column with a bracketed index label and a
-    // marker track. The index label sits BELOW the box; markers whose index
-    // equals this cell's position sit side by side beneath it, each caret over
-    // its own labelled variable name.
+    // marker track. The index label sits BELOW the box; markers whose index equals
+    // this cell's position sit side by side beneath it, each caret over its own
+    // labelled variable name. The column's fixed min-width (--cell-col-min, sized
+    // for the busiest cell in the whole trace) means two markers landing here never
+    // widen it, so no cell ever shifts.
     const col = document.createElement('div');
     col.className = 'pac-cell-col';
     col.appendChild(cell);
@@ -921,6 +963,49 @@ function marker(m) {
   mk.innerHTML = `<span class="pac-marker-caret">&#9650;</span>` +
                  `<span class="pac-marker-label">${esc(m.label)}</span>`;
   return mk;
+}
+
+/* The reserved widths (px) for a marked array's cell columns and its parked lane,
+ * resolved ONCE over the whole trace and cached on the ctx. The engine pins the
+ * PANEL to its widest step, but that alone lets an individual CELL widen on the
+ * step it holds two markers (shifting later cells); reserving every column for the
+ * busiest cell in the trace makes each cell a constant width, so nothing shifts.
+ *   cell   = room for the most markers that ever share ONE cell, side by side.
+ *   parked = room for the most markers ever parked (index null / negative) at once
+ *            -- 0 if none ever park, so the lane then takes no space left of [0].
+ * A marker is ~`labelLen` mono chars wide (the caret is narrower than its label);
+ * ~7px/char at the 10.5px marker font, +6px between side-by-side markers, +slack.
+ * A cell column also never falls below the bare cell (~48px). */
+function markerReserve(ctx) {
+  if (ctx._markerReserve) return ctx._markerReserve;
+  const id = ctx.spec?.id ?? ctx.spec?.type;
+  const steps = ctx.engine?.steps ?? [];
+  // The width a cluster actually needs is the SUM of its labels' widths plus the
+  // gaps between them -- not (count x widest label), which over-reserves when the
+  // clustered labels differ (heapsort's root+child+end is 12 chars, not 3x5). Track
+  // the widest such cluster over the whole trace, for real cells and for the parked
+  // sentinel separately.
+  let cellChars = 0, parkChars = 0, cellCount = 0, parkCount = 0;
+  for (const s of steps) {
+    const ms = s.panels?.[id]?.markers;
+    if (!ms) continue;
+    const cellSum = {}, cellN = {};
+    let parkSum = 0, parkN = 0;
+    for (const m of ms) {
+      const len = String(m.label).length;
+      if (m.index == null || m.index < 0) { parkSum += len; parkN++; }
+      else { cellSum[m.index] = (cellSum[m.index] || 0) + len; cellN[m.index] = (cellN[m.index] || 0) + 1; }
+    }
+    for (const k in cellSum) { cellChars = Math.max(cellChars, cellSum[k]); cellCount = Math.max(cellCount, cellN[k]); }
+    if (parkSum) { parkChars = Math.max(parkChars, parkSum); parkCount = Math.max(parkCount, parkN); }
+  }
+  // ~6.3px per mono char at the 10.5px marker-label font, 6px between markers, a
+  // little slack so nothing touches.
+  const band = (chars, count) => chars ? Math.ceil(chars * 6.3 + (count - 1) * 6 + 8) : 0;
+  return (ctx._markerReserve = {
+    cell:   Math.max(48, band(cellChars, cellCount)),
+    parked: band(parkChars, parkCount),
+  });
 }
 
 /* VERTICAL stack column (render: 'column'). Cell [0] is at the BOTTOM and the
@@ -1536,7 +1621,7 @@ const AUTOPLAY_MS = 900;
  * (AUTHORING.md "Panel sizing policy".) */
 const SIZE_POLICY = {
   code:      { floorRows: 15, ceiling: 'listing',     width: 'content', minCh: 60 }, // ≥15 rows; width = longest line (≥60 chars floor, capped there ceiling), leftover empty
-  callstack: { floorRows: 2,  ceiling: { frames: 2 }, scroll: true, width: 'natural' }, // ≤2 frames; natural width
+  callstack: { floorRows: 2,  ceiling: { frames: 3 }, scroll: true, width: 'natural' }, // ≤3 frames; natural width. 3 covers main→sort→siftDown (and every animation built so far); deeper recursion scrolls, active frame in view
   stream:    { floorRows: 2,  ceiling: { rows: 8 },   scroll: true, width: 'column' },  // ≤8 rows; matches its column
   structure: { floorRows: 2,  ceiling: 'halfStage',   scroll: true, width: 'natural' }, // ≤half stage (v-scroll ok); natural width, never h-scrolls
   strip:     { floorRows: 2,  ceiling: null,          width: 'natural' },  // exact content; natural width
@@ -1859,24 +1944,125 @@ class Engine {
       }
     }
 
-    let stageH;
+    // WIDE-STRUCTURE ROW PACKING (AUTHORING.md "a panel that fits in remaining
+    // width uses it"). When a structure is too wide to sit beside the code, the old
+    // fallback stacked EVERYTHING in one column -- so a small bookkeeping panel was
+    // pushed below the wide structure even though it would have fit in the empty
+    // width beside the code. Instead, pack panels into rows by FIRST FIT, in
+    // declaration order: each panel lands in the earliest row with room for it, and
+    // only a panel that fits nowhere opens a new row. A panel that had to break (the
+    // wide structure) does not drag later panels down with it -- they are re-tested
+    // against the space actually available, so a small panel returns to the code's
+    // row. Panels sharing a row share that row's height (tops and bottoms aligned)
+    // and take their natural width; leftover width at a row's right stays empty. The
+    // two-column layout (the `else` below) is unchanged -- only this path packs, and
+    // only animations whose structure cannot fit beside the code ever reach it.
     if (singleCol) {
-      // ONE column: code, then the structure region, then every bookkeeping panel,
-      // top to bottom in declaration order. The right column is emptied and hidden
-      // so no gap is reserved beside it. The page grows taller; nothing overflows.
+      this.colLeft.style.display = 'none';
       this.colRight.style.display = 'none';
-      if (structure.length) this.colLeft.appendChild(this.structureRegion);
-      for (const p of book) this.colLeft.appendChild(p.el);
-      bestK = 0;                                     // no book panel lives in the right column
-      const parts = [];
-      if (code) parts.push(codeSingleH);
-      if (structure.length) parts.push(regionH);
-      for (const p of book) parts.push(p.outerH);
-      stageH = sum(parts) + gap * Math.max(0, parts.length - 1);
-    } else {
+      this.rowStack.style.display = '';
+      // One packing block per PANEL, in declaration order. Each structure is its own
+      // block (so two structures share a row only if they genuinely fit; otherwise
+      // each lands on its own row). Every block carries a natural height `h` and a
+      // `floor` it can shrink to when the stage would otherwise overflow: the code to
+      // its 15-line floor (scrolling beyond), a structure to a fraction of the stage
+      // (scrolling vertically, active element kept in view), a book panel not at all.
+      const structFloor = Math.max(160, Math.floor(H / 4));
+      const blocks = [];
+      for (const p of this.panels.values()) {
+        if (p.kind === 'code') {
+          blocks.push({ el: code.el, w: codeContentW, h: codeSingleH, floor: codeFloor, kind: 'code' });
+        } else if (p.kind === 'structure') {
+          const nat = outer(p, p.contentH);
+          blocks.push({ el: p.el, w: p.contentW, h: nat, floor: Math.min(nat, structFloor), kind: 'structure', p });
+        } else {
+          blocks.push({ el: p.el, w: p.contentW, h: p.outerH, floor: p.outerH, kind: 'book', p });
+        }
+      }
+      // First-fit into rows bounded by the stage width.
+      const rows = [];
+      for (const blk of blocks) {
+        let row = rows.find(r => r.w + blk.w + (r.blocks.length ? gap : 0) <= stageW + 0.5);
+        if (!row) { row = { blocks: [], w: 0 }; rows.push(row); }
+        row.w += blk.w + (row.blocks.length ? gap : 0);
+        row.blocks.push(blk);
+      }
+      for (const row of rows) {
+        row.h     = Math.max(...row.blocks.map(b => b.h));
+        row.floor = Math.max(...row.blocks.map(b => b.floor));
+      }
+      // If the rows overflow the available stage height, shrink so the footer
+      // (controls + note) stays on screen -- losing the note off-screen is the one
+      // failure the layout must prevent. Code rows give back to their floor first
+      // (the code scrolls beyond its 15 lines), then structure rows give back,
+      // tallest first (they scroll vertically; _followActive keeps the active node in
+      // view). Book rows never shrink. Structures never scroll HORIZONTALLY.
+      const gapsTotal = gap * Math.max(0, rows.length - 1);
+      let over = sum(rows.map(r => r.h)) + gapsTotal - H;
+      const isCode = r => r.blocks.some(b => b.kind === 'code');
+      const isStruct = r => r.blocks.some(b => b.kind === 'structure');
+      if (over > 0) for (const row of rows) {
+        if (over <= 0) break;
+        if (!isCode(row)) continue;
+        const give = Math.min(over, row.h - row.floor); row.h -= give; over -= give;
+      }
+      if (over > 0) for (const row of rows.filter(r => isStruct(r) && !isCode(r)).sort((a, b) => b.h - a.h)) {
+        if (over <= 0) break;
+        const give = Math.min(over, row.h - row.floor); row.h -= give; over -= give;
+      }
+
+      // Rebuild the row DOM: appendChild MOVES each element into its row (out of the
+      // structure region or a stale row), then the now-empty stale rows are dropped.
+      const rowEls = rows.map(row => {
+        const rd = document.createElement('div');
+        rd.className = 'pac-row';
+        for (const blk of row.blocks) rd.appendChild(blk.el);
+        return rd;
+      });
+      [...this.rowStack.children].forEach(c => c.remove());
+      rowEls.forEach(rd => this.rowStack.appendChild(rd));
+
+      // Widths (natural, never compressed) + heights (stretched to the row height,
+      // tops and bottoms aligned). A shrunk code shows as many whole lines as fit and
+      // scrolls; a shrunk structure scrolls vertically.
+      for (const row of rows) for (const blk of row.blocks) {
+        if (blk.kind === 'code') {
+          code.el.style.minWidth = ''; code.el.style.maxWidth = '';
+          code.el.style.width = `${Math.round(codeContentW)}px`;
+          const body = code.el.querySelector('.pac-panel-body');
+          body.style.height = `${Math.round(row.h - code.headerH - BORDER)}px`;
+          const codeEl = body.querySelector('.pac-code');
+          if (codeEl) codeEl.style.maxHeight = `${Math.max(codeLineH, Math.floor((row.h - code.headerH - BORDER - bodyPad) / codeLineH) * codeLineH)}px`;
+        } else {
+          blk.el.style.width = SIZE_POLICY[this._sizeClass(blk.p)].width === 'column' ? '' : `${Math.round(blk.p.contentW)}px`;
+          blk.el.querySelector('.pac-panel-body').style.height = `${Math.round(row.h - blk.p.headerH - BORDER)}px`;
+        }
+      }
+      this.stage.style.height = `${Math.round(Math.min(sum(rows.map(r => r.h)) + gapsTotal, H))}px`;
+
+      // CONTENT-PROBLEM check: a lone block wider than the whole stage overflows even
+      // on its own row -- genuinely too wide (redesign, never compress). Unreachable
+      // at the design width; the 13-cell array fits the 1172px stage with room.
+      const widest = Math.max(codeMinW, ...blocks.map(b => b.w));
+      if (widest > stageW + 1) {
+        console.warn(`[pac] "${this.spec?.title ?? ''}" has a panel ${Math.round(widest)}px wide, `
+          + `past the ${Math.round(stageW)}px stage -- redesign (fewer cells, shorter lines, split view).`);
+      }
+      if (typeof window !== 'undefined' && window.__PAC_VERIFY) this.verifyHeights();
+      return;
+    }
+
+    // ---- narrow two-column layout (unchanged) ----
+    this.colLeft.style.display = '';
+    this.rowStack.style.display = 'none';
+    let stageH;
+    {
       this.colRight.style.display = '';
       // Restore the structure region to the top of the RIGHT column (a prior
-      // single-column layout, from a narrower resize, may have moved it left).
+      // row-packed layout, from a narrower resize, may have moved code and pulled the
+      // structure panels out of the region into row divs).
+      if (code && code.el.parentElement !== this.colLeft) this.colLeft.insertBefore(code.el, this.colLeft.firstChild);
+      for (const p of structure) this.structureRegion.appendChild(p.el);   // back into the region, in declaration order
       if (structure.length) this.colRight.insertBefore(this.structureRegion, this.colRight.firstChild);
       // Place bookkeeping panels into their columns (structure stays in the region,
       // code stays at the top of the left column).
@@ -2028,7 +2214,10 @@ class Engine {
    *  Prints a table and returns the rows. `Δ` (`delta`) must be 0 for every row. */
   verifyHeights() {
     const gap  = parseFloat(getComputedStyle(this.root).getPropertyValue('--gap')) || 14;
-    const cols = [this.colLeft, this.colRight].filter(c => c && c.style.display !== 'none');
+    // In the wide-structure layout the rowStack is the visible container and its
+    // children are ROW divs; each row's height is the max of its panels, and the
+    // per-column Σ-vs-content check applies to it exactly as to a column of panels.
+    const cols = [this.colLeft, this.colRight, this.rowStack].filter(c => c && c.style.display !== 'none');
     const rows = cols.map(col => {
       const kids    = [...col.children].filter(el => el.getBoundingClientRect().height > 0);
       const heights = kids.map(el => Math.round(el.getBoundingClientRect().height));
@@ -2234,7 +2423,16 @@ class Engine {
     this.structureRegion = document.createElement('div');
     this.structureRegion.className = 'pac-structure';
     this.colRight.appendChild(this.structureRegion);
-    this.stage.append(this.colLeft, this.colRight);
+    // A THIRD placement container, hidden by default: the row stack, used only when
+    // a structure is too wide to sit beside the code (layoutStage's wide-structure
+    // path). It flows panels into rows that PACK horizontally -- a small panel fills
+    // the width a wide structure left empty rather than being pushed below it
+    // (AUTHORING.md "a panel that fits in remaining width uses it"). The two-column
+    // layout above is unchanged; only the old single-column fallback now packs.
+    this.rowStack = document.createElement('div');
+    this.rowStack.className = 'pac-col pac-rowstack'; this.rowStack.dataset.side = 'rows';
+    this.rowStack.style.display = 'none';
+    this.stage.append(this.colLeft, this.colRight, this.rowStack);
 
     // Beginner profile is enforced here, not left to authorial restraint.
     const panels = (s.panels ?? []).slice();

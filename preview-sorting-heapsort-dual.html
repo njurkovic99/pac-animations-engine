@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>stacks-paren-scanner — preview</title>
+<title>sorting-heapsort-dual — preview</title>
 <style>/* pac-animations — design system
    15 tokens replacing the 188 distinct color values found across the
    original 25 animation files. */
@@ -2699,521 +2699,515 @@ function mountAnimation(spec, el = document.getElementById('pac')) {
   return eng;
 }
 
-/* ds — A3 "Checking parentheses with a stack"
+/* ds — A7 "Heapsort", PART 2 of 2: emptying the heap (KEY material)
  *
- * A parenthesis scanner, built on a stack, in one continuous trace driven by
- * main() over three short expressions -- each isolating one error:
+ * Heapsort is split across two animations because one is too long. Part 1,
+ * `sorting-heapify`, turned an unordered array into a valid binary MAX HEAP and
+ * ended on the array [9,6,8,4,1,2]. This is part 2, and it OPENS on exactly that
+ * heap. Where part 1 ended, this begins: the repeated extract-and-sink that
+ * turns the heap into a sorted array.
  *
- *   scan("a)(b")  -> TOO_MANY_RIGHT  (a stray ')' while the stack is empty)
- *   scan("[a)")   -> MISMATCH        (popped '[' is not the type ')' closes)
- *   scan("((a)")  -> TOO_MANY_LEFT   (a '(' left on the stack when the loop ends)
+ * INHERITS PART 1 UNCHANGED — no new engine capability. Same five panels, same
+ * tree ↔ array dual view, same markers, same CALLSTACK discipline, and the SAME
+ * siftDown (lines 1–10 are byte-for-byte part 1's). The only genuinely new thing
+ * is a lesson, not a mechanism: two ideas carried with equal weight —
+ *   (a) the SORTED region grows from the RIGHT and is permanent (green fill), and
+ *   (b) the HEAP SHRINKS as it grows: one array, one boundary (`end`) moving
+ *       leftward, no second array. The lecture's word is "in-place".
  *
- * The lesson is error DETECTION, not evaluation. The payoff is the third scan:
- * the loop ends with error still NONE, and the error is found only by looking at
- * the stack AFTER the loop -- the one error no in-loop event can catch.
+ * THE SHRINKING TREE is the visual part 1 could not show, and it is built from
+ * existing capability only:
+ *   - All six tree nodes are present in EVERY snapshot (as in part 1), so the
+ *     layout is computed once over the whole tree and nothing ever jumps.
+ *   - When a value is PLACED (swapped to a[end], then end decremented), its node
+ *     LEAVES THE HEAP: it is rendered in the `pending` state — the panel's
+ *     existing "present for layout, not an active member" treatment, greyed with
+ *     its value still shown — and its edge to its parent is dropped from the
+ *     per-step `edges` array (pure data). Fixed positions + dropped edges means
+ *     the tree visibly thins out from the bottom-right, node by node, exactly as
+ *     the lecture's diagrams show, while the array beside it stays six cells
+ *     wide. That size difference IS the in-place lesson.
+ *   - On the SAME step the array cell for that index takes GREEN FILL (`sorted`,
+ *     final, permanent, never released). Node leaves the tree, cell turns green —
+ *     one event, both panels.
  *
- * The stack starts EMPTY: step 0 is four empty cells, stack_ix at -1 with its
- * marker parked below cell [0]. push and pop are STEPPED INTO everywhere (never
- * summarized) -- every call shows its body (the call line, then lines 2-3 for
- * push or 6-7 for pop), with a push/pop frame on Function calls and BOTH callers
- * (main and scan) dimmed while it runs. Five stepped-into calls in all.
+ * THE VERIFIED TRACE (the lecture's own numbers, checked frame by frame):
  *
- * The NEW capability this animation introduced is the vertical CELLS `column`
- * (the stack): cell [0] at the bottom, growing upward, index labels [0]..[3] in a
- * fixed band on the RIGHT, and the stack_ix marker on the LEFT (caret ▶), parking
- * BELOW cell [0] at the -1 sentinel. The expression and the stack are the two
- * structure panels; the engine places them side by side (structure region).
+ *   start heap: a = [9,6,8,4,1,2]  end = 5
+ *   swap a0,a5 -> [2,6,8,4,1,9] end=4  9 placed[5]
+ *     siftDown(0,4): 2 vs (6,8) -> swap 8 -> [8,6,2,4,1,9]  done
+ *   swap a0,a4 -> [1,6,2,4,8,9] end=3  8 placed[4]
+ *     siftDown(0,3): 1 vs (6,2) -> swap 6 -> [6,1,2,4,8,9]
+ *                    1 vs (4)   -> swap 4 -> [6,4,2,1,8,9]  done   (only-child, end=3)
+ *   swap a0,a3 -> [1,4,2,6,8,9] end=2  6 placed[3]
+ *     siftDown(0,2): 1 vs (4,2) -> swap 4 -> [4,1,2,6,8,9]  done
+ *   swap a0,a2 -> [2,1,4,6,8,9] end=1  4 placed[2]
+ *     siftDown(0,1): 2 vs (1) -> 1>2 false -> return, no swap
+ *   swap a0,a1 -> [1,2,4,6,8,9] end=0  2 placed[1]
+ *     while end>0 is FALSE -> sort over.  a[0]=1 placed[0] by elimination.
+ *   FINAL: [1,2,4,6,8,9] — all six green.
  *
- * A stale cell is HEALTHY: after scan 2 pops the '[', it stays greyed in the
- * array until scan 3 writes over it. Nothing corrupts memory; every error is a
- * syntax error in the student's input. NO memory-danger marker anywhere. WATCH
- * only: one trace, no gates; the insight is all narration and notes.
- *
- * matches() is NEVER stepped into -- its result is narrated. Line 13's three
- * initialisations run as ONE step. Lines 16 and 21 are isFull and isEmpty,
- * inlined; the narration names them as such (the lecture's vocabulary). Only two
- * symbol types, ( ) and [ ]; the { } case and the TOO_DEEP error are left to the
- * post-watch challenge. */
+ * GREEN accumulates [5],[4],[3],[2],[1],[0], right to left, and never reverts.
+ * Nothing here corrupts memory — no memory-danger marker. WATCH only: one trace,
+ * no gates. Metrics hidden. No assignment ID visible. */
 
-const MAX = 4;
-
-/* One listing, three ds languages, line-aligned to a single 35-line grid, so
- * `line` is a plain number that resolves the same in every language. */
+/* One listing, three ds languages, line-aligned to a single 21-line grid so
+ * `line` is a plain number that resolves the same in every language. Lines 1–10
+ * are siftDown, IDENTICAL to part 1. Lines 12–18 are the sort loop, which is all
+ * that is new: extract the root to the end, shrink the heap by one, sift the new
+ * root down, repeat. heapify (line 13) is the whole of part 1, run here as ONE
+ * step that produces the starting heap. */
 const LISTINGS = {
   pseudo: [
-    'push(c)',                                       //  1
-    '    stack_ix = stack_ix + 1',                   //  2
-    '    stack[stack_ix] = c',                       //  3
-    '',                                              //  4
-    'pop()',                                         //  5
-    '    popped = stack[stack_ix]',                  //  6
-    '    stack_ix = stack_ix - 1',                   //  7
-    '',                                              //  8
-    'matches(open, close)',                          //  9
-    '    return open and close are the same type',   // 10
-    '',                                              // 11
-    'scan(expr)',                                    // 12
-    '    ix = 0,  stack_ix = -1,  error = NONE',     // 13
-    '    while ix < length(expr) and error = NONE',  // 14
-    '        if expr[ix] is one of  (  [',           // 15
-    '            if stack_ix = MAX - 1',             // 16
-    '                error = TOO_DEEP',              // 17
-    '            else',                              // 18
-    '                push(expr[ix])',                // 19
-    '        else if expr[ix] is one of  )  ]',      // 20
-    '            if stack_ix = -1',                  // 21
-    '                error = TOO_MANY_RIGHT',        // 22
-    '            else',                              // 23
-    '                pop()',                         // 24
-    '                if not matches(popped, expr[ix])', // 25
-    '                    error = MISMATCH',          // 26
-    '        ix = ix + 1',                           // 27
-    '    if error = NONE and stack_ix > -1',         // 28
-    '        error = TOO_MANY_LEFT',                 // 29
-    '    report(error)',                             // 30
-    '',                                              // 31
-    'main()',                                        // 32
-    '    scan("a)(b")',                              // 33
-    '    scan("[a)")',                               // 34
-    '    scan("((a)")',                              // 35
-  ],
-  java: [
-    'void push(char c) {',                           //  1
-    '    stack_ix = stack_ix + 1;',                  //  2
-    '    stack[stack_ix] = c; }',                    //  3
-    '',                                              //  4
-    'char pop() {',                                  //  5
-    '    popped = stack[stack_ix];',                 //  6
-    '    stack_ix = stack_ix - 1; }',                //  7
-    '',                                              //  8
-    'boolean matches(char open, char close) {',      //  9
-    '    return sameType(open, close); }',           // 10
-    '',                                              // 11
-    'void scan(String expr) {',                      // 12
-    '    ix = 0;  stack_ix = -1;  error = NONE;',    // 13
-    '    while (ix < expr.length() && error == NONE) {', // 14
-    '        if ("([".indexOf(expr.charAt(ix)) >= 0) {',  // 15
-    '            if (stack_ix == MAX - 1)',          // 16
-    '                error = TOO_DEEP;',             // 17
-    '            else',                              // 18
-    '                push(expr.charAt(ix));',        // 19
-    '        } else if (")]".indexOf(expr.charAt(ix)) >= 0) {', // 20
-    '            if (stack_ix == -1)',               // 21
-    '                error = TOO_MANY_RIGHT;',       // 22
-    '            else {',                            // 23
-    '                pop();',                        // 24
-    '                if (!matches(popped, expr.charAt(ix)))', // 25
-    '                    error = MISMATCH; } }',     // 26
-    '        ix = ix + 1; }',                        // 27
-    '    if (error == NONE && stack_ix > -1)',       // 28
-    '        error = TOO_MANY_LEFT;',                // 29
-    '    report(error); }',                          // 30
-    '',                                              // 31
-    'void main() {',                                 // 32
-    '    scan("a)(b");',                             // 33
-    '    scan("[a)");',                              // 34
-    '    scan("((a)"); }',                           // 35
+    'siftDown(a, root, end)',                                 //  1
+    '    while root * 2 + 1 <= end',                          //  2
+    '        child = root * 2 + 1',                           //  3
+    '        if child + 1 <= end and a[child + 1] > a[child]', //  4
+    '            child = child + 1',                          //  5
+    '        if a[child] > a[root]',                          //  6
+    '            swap a[root] and a[child]',                  //  7
+    '            root = child',                               //  8
+    '        else',                                           //  9
+    '            return',                                     // 10
+    '',                                                       // 11
+    'sort(a, size)',                                          // 12
+    '    heapify(a, size)',                                   // 13
+    '    end = size - 1',                                     // 14
+    '    while end > 0',                                      // 15
+    '        swap a[0] and a[end]',                           // 16
+    '        end = end - 1',                                  // 17
+    '        siftDown(a, 0, end)',                            // 18
+    '',                                                       // 19
+    'main()',                                                 // 20
+    '    sort(a, 6)',                                         // 21
   ],
   cpp: [
-    'void push(char c) {',                           //  1
-    '    stack_ix = stack_ix + 1;',                  //  2
-    '    stack[stack_ix] = c; }',                    //  3
-    '',                                              //  4
-    'char pop() {',                                  //  5
-    '    popped = stack[stack_ix];',                 //  6
-    '    stack_ix = stack_ix - 1; }',                //  7
-    '',                                              //  8
-    'bool matches(char open, char close) {',         //  9
-    '    return sameType(open, close); }',           // 10
-    '',                                              // 11
-    'void scan(string expr) {',                      // 12
-    '    ix = 0;  stack_ix = -1;  error = NONE;',    // 13
-    '    while (ix < expr.length() && error == NONE) {', // 14
-    '        if (strchr("([", expr[ix])) {',         // 15
-    '            if (stack_ix == MAX - 1)',          // 16
-    '                error = TOO_DEEP;',             // 17
-    '            else',                              // 18
-    '                push(expr[ix]);',               // 19
-    '        } else if (strchr(")]", expr[ix])) {',  // 20
-    '            if (stack_ix == -1)',               // 21
-    '                error = TOO_MANY_RIGHT;',       // 22
-    '            else {',                            // 23
-    '                pop();',                        // 24
-    '                if (!matches(popped, expr[ix]))', // 25
-    '                    error = MISMATCH; } }',     // 26
-    '        ix = ix + 1; }',                        // 27
-    '    if (error == NONE && stack_ix > -1)',       // 28
-    '        error = TOO_MANY_LEFT;',                // 29
-    '    report(error); }',                          // 30
-    '',                                              // 31
-    'int main() {',                                  // 32
-    '    scan("a)(b");',                             // 33
-    '    scan("[a)");',                              // 34
-    '    scan("((a)"); }',                           // 35
+    'void siftDown(int a[], int root, int end) {',            //  1
+    '    while (root * 2 + 1 <= end) {',                      //  2
+    '        int child = root * 2 + 1;',                      //  3
+    '        if (child + 1 <= end && a[child + 1] > a[child])', //  4
+    '            child = child + 1;',                         //  5
+    '        if (a[child] > a[root]) {',                      //  6
+    '            swap(a[root], a[child]);',                   //  7
+    '            root = child;',                              //  8
+    '        } else',                                         //  9
+    '            return; } }',                                // 10
+    '',                                                       // 11
+    'void sort(int a[], int size) {',                         // 12
+    '    heapify(a, size);',                                  // 13
+    '    int end = size - 1;',                                // 14
+    '    while (end > 0) {',                                  // 15
+    '        swap(a[0], a[end]);',                            // 16
+    '        end = end - 1;',                                 // 17
+    '        siftDown(a, 0, end); } }',                       // 18
+    '',                                                       // 19
+    'int main() {',                                           // 20
+    '    sort(a, 6); }',                                      // 21
+  ],
+  java: [
+    'void siftDown(int[] a, int root, int end) {',            //  1
+    '    while (root * 2 + 1 <= end) {',                      //  2
+    '        int child = root * 2 + 1;',                      //  3
+    '        if (child + 1 <= end && a[child + 1] > a[child])', //  4
+    '            child = child + 1;',                         //  5
+    '        if (a[child] > a[root]) {',                      //  6
+    '            swap(a, root, child);',                      //  7
+    '            root = child;',                              //  8
+    '        } else',                                         //  9
+    '            return; } }',                                // 10
+    '',                                                       // 11
+    'void sort(int[] a, int size) {',                         // 12
+    '    heapify(a, size);',                                  // 13
+    '    int end = size - 1;',                                // 14
+    '    while (end > 0) {',                                  // 15
+    '        swap(a, 0, end);',                               // 16
+    '        end = end - 1;',                                 // 17
+    '        siftDown(a, 0, end); } }',                       // 18
+    '',                                                       // 19
+    'void main() {',                                          // 20
+    '    sort(a, 6); }',                                      // 21
   ],
 };
 
-/* ---- call-frame builders. `call` is a parked caller line, dimmed while a
- * callee runs. push and pop are stepped into inside scan, so their frame sits on
- * top of main -> scan, and BOTH callers dim: main at its scan(...) line, scan at
- * its push/pop line (19 or 24). ---- */
-const mainF = call        => ({ fn: 'main',  vars: [],                          call });
-const scanF = (expr, call) => ({ fn: 'scan',  vars: [{ name: 'expr', value: `"${expr}"` }], call });
-const pushF = c           => ({ fn: 'push',  vars: [{ name: 'c', value: `'${c}'` }] });
-const popF  = ()          => ({ fn: 'pop',   vars: [] });
-
 /* ---- teaching notes ---- */
-const SETUP_NOTE =
-  'A stack is a pile: you can only take the top item off, and you can only add to the top. That is what ' +
-  'LIFO means — last in, first out. stack_ix holds the index of the top element; -1 means the stack is ' +
-  'empty. MAX is 4, so it can hold at most four symbols.';
+const OPEN_NOTE =
+  'Building this heap is the previous animation. What matters here is one fact: in a max heap the largest ' +
+  'remaining value is ALWAYS at index 0. That is what makes the sort work — you never have to search for the ' +
+  'maximum, you just take the root.';
 
-const HOOK_NOTE =
-  'Count the parentheses in a)(b: one left, one right. Balanced. A program that just counted them would ' +
-  'accept this expression, and it is plainly wrong. The stack rejected it at the second character, ' +
-  "because a stack asks a harder question than 'how many?' — it asks 'is there something open for this " +
-  "to close?'";
+const HEAPIFY_NOTE =
+  'This one line is the whole of the previous animation — sifting the unordered array down into this max heap. ' +
+  'Here it runs as a single move; all that matters is its result: 9, the largest value, is at the root.';
 
-const POP_NOTE =
-  "Popping did not remove anything. stack_ix moved down, and the '[' stopped being part of the stack. " +
-  'The character is still sitting in the array — the greying is ours, for reading the picture. The ' +
-  'program has only the array and stack_ix.';
+const END_NOTE =
+  'end marks the last index still part of the heap. Everything to its right is finished. Right now nothing is ' +
+  'finished, so end is at the last cell.';
 
-const SILENT_NOTE =
-  'Nothing was printed while the loop ran. The error was recorded in a variable and reported here, after ' +
-  "the loop — silent error reporting. The scanner's job is to scan; reporting is somebody else's job.";
+const REUSE_NOTE =
+  'This is the exact siftDown from the previous animation — the same function, unchanged. The only thing that ' +
+  'differs is the end it is handed. heapify always passed the last index; the sort passes a smaller end each ' +
+  'time, so siftDown rearranges only the shrinking heap and never touches the sorted values to its right.';
 
-const MISMATCH_NOTE =
-  'This is why the pop has to store what it removed. Counting symbols, or even matching them by position, ' +
-  'is not enough — you have to compare the type of the closing symbol against the type of the opening ' +
-  'symbol it is closing. ([...]) and [(...)] are fine; [...) is not. You cannot mix and match.';
+const SWAP1_NOTE =
+  'This looks destructive: 2 was a leaf and now it is the root, which almost certainly breaks the heap. That is ' +
+  'fine. The heap property only has to be restored, and sifting one value down costs about log n — much less than ' +
+  'searching the whole array for the next maximum.';
 
-const SCAN3_ENDLOOP_NOTE =
-  'The scanner is finished and it reported no error. Look at the stack before clicking on.';
+const PLACE1_NOTE =
+  "Green means final. Not 'correct for now' — 9 is in the position it will occupy in the finished array, and " +
+  'nothing will touch it again. Watch the tree: node 5 is gone. The heap is now five values, in the same array.';
 
-const PAYOFF_NOTE =
-  'Three kinds of parenthesis error, and only two of them can be caught inside the loop. A stray closing ' +
-  'symbol is caught the moment it appears, because the stack is empty. A mismatched type is caught the ' +
-  'moment it is popped. But an opening symbol that is never closed produces no event at all — the loop ' +
-  'just ends, normally, with error still NONE. The only way to catch it is to look at the stack after the ' +
-  'loop has finished. A non-empty stack at the end means something was opened and never closed.';
+const CASCADE_NOTE =
+  'The same siftDown as before, and the same only-child case — except end is now 3, not 5. The heap has shrunk, ' +
+  "so what counts as 'off the end' has moved inward. That single parameter is what keeps the sorted values " +
+  'untouched.';
 
-const CHALLENGE_NOTE =
-  'This scanner handles ( ) and [ ]. Your assignment also allows { }. What changes in the code — and what ' +
-  'does NOT change? Also: one error never fired in any of these three scans. MAX is 4 here, so this stack ' +
-  'holds at most four unclosed symbols. What is the shortest expression that would trigger TOO_DEEP on ' +
-  'line 17?';
+const NO_SWAP_NOTE =
+  'A sift that does nothing is not a wasted step — it is the check that proves the value left at the root is ' +
+  'already bigger than its children, so the shrunken heap is still valid.';
+
+const DEGENERATE_NOTE =
+  'The loop never places a[0] explicitly, and it does not need to. When everything else has been placed, whatever ' +
+  'remains has nowhere else to go — so a[0] is sorted by elimination.';
+
+const FINAL_NOTE =
+  'Six values, six extractions, and each sift cost about log n — that is the n log n. Two things worth noticing. ' +
+  'Nothing was ever copied to a second array: the heap and the sorted region shared one array the whole time, ' +
+  'divided by end. And unlike quicksort, this cost is guaranteed — there is no arrangement of input that makes ' +
+  "heapsort slow, because the tree's shape depends on the number of values, not on what they are. That is why a " +
+  'real-time system uses heapsort even though quicksort is usually faster.';
+
+/* The six tree nodes: a complete binary tree over indices 0..5. Node i's
+ * children are 2i+1 and 2i+2, so 1,2 sit under 0; 3,4 under 1; 5 under 2. All
+ * six are present in every snapshot and never move — a placed node stays in
+ * position, greyed (`pending`) with its parent edge dropped, so the tree thins
+ * out without anything jumping. */
+const NODES = [
+  { id: 'n0', parent: null, idx: 0 },
+  { id: 'n1', parent: 'n0', idx: 1 },
+  { id: 'n2', parent: 'n0', idx: 2 },
+  { id: 'n3', parent: 'n1', idx: 3 },
+  { id: 'n4', parent: 'n1', idx: 4 },
+  { id: 'n5', parent: 'n2', idx: 5 },
+];
+// Each non-root node carries one edge from its parent; `childIdx` lets the trace
+// drop that edge the moment the child leaves the heap.
+const EDGES = NODES.filter(n => n.parent).map(n => ({ from: n.parent, to: n.id, childIdx: n.idx }));
 
 function* trace() {
-  const stack = [null, null, null, null];   // the stack storage; starts empty
-  let stackIx = -1;                          // top of stack; -1 means empty
-  let exprChars = [null, null, null, null];
-  let ix = -1;                               // scan's cursor; -1 = no scan (parked)
-  let popped = null;                         // last value pop() removed
-  let error = 'NONE';
-  const stream = [];
-  let curExpr = '';                          // the expression scan() is running now
-  let curMLine = 0;                          // main's call line for the running scan
+  const a = [9, 6, 8, 4, 1, 2];      // heapify's output — the heap this animation opens on
+  let end = null;                    // sort's heap boundary (null = box empty, no marker)
+  let root = null, child = null;     // siftDown's vars (null = absent)
+  let zeroPlaced = false;            // a[0], placed by elimination on the very last step
 
-  /* The expression as a marked CELLS row: one character per cell, [0]..[3] labels
-   * beneath, the ix marker (parked left of [0] when there is no scan). The panel
-   * title names it, so the row carries no separate label. The character under
-   * examination this step is `compared`. */
-  const exprPanel = compared => ({
+  /* A cell/node index is PLACED — out of the heap for good — when it is past the
+   * heap boundary (idx > end), plus the final a[0] by elimination. Monotonic:
+   * end only decreases, so green never reverts. */
+  const isPlaced = idx => (end != null && idx > end) || (zeroPlaced && idx === 0);
+
+  /* The array-position markers: end (the heap boundary), root, child. A marker
+   * only appears for a variable that is currently in scope and stored. */
+  const markers = () => {
+    const m = [];
+    if (root != null)  m.push({ label: 'root',  index: root });
+    if (child != null) m.push({ label: 'child', index: child });
+    if (end != null)   m.push({ label: 'end',   index: end });
+    return m;
+  };
+
+  /* The array. A PLACED cell is green (`sorted`) and wins over everything — it is
+   * settled, never acted on again. Otherwise a cell acted on THIS step (`active`,
+   * blue fill) beats the amber `compared` outline (a cell being examined). */
+  const arrayPanel = (compared, active) => ({
     render: 'box',
-    cells: exprChars.map((v, i) => {
-      if (v == null)      return { value: '', role: 'empty' };
-      if (i === compared) return { value: v, role: 'compared' };
+    rowLabel: 'a',
+    cells: a.map((v, idx) => {
+      if (isPlaced(idx))          return { value: v, role: 'sorted' };
+      if (active.includes(idx))   return { value: v, role: 'active' };
+      if (compared.includes(idx)) return { value: v, role: 'compared' };
       return { value: v };
     }),
-    markers: [{ label: 'ix', index: ix }],
+    markers: markers(),
   });
 
-  /* The stack as the vertical column: cell [0] at the bottom, growing up. A cell
-   * above stack_ix that still holds a character is `stale` (greyed); a cell
-   * written THIS step is `active` (blue). The stack_ix marker sits on the left and
-   * parks below cell [0] at the -1 sentinel. */
-  const stackPanel = active => ({
-    render: 'column',
-    cells: stack.map((v, i) => {
-      if (v == null)     return { value: '', role: 'empty' };
-      if (i === active)  return { value: v, role: 'active' };
-      if (i > stackIx)   return { value: v, role: 'stale' };
-      return { value: v };                                  // member
+  /* The tree — the SAME data. A PLACED node leaves the heap: state `pending` (the
+   * panel's greyed, present-for-layout treatment) and its parent edge dropped, so
+   * the tree visibly thins out while its remaining nodes hold position. A node
+   * still in the heap is `active` (blue fill) when this step touches it, amber
+   * `unlinked` when it is being examined (matching the array's `compared`), else
+   * the neutral `idle` outline — never green, which belongs to the array's
+   * settled cells, not the tree. */
+  const treePanel = (compared, active) => ({
+    layout: 'tree',
+    edges: EDGES.filter(e => !isPlaced(e.childIdx)),
+    nodes: NODES.map(n => {
+      if (isPlaced(n.idx)) {
+        return { id: n.id, parent: n.parent, label: String(a[n.idx]), meta: [`[${n.idx}]`], state: 'pending', active: false };
+      }
+      return {
+        id: n.id, parent: n.parent,
+        label: String(a[n.idx]),
+        meta: [`[${n.idx}]`],
+        state: compared.includes(n.idx) ? 'unlinked' : 'idle',
+        active: active.includes(n.idx),
+      };
     }),
-    markers: [{ label: 'stack_ix', index: stackIx }],
   });
 
-  /* The compact Variables strip: ix, stack_ix, popped, error. `hot` gives the
-   * changing box the blue fill. stack_ix always shows its real value (the -1
-   * sentinel included); ix and popped show the placeholder before they hold a
-   * meaningful value. The error box reserves the width of the longest name
-   * (TOO_MANY_RIGHT) so the strip never resizes. */
+  /* The compact Variables strip: end, root, child. A var with no value shows the
+   * placeholder dash; the one changing this step takes the blue fill. */
   const varsPanel = hot => ({
     render: 'box',
     cells: [
-      { label: 'ix',       value: ix < 0 ? '' : ix,             role: ix < 0 ? 'empty' : (hot === 'ix' ? 'active' : undefined) },
-      { label: 'stack_ix', value: stackIx,                      role: hot === 'stack_ix' ? 'active' : undefined },
-      { label: 'popped',   value: popped == null ? '' : popped, role: popped == null ? 'empty' : (hot === 'popped' ? 'active' : undefined) },
-      { label: 'error',    value: error, minCh: 16,             role: hot === 'error' ? 'active' : undefined },
+      { label: 'end',   value: end   == null ? '' : end,   role: end   == null ? 'empty' : (hot === 'end'   ? 'active' : undefined) },
+      { label: 'root',  value: root  == null ? '' : root,  role: root  == null ? 'empty' : (hot === 'root'  ? 'active' : undefined) },
+      { label: 'child', value: child == null ? '' : child, role: child == null ? 'empty' : (hot === 'child' ? 'active' : undefined) },
     ],
   });
 
-  const snap = ({ line, tag, narrate, note, frames, compared = null, active = null, hot = null, streamNew = false }) => ({
-    line, tag, narrate, note,
-    parked: frames.slice(0, -1).map(f => f.call).filter(v => v != null),
-    panels: {
-      expr:      exprPanel(compared),
-      stack:     stackPanel(active),
-      vars:      varsPanel(hot),
-      callstack: { frames: frames.map((f, i) => ({ fn: f.fn, vars: f.vars, active: i === frames.length - 1 })) },
-      out:       { lines: stream.map((t, i) => ({ text: t, dir: 'out', isNew: streamNew && i === stream.length - 1 })) },
-    },
+  /* The call frames, bottom-to-top: main -> sort -> siftDown. `a` is the shared
+   * array, not shown as a value; each frame carries the bindings that make the
+   * call concrete. sort's own local is `end`. A caller frame's `call` line is
+   * dimmed (parked) in the code panel; the running top frame's is the bright
+   * active line. */
+  const mainF = () => ({ fn: 'main', vars: [], call: 21 });
+  const sortF = hot => ({
+    fn: 'sort',
+    vars: [
+      { name: 'size', value: 6 },
+      ...(end == null ? [] : [{ name: 'end', value: end, kind: 'local', role: hot === 'end' ? 'active' : undefined }]),
+    ],
+    call: 18,
   });
-
-  // Frames while scan's OWN body runs (scan active, main's call line dimmed).
-  const scanFrames = () => [mainF(curMLine), scanF(curExpr)];
-  // Frames while push/pop runs (that frame active; main AND scan both dimmed).
-  const pushFrames = (ch) => [mainF(curMLine), scanF(curExpr, 19), pushF(ch)];
-  const popFrames  = ()   => [mainF(curMLine), scanF(curExpr, 24), popF()];
-
-  /* ---- stepped-into push and pop (shown in full, every time) ---- */
-
-  // push(expr[ix]) -- the call line 19, then the body lines 2 and 3.
-  function* doPush(p, ch, n) {
-    yield snap({ line: 19, tag: 'call', narrate: n.call, compared: p, frames: scanFrames() });
-    stackIx += 1;
-    yield snap({ line: 2, tag: 'assign', narrate: n.raise, hot: 'stack_ix', frames: pushFrames(ch) });
-    stack[stackIx] = ch;
-    yield snap({ line: 3, tag: 'store', narrate: n.write, active: stackIx, frames: pushFrames(ch) });
-  }
-
-  // pop() -- the call line 24, then the body lines 6 and 7.
-  function* doPop(p, n) {
-    yield snap({ line: 24, tag: 'call', narrate: n.call, compared: p, frames: scanFrames() });
-    popped = stack[stackIx];
-    yield snap({ line: 6, tag: 'assign', narrate: n.read, hot: 'popped', frames: popFrames() });
-    stackIx -= 1;                                            // the popped cell becomes stale
-    yield snap({ line: 7, tag: 'assign', narrate: n.drop, note: n.dropNote, hot: 'stack_ix', frames: popFrames() });
-  }
-
-  /* ---- character patterns ---- */
-
-  // Opening symbol with room: 14 / 15(true) / 16(false) / 19,2,3 (push) / 27.
-  function* charOpen(p, ch, n) {
-    yield snap({ line: 14, tag: 'test', narrate: n.loop, frames: scanFrames() });
-    yield snap({ line: 15, tag: 'test', narrate: n.isOpen, compared: p, frames: scanFrames() });
-    yield snap({ line: 16, tag: 'test', narrate: n.isFull, compared: p, frames: scanFrames() });
-    yield* doPush(p, ch, n);
-    ix = p + 1;
-    yield snap({ line: 27, tag: 'inc', narrate: n.inc, hot: 'ix', frames: scanFrames() });
-  }
-
-  // Ignored character: 14 / 15(false) / 20(false) / 27.
-  function* charIgnore(p, n) {
-    yield snap({ line: 14, tag: 'test', narrate: n.loop, frames: scanFrames() });
-    yield snap({ line: 15, tag: 'test', narrate: n.notOpen, compared: p, frames: scanFrames() });
-    yield snap({ line: 20, tag: 'test', narrate: n.notClose, compared: p, frames: scanFrames() });
-    ix = p + 1;
-    yield snap({ line: 27, tag: 'inc', narrate: n.inc, hot: 'ix', frames: scanFrames() });
-  }
-
-  // Closing symbol, stack empty: 14 / 15(false) / 20(true) / 21(true) / 22 / 27.
-  function* charCloseEmpty(p, n) {
-    yield snap({ line: 14, tag: 'test', narrate: n.loop, frames: scanFrames() });
-    yield snap({ line: 15, tag: 'test', narrate: n.notOpen, compared: p, frames: scanFrames() });
-    yield snap({ line: 20, tag: 'test', narrate: n.isClose, compared: p, frames: scanFrames() });
-    yield snap({ line: 21, tag: 'test', narrate: n.isEmpty, compared: p, frames: scanFrames() });
-    error = 'TOO_MANY_RIGHT';
-    yield snap({ line: 22, tag: 'error', narrate: n.setErr, note: n.errNote, compared: p, hot: 'error', frames: scanFrames() });
-    ix = p + 1;
-    yield snap({ line: 27, tag: 'inc', narrate: n.inc, hot: 'ix', frames: scanFrames() });
-  }
-
-  // Closing symbol, stack non-empty: 14 / 15(false) / 20(true) / 21(false) /
-  // 24,6,7 (pop) / 25 / [26 if mismatch] / 27.
-  function* charClosePop(p, n, mismatch) {
-    yield snap({ line: 14, tag: 'test', narrate: n.loop, frames: scanFrames() });
-    yield snap({ line: 15, tag: 'test', narrate: n.notOpen, compared: p, frames: scanFrames() });
-    yield snap({ line: 20, tag: 'test', narrate: n.isClose, compared: p, frames: scanFrames() });
-    yield snap({ line: 21, tag: 'test', narrate: n.notEmpty, compared: p, frames: scanFrames() });
-    yield* doPop(p, n);
-    yield snap({ line: 25, tag: 'test', narrate: n.matches, compared: p, frames: scanFrames() });
-    if (mismatch) {
-      error = 'MISMATCH';
-      yield snap({ line: 26, tag: 'error', narrate: n.setErr, note: n.errNote, compared: p, hot: 'error', frames: scanFrames() });
-    }
-    ix = p + 1;
-    yield snap({ line: 27, tag: 'inc', narrate: n.inc, hot: 'ix', frames: scanFrames() });
-  }
-
-  // scan() call: a fresh scan, so expr blanks, ix parks, error resets. The frame
-  // is not pushed yet (main only), and stack_ix keeps whatever the last scan left.
-  function* scanCall(mLine, expr) {
-    curMLine = mLine; curExpr = expr;
-    exprChars = [null, null, null, null]; ix = -1; error = 'NONE';
-    yield snap({ line: mLine, tag: 'call', narrate: `main calls scan with the expression "${expr}".`, frames: [mainF()] });
-  }
-
-  // scan() line 13: the three initialisations as ONE step. expr loads, ix -> 0,
-  // stack_ix -> -1 (the marker parks below cell [0]).
-  function* scanInit(narrate, note) {
-    exprChars = curExpr.split('').concat([null, null, null, null]).slice(0, 4);
-    ix = 0; stackIx = -1; error = 'NONE';
-    yield snap({ line: 13, tag: 'init', narrate, note, hot: 'stack_ix', frames: scanFrames() });
-  }
-
-  // Loop exit when error is set inside the loop: 14(false) / 28(skipped) / 30.
-  function* exitWithError(report, reportNote) {
-    yield snap({ line: 14, tag: 'test', narrate: 'error is no longer NONE, so the loop stops.', frames: scanFrames() });
-    yield snap({ line: 28, tag: 'test', narrate: 'error is not NONE, so this post-loop check is skipped.', frames: scanFrames() });
-    stream.push(report);
-    yield snap({ line: 30, tag: 'report', narrate: 'report prints the error that was recorded.', note: reportNote, streamNew: true, frames: scanFrames() });
-  }
-
-  /* ================= STEP 0 — the empty stack, nothing executed ========= */
-  yield snap({
-    line: null, tag: 'init',
-    narrate: 'An empty stack. stack_ix is -1 — it points at nothing yet — so the stack holds no symbols.',
-    note: SETUP_NOTE,
-    frames: [mainF()],
+  const siftF = hot => ({
+    fn: 'siftDown',
+    vars: [
+      { name: 'root', value: root, role: hot === 'root' ? 'active' : undefined },
+      { name: 'end',  value: end },
+      ...(child == null ? [] : [{ name: 'child', value: child, kind: 'local', role: hot === 'child' ? 'active' : undefined }]),
+    ],
   });
+  const buildFrames = (level, hot) => {
+    const f = [mainF()];
+    if (level >= 1) f.push(sortF(hot));
+    if (level >= 2) f.push(siftF(hot));
+    return f;
+  };
 
-  /* ================= SCAN 1 — scan("a)(b")  ->  TOO_MANY_RIGHT ========== */
-  yield* scanCall(33, 'a)(b');
-  yield* scanInit(
-    'ix starts at the first character, stack_ix is -1 — the stack is empty — and error is set to NONE.');
-  yield* charIgnore(0, {
-    loop:     'ix is 0, which is less than 4, and error is NONE, so the scanner reads the next character.',
-    notOpen:  "'a' is not an opening symbol.",
-    notClose: "'a' is neither an opening nor a closing symbol, so the scanner ignores it.",
-    inc:      'ix advances to 1, the next character.',
-  });
-  yield* charCloseEmpty(1, {
-    loop:     'ix is 1, still less than 4 and error is NONE, so the scan continues.',
-    notOpen:  "')' is not an opening symbol.",
-    isClose:  "')' is a closing symbol.",
-    isEmpty:  'A closing symbol, and the stack is empty — there is no opening symbol for it to close. This test is isEmpty.',
-    setErr:   'error is set to TOO_MANY_RIGHT.',
-    errNote:  HOOK_NOTE,
-    inc:      'ix advances to 2.',
-  });
-  yield* exitWithError('too many right parentheses', SILENT_NOTE);
+  const snap = ({ line, tag, narrate, note, compared = [], active = [], hot = null, level = 0 }) => {
+    const frames = buildFrames(level, hot);
+    const parked = frames.slice(0, -1).map(f => f.call).filter(Boolean);
+    return {
+      line, tag, narrate, note, parked,
+      panels: {
+        array: arrayPanel(compared, active),
+        tree:  treePanel(compared, active),
+        vars:  varsPanel(hot),
+        calls: { frames: frames.map((f, k) => ({ fn: f.fn, vars: f.vars, active: k === frames.length - 1 })) },
+      },
+    };
+  };
 
-  /* ================= SCAN 2 — scan("[a)")  ->  MISMATCH ================= */
-  yield* scanCall(34, '[a)');
-  yield* scanInit(
-    'The next expression loads: [ a ) fills cells 0 to 2, and cell 3 stays empty. ix is 0, stack_ix is -1, error is NONE.');
-  yield* charOpen(0, '[', {
-    loop:   'ix is 0, less than 3, and error is NONE, so the scan begins.',
-    isOpen: "'[' is an opening symbol.",
-    isFull: 'stack_ix is -1, not 3, so the stack is not full. This test is isFull.',
-    call:   "'[' is an opening symbol, so scan calls push to put it on the stack.",
-    raise:  'stack_ix rises from -1 to 0 — that is where the new symbol goes.',
-    write:  "'[' is written into cell 0. It is on the stack now.",
-    inc:    'ix advances to 1.',
-  });
-  yield* charIgnore(1, {
-    loop:     'ix is 1, less than 3, and error is NONE.',
-    notOpen:  "'a' is not an opening symbol.",
-    notClose: "'a' is neither an opening nor a closing symbol, so it is ignored.",
-    inc:      'ix advances to 2.',
-  });
-  yield* charClosePop(2, {
-    loop:     'ix is 2, less than 3, and error is NONE.',
-    notOpen:  "')' is not an opening symbol.",
-    isClose:  "')' is a closing symbol.",
-    notEmpty: 'stack_ix is 0, not -1, so the stack is not empty. This test is isEmpty.',
-    call:     'The stack is not empty, so scan calls pop.',
-    read:     "popped takes the top symbol, '[' — the symbol this ')' is supposed to be closing.",
-    drop:     "stack_ix drops back to -1. The '[' is no longer on the stack.",
-    dropNote: POP_NOTE,
-    matches:  "'[' and ')' are not the same type.",
-    setErr:   'error is set to MISMATCH.',
-    errNote:  MISMATCH_NOTE,
-    inc:      'ix advances to 3.',
-  }, true);
-  yield* exitWithError('mismatched parentheses');
+  /* ================================ the trace ================================ */
 
-  /* ================= SCAN 3 — scan("((a)")  ->  TOO_MANY_LEFT (payoff) == */
-  yield* scanCall(35, '((a)');
-  yield* scanInit(
-    'The last expression loads: ( ( a ) fills all four cells. ix is 0, stack_ix is -1, error is NONE.');
-  yield* charOpen(0, '(', {
-    loop:   'ix is 0, less than 4, and error is NONE.',
-    isOpen: "'(' is an opening symbol.",
-    isFull: 'stack_ix is -1, not 3, so the stack is not full. This test is isFull.',
-    call:   "'(' is an opening symbol, so scan calls push.",
-    raise:  'stack_ix rises from -1 to 0.',
-    write:  "'(' is written into cell 0, over the '[' that scan 2 left behind.",
-    inc:    'ix advances to 1.',
-  });
-  yield* charOpen(1, '(', {
-    loop:   'ix is 1, less than 4, and error is NONE.',
-    isOpen: "'(' is an opening symbol.",
-    isFull: 'stack_ix is 0, not 3, so the stack is not full.',
-    call:   'A second opening symbol, so scan calls push again.',
-    raise:  'stack_ix rises from 0 to 1.',
-    write:  "'(' is written into cell 1. Two opening symbols are on the stack now.",
-    inc:    'ix advances to 2.',
-  });
-  yield* charIgnore(2, {
-    loop:     'ix is 2, less than 4, and error is NONE.',
-    notOpen:  "'a' is not an opening symbol.",
-    notClose: "'a' is neither an opening nor a closing symbol, so it is ignored.",
-    inc:      'ix advances to 3.',
-  });
-  yield* charClosePop(3, {
-    loop:     'ix is 3, less than 4, and error is NONE.',
-    notOpen:  "')' is not an opening symbol.",
-    isClose:  "')' is a closing symbol.",
-    notEmpty: 'stack_ix is 1, not -1, so the stack is not empty. This test is isEmpty.',
-    call:     'The stack is not empty, so scan calls pop.',
-    read:     "popped takes the top symbol, '(' — the opening symbol this ')' should close.",
-    drop:     "stack_ix drops from 1 to 0. One opening symbol is still on the stack.",
-    matches:  "'(' and ')' are the same type. No error — this closing symbol is correct.",
-    inc:      'ix advances to 4.',
-  }, false);
+  // STEP 0 — nothing has executed. The valid max heap heapify produced.
+  yield snap({ line: null, tag: 'init', note: OPEN_NOTE,
+    narrate: 'A valid max heap. The largest value, 9, is at the root — the same six values as a tree and as an array.' });
 
-  // Loop exit — the payoff. The test fails because ix ran out, NOT an error.
-  yield snap({ line: 14, tag: 'test',
-    narrate: 'The loop ends because we ran out of characters. error is still NONE — the scanner found nothing wrong.',
-    note: SCAN3_ENDLOOP_NOTE, frames: scanFrames() });
-  yield snap({ line: 28, tag: 'test',
-    narrate: 'error is NONE, and stack_ix is 0, which is greater than -1 — so this test is true.',
-    frames: scanFrames() });
-  error = 'TOO_MANY_LEFT';
-  yield snap({ line: 29, tag: 'error',
-    narrate: 'There is still an opening symbol on the stack. Nothing ever closed it.',
-    note: PAYOFF_NOTE, hot: 'error', frames: scanFrames() });
-  stream.push('too many left parentheses');
-  yield snap({ line: 30, tag: 'report',
-    narrate: 'report prints the error that was recorded after the loop.',
-    note: CHALLENGE_NOTE, streamNew: true, frames: scanFrames() });
+  // main calls sort (line 21). The call has a visible origin.
+  yield snap({ line: 21, tag: 'call', level: 0,
+    narrate: 'main calls sort on the whole array, passing size = 6.' });
+
+  // heapify (line 13) — one step, run inside sort. The array is already the heap.
+  yield snap({ line: 13, tag: 'call', level: 1, note: HEAPIFY_NOTE,
+    narrate: 'Inside sort. heapify has already run — this heap is its result — so this line leaves the array exactly as it is.' });
+
+  // end = size - 1 = 5.
+  end = 5;
+  yield snap({ line: 14, tag: 'assign', hot: 'end', level: 1, note: END_NOTE,
+    narrate: 'end = size - 1 = 5 — the last index. The heap is the whole array for now, so end sits at the last cell.' });
+
+  /* ===================== EXTRACTION 1 : root 9 -> [5], siftDown(0,4) ===================== */
+  yield snap({ line: 15, tag: 'test', level: 1, compared: [5],
+    narrate: 'end is 5, and 5 > 0, so the heap still holds more than one value — keep going.' });
+  a[0] = 2; a[5] = 9;
+  yield snap({ line: 16, tag: 'swap', level: 1, active: [0, 5], note: SWAP1_NOTE,
+    narrate: '9 and 2 trade places. 9 lands at index 5, and the leaf value 2 is now at the root.' });
+  end = 4;
+  yield snap({ line: 17, tag: 'assign', hot: 'end', level: 1, note: PLACE1_NOTE,
+    narrate: 'end moves to 4. 9 is out of the heap for good — its cell turns green and its node leaves the tree. It is in its final position.' });
+  yield snap({ line: 18, tag: 'call', level: 1, note: REUSE_NOTE,
+    narrate: 'sort calls siftDown for the root, index 0, but with end = 4 — the shrunken heap.' });
+
+  root = 0;
+  yield snap({ line: 2, tag: 'test', level: 2, compared: [0],
+    narrate: "Inside siftDown. The root's left child is at 0*2+1 = 1, and 1 <= 4, so the root has a child to check." });
+  child = 1;
+  yield snap({ line: 3, tag: 'assign', hot: 'child', level: 2, compared: [1],
+    narrate: 'child = 0*2+1 = 1 — the left child, holding 6.' });
+  yield snap({ line: 4, tag: 'test', level: 2, compared: [1, 2],
+    narrate: 'Both children exist: index 1 holds 6, index 2 holds 8. 8 > 6, so the right child is the larger one.' });
+  child = 2;
+  yield snap({ line: 5, tag: 'assign', hot: 'child', level: 2, compared: [2],
+    narrate: 'child moves to index 2 — the larger child, holding 8.' });
+  yield snap({ line: 6, tag: 'test', level: 2, compared: [0, 2],
+    narrate: 'a[2] is 8 and a[root] = a[0] is 2. 8 > 2, so the root must sink.' });
+  a[0] = 8; a[2] = 2;
+  yield snap({ line: 7, tag: 'swap', level: 2, active: [0, 2],
+    narrate: '8 and 2 trade places. 8 rises to the root; 2 sinks to index 2.' });
+  root = 2;
+  yield snap({ line: 8, tag: 'assign', hot: 'root', level: 2, compared: [2],
+    narrate: 'root follows the 2 down to index 2.' });
+  yield snap({ line: 2, tag: 'test', level: 2, compared: [2],
+    narrate: "Index 2's left child would be at 2*2+1 = 5, which is past end = 4 — outside the heap. Node 2 has no children now, so siftDown is finished." });
+
+  /* ===================== EXTRACTION 2 : root 8 -> [4], siftDown(0,3) cascade ===================== */
+  root = null; child = null;
+  yield snap({ line: 15, tag: 'test', level: 1, compared: [4],
+    narrate: 'Back in sort. end is 4, still greater than 0 — extract again.' });
+  a[0] = 1; a[4] = 8;
+  yield snap({ line: 16, tag: 'swap', level: 1, active: [0, 4],
+    narrate: '8 and 1 trade places. 8 lands at index 4.' });
+  end = 3;
+  yield snap({ line: 17, tag: 'assign', hot: 'end', level: 1,
+    narrate: 'end moves to 3. 8 is placed — its cell turns green and its node leaves the tree. The heap is down to four values.' });
+  yield snap({ line: 18, tag: 'call', level: 1,
+    narrate: 'sort calls siftDown for the root with end = 3.' });
+
+  root = 0;
+  yield snap({ line: 2, tag: 'test', level: 2, compared: [0],
+    narrate: "The root's left child is at 0*2+1 = 1, and 1 <= 3." });
+  child = 1;
+  yield snap({ line: 3, tag: 'assign', hot: 'child', level: 2, compared: [1],
+    narrate: 'child = 1 — the left child, holding 6.' });
+  yield snap({ line: 4, tag: 'test', level: 2, compared: [1, 2],
+    narrate: 'Index 1 holds 6, index 2 holds 2. 2 > 6 is false, so the left child (6) is still the larger — child stays at 1.' });
+  yield snap({ line: 6, tag: 'test', level: 2, compared: [0, 1],
+    narrate: 'a[1] is 6 and a[root] = a[0] is 1. 6 > 1, so the root sinks.' });
+  a[0] = 6; a[1] = 1;
+  yield snap({ line: 7, tag: 'swap', level: 2, active: [0, 1],
+    narrate: '6 rises to the root and 1 drops to index 1 — but 1 may keep falling.' });
+  root = 1;
+  yield snap({ line: 8, tag: 'assign', hot: 'root', level: 2, compared: [1],
+    narrate: 'root follows the 1 down to index 1.' });
+  yield snap({ line: 2, tag: 'test', level: 2, compared: [1],
+    narrate: "Index 1's left child is at 1*2+1 = 3, and 3 <= 3 — 1 keeps going." });
+  child = 3;
+  yield snap({ line: 3, tag: 'assign', hot: 'child', level: 2, compared: [3],
+    narrate: 'child = 1*2+1 = 3 — the left child, holding 4.' });
+  yield snap({ line: 4, tag: 'test', level: 2, compared: [3], note: CASCADE_NOTE,
+    narrate: 'There is no right child inside the heap: index 4 is past end = 3 (4 <= 3 is false). The only candidate is index 3.' });
+  yield snap({ line: 6, tag: 'test', level: 2, compared: [1, 3],
+    narrate: 'a[3] is 4 and a[root] = a[1] is 1. 4 > 1, so 1 sinks again.' });
+  a[1] = 4; a[3] = 1;
+  yield snap({ line: 7, tag: 'swap', level: 2, active: [1, 3],
+    narrate: '1 keeps sinking. It swaps with 4 and lands at index 3.' });
+  root = 3;
+  yield snap({ line: 8, tag: 'assign', hot: 'root', level: 2, compared: [3],
+    narrate: 'root follows the 1 down to index 3.' });
+  yield snap({ line: 2, tag: 'test', level: 2, compared: [3],
+    narrate: "Index 3's left child would be at 3*2+1 = 7, past end = 3. Node 3 has no children, so 1 has landed and siftDown is finished." });
+
+  /* ===================== EXTRACTION 3 : root 6 -> [3], siftDown(0,2) ===================== */
+  root = null; child = null;
+  yield snap({ line: 15, tag: 'test', level: 1, compared: [3],
+    narrate: 'Back in sort. end is 3, still > 0.' });
+  a[0] = 1; a[3] = 6;
+  yield snap({ line: 16, tag: 'swap', level: 1, active: [0, 3],
+    narrate: '6 and 1 trade places. 6 lands at index 3.' });
+  end = 2;
+  yield snap({ line: 17, tag: 'assign', hot: 'end', level: 1,
+    narrate: 'end moves to 2. 6 is placed — green in the array, gone from the tree. Three values left in the heap.' });
+  yield snap({ line: 18, tag: 'call', level: 1,
+    narrate: 'sort calls siftDown for the root with end = 2.' });
+
+  root = 0;
+  yield snap({ line: 2, tag: 'test', level: 2, compared: [0],
+    narrate: "The root's left child is at index 1, and 1 <= 2." });
+  child = 1;
+  yield snap({ line: 3, tag: 'assign', hot: 'child', level: 2, compared: [1],
+    narrate: 'child = 1, holding 4.' });
+  yield snap({ line: 4, tag: 'test', level: 2, compared: [1, 2],
+    narrate: 'Index 1 holds 4, index 2 holds 2. 2 > 4 is false, so child stays at the left child, 4.' });
+  yield snap({ line: 6, tag: 'test', level: 2, compared: [0, 1],
+    narrate: 'a[1] is 4 and a[root] = a[0] is 1. 4 > 1, so the root sinks.' });
+  a[0] = 4; a[1] = 1;
+  yield snap({ line: 7, tag: 'swap', level: 2, active: [0, 1],
+    narrate: '4 and 1 trade places. 1 drops to index 1.' });
+  root = 1;
+  yield snap({ line: 8, tag: 'assign', hot: 'root', level: 2, compared: [1],
+    narrate: 'root follows the 1 down to index 1.' });
+  yield snap({ line: 2, tag: 'test', level: 2, compared: [1],
+    narrate: "Index 1's left child would be at index 3, past end = 2. Node 1 has no children in the heap — siftDown is finished." });
+
+  /* ===================== EXTRACTION 4 : root 4 -> [2], siftDown(0,1) NO SWAP ===================== */
+  root = null; child = null;
+  yield snap({ line: 15, tag: 'test', level: 1, compared: [2],
+    narrate: 'Back in sort. end is 2, still > 0.' });
+  a[0] = 2; a[2] = 4;
+  yield snap({ line: 16, tag: 'swap', level: 1, active: [0, 2],
+    narrate: '4 and 2 trade places. 4 lands at index 2.' });
+  end = 1;
+  yield snap({ line: 17, tag: 'assign', hot: 'end', level: 1,
+    narrate: 'end moves to 1. 4 is placed. Only two values are left in the heap.' });
+  yield snap({ line: 18, tag: 'call', level: 1,
+    narrate: 'sort calls siftDown for the root with end = 1.' });
+
+  root = 0;
+  yield snap({ line: 2, tag: 'test', level: 2, compared: [0],
+    narrate: "The root's left child is at 0*2+1 = 1, and 1 <= 1 — there is one child." });
+  child = 1;
+  yield snap({ line: 3, tag: 'assign', hot: 'child', level: 2, compared: [1],
+    narrate: 'child = 1 — the only child, holding 1.' });
+  yield snap({ line: 4, tag: 'test', level: 2, compared: [1],
+    narrate: 'Index 2 is past end = 1, so there is no right child (2 <= 1 is false). The only candidate is index 1.' });
+  yield snap({ line: 6, tag: 'test', level: 2, compared: [0, 1],
+    narrate: 'a[1] is 1 and a[root] = a[0] is 2. 1 > 2 is false — the parent is already bigger.' });
+  yield snap({ line: 10, tag: 'return', level: 2, compared: [0], note: NO_SWAP_NOTE,
+    narrate: '2 is already bigger than its only child. Nothing moves, and siftDown returns.' });
+
+  /* ===================== EXTRACTION 5 : root 2 -> [1], degenerate end -> 0 ===================== */
+  root = null; child = null;
+  yield snap({ line: 15, tag: 'test', level: 1, compared: [1],
+    narrate: 'Back in sort. end is 1, and 1 > 0 — one more extraction.' });
+  a[0] = 1; a[1] = 2;
+  yield snap({ line: 16, tag: 'swap', level: 1, active: [0, 1],
+    narrate: '2 and 1 trade places. 2 lands at index 1.' });
+  end = 0;
+  yield snap({ line: 17, tag: 'assign', hot: 'end', level: 1,
+    narrate: 'end moves to 0. 2 is placed — green in the array, gone from the tree.' });
+
+  // The loop test fails; a[0] is placed by elimination on this same step.
+  zeroPlaced = true;
+  yield snap({ line: 15, tag: 'test', level: 1, compared: [0], note: DEGENERATE_NOTE,
+    narrate: 'end is 0, so end > 0 is false and the loop stops. One value is left in the heap, at index 0 — and if it is the only one left, it must be the smallest. It is already where it belongs, so 1 turns green and the last node leaves the tree.' });
+
+  // FINAL — sort returns to main; the array is sorted.
+  yield snap({ line: 21, tag: 'return', level: 0, note: FINAL_NOTE,
+    narrate: 'The array is sorted: 1 2 4 6 8 9. The tree is empty — every value has been placed, and no second array was ever used.' });
 }
 
 const SPEC = {
-  title: 'Checking parentheses with a stack',
-  subtitle: 'A scanner that reads left to right',
+  title: 'Heapsort: emptying the heap',
+  subtitle: 'The sorted part grows as the heap shrinks',
   profile: 'standard',
   columns: 2,
-  languages: ['pseudo', 'java', 'cpp'],
+  languages: ['pseudo', 'cpp', 'java'],
 
-  // Placement is derived by the engine from each panel's kind (AUTHORING.md
-  // "Panels flow across both columns"): the code listing anchors the left column
-  // at its 15-line floor; the two structure panels -- the expression and the
-  // stack -- sit side by side in the capped region at the top of the right
-  // column; and the bookkeeping panels (Variables, Function calls, output) flow
-  // down, the balancing overflow continuing beneath the code. Everything resolves
-  // once on load and holds, so nothing moves as steps advance.
+  // Same five panels as part 1. The array (6 cells) and the tree are BOTH
+  // structure panels and both fit within a row, so the engine sits them SIDE BY
+  // SIDE — that correspondence, and the tree shrinking while the array does not,
+  // is the point. The code panel anchors the left column; the compact Variables
+  // strip and the Function calls stack flow down beside/below. Everything
+  // resolves once on load and holds, so nothing moves as steps advance
+  // (pac.verifyHeights()).
   panels: [
-    { type: 'code',      id: 'code',      title: 'checking parentheses',
-      listings: LISTINGS, labels: { pseudo: 'pseudocode', java: 'Java', cpp: 'C++' } },
-    { type: 'cells',     id: 'expr',      title: 'the expression', structure: true },
-    { type: 'cells',     id: 'stack',     title: 'the stack',      structure: true },
-    { type: 'cells',     id: 'vars',      title: 'Variables', compact: true },
-    { type: 'callstack', id: 'callstack', title: 'Function calls' },
-    { type: 'stream',    id: 'out',       title: 'output', compact: true },
+    { type: 'code',      id: 'code',  title: 'heapsort',
+      listings: LISTINGS, labels: { pseudo: 'pseudocode', cpp: 'C++', java: 'Java' } },
+    { type: 'cells',     id: 'array', title: 'the array', structure: true },
+    { type: 'nodes',     id: 'tree',  title: 'the heap as a tree', structure: true },
+    { type: 'cells',     id: 'vars',  title: 'Variables', compact: true },
+    { type: 'callstack', id: 'calls', title: 'Function calls' },
   ],
 
   initialTrace: 'run',

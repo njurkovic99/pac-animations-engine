@@ -55,11 +55,22 @@ export function render(body, data, ctx) {
   // Marked mode: a `box` grid with index-pointer markers below the cell row.
   const markers = mode === 'box' && data?.markers ? data.markers : null;
   if (markers) { wrap.dataset.marked = ''; } else { delete wrap.dataset.marked; }
-  // A single-marker array uses narrower columns (there is never a pair of markers
-  // to sit side by side under one cell), so a short array fits more panels beside
-  // it. Two-or-more-marker arrays keep the wider column so front + rear on the
-  // same cell never overlap.
-  if (markers && markers.length <= 1) { wrap.dataset.single = ''; } else { delete wrap.dataset.single; }
+  // Markers on the same cell sit SIDE BY SIDE (AUTHORING.md "The index pointer"),
+  // each caret directly under its cell. The jitter that used to come with that --
+  // a cell widening when a second marker landed on it, shifting every later cell --
+  // is killed by sizing the cell column ONCE, at load, for the MAXIMUM number of
+  // markers that ever share a single cell ANYWHERE in the trace (`markerReserve`),
+  // then holding it constant. An array whose markers never collide keeps a normal
+  // column; one that reaches two (queues' front/rear) is sized for two from step 0;
+  // one that reaches three (heapsort's root/child/end) is sized for three. Same
+  // rule as every other dimension: resolve the max over the whole trace, once, then
+  // hold -- so no cell ever moves. (A7 item 54, superseding the vertical stacking
+  // of item 53.)
+  if (markers) {
+    const r = markerReserve(ctx);
+    wrap.style.setProperty('--cell-col-min', `${r.cell}px`);
+    wrap.style.setProperty('--parked-min', `${r.parked}px`);
+  }
 
   // A row label names the whole row once, to the LEFT of the cells (marked mode).
   if (markers && data.rowLabel) {
@@ -69,19 +80,19 @@ export function render(body, data, ctx) {
     wrap.appendChild(name);
   }
 
-  // Parked markers (index < 0): they point at nothing yet, so they sit to the
-  // left of cell [0], dimmed, still labelled. The parked zone is a full cell
-  // column with an INVISIBLE box and index band above its marker track, so those
-  // bands reserve the exact same heights as a real cell -- the marker lane then
-  // begins at the same y here as over any cell. A marker moving from -1 onto a
+  // Parked markers (index < 0 or null): they point at nothing yet, so they sit to
+  // the left of cell [0], dimmed, still labelled, side by side. The parked zone is
+  // a full cell column with an INVISIBLE box and index band above its marker track,
+  // so those bands reserve the exact same heights as a real cell -- the marker lane
+  // then begins at the same y here as over any cell. A marker moving from -1 onto a
   // cell therefore travels laterally only, never vertically.
   // The parked lane is ALWAYS present in marked mode (not only when a marker is
-  // currently parked), so the cells never shift left as a marker leaves the -1
-  // sentinel and the panel's width never changes across steps -- the width
-  // analogue of the master invariant. Its box and index bands are invisible (they
-  // only reserve height); the marker track holds any parked markers, or nothing.
-  const parked = markers ? markers.filter(m => m.index == null || m.index < 0) : [];
+  // currently parked), and its width is reserved ONCE for the most markers ever
+  // parked at the same time (0 if none ever park), so the cells never shift left as
+  // a marker leaves the -1 sentinel and the panel's width never changes across
+  // steps -- the width analogue of the master invariant.
   if (markers) {
+    const parked = markers.filter(m => m.index == null || m.index < 0);
     const col = document.createElement('div');
     col.className = 'pac-cell-col pac-cell-parked';
     const box = document.createElement('div');
@@ -122,9 +133,11 @@ export function render(body, data, ctx) {
     if (!markers) { wrap.appendChild(cell); return; }
 
     // Marked mode: wrap the box in a column with a bracketed index label and a
-    // marker track. The index label sits BELOW the box; markers whose index
-    // equals this cell's position sit side by side beneath it, each caret over
-    // its own labelled variable name.
+    // marker track. The index label sits BELOW the box; markers whose index equals
+    // this cell's position sit side by side beneath it, each caret over its own
+    // labelled variable name. The column's fixed min-width (--cell-col-min, sized
+    // for the busiest cell in the whole trace) means two markers landing here never
+    // widen it, so no cell ever shifts.
     const col = document.createElement('div');
     col.className = 'pac-cell-col';
     col.appendChild(cell);
@@ -151,6 +164,49 @@ function marker(m) {
   mk.innerHTML = `<span class="pac-marker-caret">&#9650;</span>` +
                  `<span class="pac-marker-label">${esc(m.label)}</span>`;
   return mk;
+}
+
+/* The reserved widths (px) for a marked array's cell columns and its parked lane,
+ * resolved ONCE over the whole trace and cached on the ctx. The engine pins the
+ * PANEL to its widest step, but that alone lets an individual CELL widen on the
+ * step it holds two markers (shifting later cells); reserving every column for the
+ * busiest cell in the trace makes each cell a constant width, so nothing shifts.
+ *   cell   = room for the most markers that ever share ONE cell, side by side.
+ *   parked = room for the most markers ever parked (index null / negative) at once
+ *            -- 0 if none ever park, so the lane then takes no space left of [0].
+ * A marker is ~`labelLen` mono chars wide (the caret is narrower than its label);
+ * ~7px/char at the 10.5px marker font, +6px between side-by-side markers, +slack.
+ * A cell column also never falls below the bare cell (~48px). */
+function markerReserve(ctx) {
+  if (ctx._markerReserve) return ctx._markerReserve;
+  const id = ctx.spec?.id ?? ctx.spec?.type;
+  const steps = ctx.engine?.steps ?? [];
+  // The width a cluster actually needs is the SUM of its labels' widths plus the
+  // gaps between them -- not (count x widest label), which over-reserves when the
+  // clustered labels differ (heapsort's root+child+end is 12 chars, not 3x5). Track
+  // the widest such cluster over the whole trace, for real cells and for the parked
+  // sentinel separately.
+  let cellChars = 0, parkChars = 0, cellCount = 0, parkCount = 0;
+  for (const s of steps) {
+    const ms = s.panels?.[id]?.markers;
+    if (!ms) continue;
+    const cellSum = {}, cellN = {};
+    let parkSum = 0, parkN = 0;
+    for (const m of ms) {
+      const len = String(m.label).length;
+      if (m.index == null || m.index < 0) { parkSum += len; parkN++; }
+      else { cellSum[m.index] = (cellSum[m.index] || 0) + len; cellN[m.index] = (cellN[m.index] || 0) + 1; }
+    }
+    for (const k in cellSum) { cellChars = Math.max(cellChars, cellSum[k]); cellCount = Math.max(cellCount, cellN[k]); }
+    if (parkSum) { parkChars = Math.max(parkChars, parkSum); parkCount = Math.max(parkCount, parkN); }
+  }
+  // ~6.3px per mono char at the 10.5px marker-label font, 6px between markers, a
+  // little slack so nothing touches.
+  const band = (chars, count) => chars ? Math.ceil(chars * 6.3 + (count - 1) * 6 + 8) : 0;
+  return (ctx._markerReserve = {
+    cell:   Math.max(48, band(cellChars, cellCount)),
+    parked: band(parkChars, parkCount),
+  });
 }
 
 /* VERTICAL stack column (render: 'column'). Cell [0] is at the BOTTOM and the
