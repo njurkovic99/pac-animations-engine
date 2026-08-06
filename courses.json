@@ -31,6 +31,10 @@
           { "file": "sorting-quicksort-partition", "backs": "A6", "built": true },
           { "file": "sorting-quicksort-worstcase", "backs": "A6", "built": true }
         ] },
+      { "topic": "Heaps — Is This a Valid Heap?",
+        "animations": [
+          { "file": "heap-is-this-valid", "backs": null, "built": true }
+        ] },
       { "topic": "4.1.5 Doubly Linked Lists",
         "animations": [
           { "file": "lists-doubly-insert-order",  "backs": "A10", "built": true }

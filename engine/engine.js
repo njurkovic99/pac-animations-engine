@@ -880,7 +880,8 @@ export class Engine {
         <span class="pac-progress"></span>
       </div>
       <div class="pac-narrate"></div>
-      <div class="pac-note pac-note-empty" role="note"></div>`;
+      <div class="pac-note pac-note-empty" role="note"></div>
+      <div class="pac-attribution">Designed by Dr. Neven Jurkovic with help from Claude AI</div>`;
 
     this.root.querySelector('.pac-title').textContent = s.title ?? '';
     this.root.querySelector('.pac-sub').textContent = s.subtitle ?? '';
