@@ -288,6 +288,15 @@ body {
   color: var(--highlight);
   margin-bottom: 3px;
 }
+/* An inline cross-animation link in a note or narration (e.g. part 2's opening
+ * note back to part 1). Reads as a link -- accent colour, underlined -- without
+ * shouting over the note prose. */
+.pac-seg-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.pac-seg-link:focus-visible { outline: 2px solid var(--warn); outline-offset: 2px; }
 /* No note on this step: the box is rendered invisible (nothing painted -- no
  * border, background, or "note" label) but KEEPS its reserved --note-h height,
  * so a note appearing or disappearing never shifts the controls above it. A
@@ -405,13 +414,15 @@ body {
 .pac-cell[data-role="sorted"]   { border-color: var(--ok); background: var(--ok-soft); }
 .pac-cell[data-role="error"]    { border-color: var(--error); color: var(--error); }
 /* empty: indeterminate storage -- an unwritten array cell OR an unassigned
- * standalone variable (one glyph for both). Same box and dimensions as a member,
- * but a DASHED dimmed border, a dim em-dash "—" value (added by the renderer),
- * and a thin, low-opacity X drawn corner to corner across the interior (an SVG
- * stretched to the cell). Together they read as "holds no meaningful value" --
- * impossible to mistake for a space character or a rendering failure, and a
- * different SHAPE from `stale`'s greyed character. (A real stored value such as
- * the -1 sentinel is NOT empty and renders normally.) */
+ * standalone variable (one placeholder for both). Same box and dimensions as a
+ * member, but a DASHED dimmed border and a thin, low-opacity X drawn corner to
+ * corner across the interior (an SVG stretched to the cell), with NOTHING in the
+ * value slot. The X alone reads as "holds no meaningful value" -- impossible to
+ * mistake for a space or a rendering failure, and a different SHAPE from `stale`'s
+ * greyed character. No dash sits in the slot: it could read as a value, and next
+ * to the sorting animations' negatives (-1, -3) specifically as a minus sign
+ * (A7 item 55). A real stored value such as the -1 sentinel is NOT empty and
+ * renders normally. */
 .pac-cell[data-role="empty"] {
   border-style: dashed;
   border-color: var(--border);
@@ -836,7 +847,12 @@ const cellsPanel = (() => { /* CELLS panel — 1D/2D grid. Absorbs arrays, sorti
  * cell whose value varies in length (e.g. an error name) never resizes the strip
  * as the value changes — the width analogue of the engine's reserved heights. */
 
-const PLACEHOLDER = '—';   // em-dash: the value of indeterminate storage
+// Indeterminate storage renders as the X ALONE (drawn in CSS across an `empty`
+// cell). No character sits in the value slot: a dash there can read as a value --
+// specifically as a minus sign next to the sorting animations' negative numbers
+// (-1, -3). The empty string still reserves the value slot's height (min-height),
+// so an empty cell keeps a member's dimensions. (A7 item 55.)
+const PLACEHOLDER = '';
 
 function mount(body) { body.innerHTML = '<div class="pac-cells"></div>'; }
 
@@ -896,7 +912,7 @@ function render(body, data, ctx) {
     col.className = 'pac-cell-col pac-cell-parked';
     const box = document.createElement('div');
     box.className = 'pac-cell';
-    box.innerHTML = '<span class="pac-cell-value">—</span>';   // reserves the box band height
+    box.innerHTML = '<span class="pac-cell-value"></span>';    // hidden; reserves the box band height only
     const index = document.createElement('div');
     index.className = 'pac-cell-index';
     index.textContent = '[0]';                                 // reserves the index band height
@@ -916,11 +932,11 @@ function render(body, data, ctx) {
     // the engine's reserved heights (master invariant).
     if (c.minCh) cell.style.minWidth = `${c.minCh}ch`;
     if (mode === 'bar') cell.style.height = `${20 + 70 * (+c.value / max)}px`;
-    // ONE placeholder glyph for indeterminate storage — an unwritten array cell
-    // and an unassigned standalone variable are the same thing. An `empty` cell
-    // always shows the em-dash "—" (over the dashed box + faint X from CSS),
-    // never a real value. A real stored value (including a sentinel like -1) is
-    // NOT `empty` and renders normally.
+    // ONE placeholder for indeterminate storage — an unwritten array cell and an
+    // unassigned standalone variable are the same thing: an `empty` cell, drawn as
+    // the dashed box + faint X from CSS with NOTHING in the value slot. A real
+    // stored value (including a sentinel like -1) is NOT `empty` and renders
+    // normally.
     const value = c.role === 'empty' ? PLACEHOLDER : c.value;
     cell.innerHTML = (!markers && c.label ? `<span class="pac-cell-label">${esc(c.label)}</span>` : '') +
                      `<span class="pac-cell-value">${esc(value)}</span>`;
@@ -2661,10 +2677,12 @@ const DANGER_MARK = '⚠';
  * Render segmented content (narration or a note) into `el`.
  *
  * `content` is either a plain string (the common case -- nearly every step),
- * or an array of segments. A segment is a string, or an object; an object with
- * `danger: true` renders a leading red ⚠ and the danger-red colour (--error),
- * naming a memory-integrity violation. Returns true iff anything was written,
- * so the caller can collapse an empty note box.
+ * or an array of segments. A segment is a string, or an object:
+ *   - `{ danger: true, text }` renders a leading red ⚠ and the danger-red colour
+ *     (--error), naming a memory-integrity violation.
+ *   - `{ href, text }` renders an inline link (opens in a new tab) -- used to
+ *     bridge related animations, e.g. part 2's opening note back to part 1.
+ * Returns true iff anything was written, so the caller can collapse an empty note.
  */
 function renderSegments(el, content) {
   el.textContent = '';
@@ -2681,6 +2699,15 @@ function renderSegments(el, content) {
       span.className = 'pac-danger';
       span.textContent = `${DANGER_MARK} ${seg.text ?? ''}`;
       el.appendChild(span);
+      wrote = true;
+    } else if (typeof seg.href === 'string') {
+      const a = document.createElement('a');
+      a.className = 'pac-seg-link';
+      a.href = seg.href;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.textContent = seg.text ?? seg.href;
+      el.appendChild(a);
       wrote = true;
     } else if (typeof seg.text === 'string') {
       el.appendChild(document.createTextNode(seg.text));
@@ -3010,8 +3037,11 @@ function* trace() {
 
   /* ================================ the trace ================================ */
 
-  // STEP 0 — nothing has executed. The valid max heap heapify produced.
-  yield snap({ line: null, tag: 'init', note: OPEN_NOTE,
+  // STEP 0 — nothing has executed. The valid max heap heapify produced. The note
+  // links BACK to part 1 here, at the opening — a student landing on part 2 first
+  // needs the prerequisite when they arrive, not when they leave.
+  yield snap({ line: null, tag: 'init',
+    note: [OPEN_NOTE, ' ', { href: 'sorting-heapify.html', text: 'See how this heap was built' }],
     narrate: 'A valid max heap. The largest value, 9, is at the root — the same six values as a tree and as an array.' });
 
   // main calls sort (line 21). The call has a visible origin.

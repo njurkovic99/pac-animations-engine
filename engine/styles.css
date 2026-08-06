@@ -284,6 +284,15 @@ body {
   color: var(--highlight);
   margin-bottom: 3px;
 }
+/* An inline cross-animation link in a note or narration (e.g. part 2's opening
+ * note back to part 1). Reads as a link -- accent colour, underlined -- without
+ * shouting over the note prose. */
+.pac-seg-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.pac-seg-link:focus-visible { outline: 2px solid var(--warn); outline-offset: 2px; }
 /* No note on this step: the box is rendered invisible (nothing painted -- no
  * border, background, or "note" label) but KEEPS its reserved --note-h height,
  * so a note appearing or disappearing never shifts the controls above it. A
@@ -401,13 +410,15 @@ body {
 .pac-cell[data-role="sorted"]   { border-color: var(--ok); background: var(--ok-soft); }
 .pac-cell[data-role="error"]    { border-color: var(--error); color: var(--error); }
 /* empty: indeterminate storage -- an unwritten array cell OR an unassigned
- * standalone variable (one glyph for both). Same box and dimensions as a member,
- * but a DASHED dimmed border, a dim em-dash "—" value (added by the renderer),
- * and a thin, low-opacity X drawn corner to corner across the interior (an SVG
- * stretched to the cell). Together they read as "holds no meaningful value" --
- * impossible to mistake for a space character or a rendering failure, and a
- * different SHAPE from `stale`'s greyed character. (A real stored value such as
- * the -1 sentinel is NOT empty and renders normally.) */
+ * standalone variable (one placeholder for both). Same box and dimensions as a
+ * member, but a DASHED dimmed border and a thin, low-opacity X drawn corner to
+ * corner across the interior (an SVG stretched to the cell), with NOTHING in the
+ * value slot. The X alone reads as "holds no meaningful value" -- impossible to
+ * mistake for a space or a rendering failure, and a different SHAPE from `stale`'s
+ * greyed character. No dash sits in the slot: it could read as a value, and next
+ * to the sorting animations' negatives (-1, -3) specifically as a minus sign
+ * (A7 item 55). A real stored value such as the -1 sentinel is NOT empty and
+ * renders normally. */
 .pac-cell[data-role="empty"] {
   border-style: dashed;
   border-color: var(--border);
