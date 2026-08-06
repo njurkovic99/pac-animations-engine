@@ -3111,8 +3111,11 @@ function* trace() {
   yield snap({ line: 16, tag: 'assign', hot: 'start', level: 1,
     narrate: 'Back in heapify. start = start - 1 = -1.' });
 
-  // FINAL — the loop test fails, heapify returns, the heap is complete.
-  yield snap({ line: 14, tag: 'test', level: 1, note: FINAL_NOTE,
+  // FINAL — the loop test fails, heapify returns, the heap is complete. The note
+  // links FORWARD to part 2: the student, now holding a max heap and asked how they
+  // would sort with it, can go watch exactly that.
+  yield snap({ line: 14, tag: 'test', level: 1,
+    note: [FINAL_NOTE, ' ', { href: 'sorting-heapsort-dual.html', text: 'See how the values actually get sorted' }],
     narrate: 'start is -1, so start >= 0 is false: heapify’s loop ends and it returns. Every parent is now greater than or equal to both of its children — the array is a valid max heap.' });
 }
 
