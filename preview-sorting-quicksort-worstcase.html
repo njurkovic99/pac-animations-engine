@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>sorting-quicksort-partition — preview</title>
+<title>sorting-quicksort-worstcase — preview</title>
 <style>/* pac-animations — design system
    15 tokens replacing the 188 distinct color values found across the
    original 25 animation files. */
@@ -2726,40 +2726,49 @@ function mountAnimation(spec, el = document.getElementById('pac')) {
   return eng;
 }
 
-/* ds — A6 "Quicksort" (KEY)
+/* ds — A6 "Quicksort" companion to sorting-quicksort-partition
  *
- * The COMPLETE sort, built in two grains. The FIRST partition of quicksort(0,12)
- * is shown in full detail (the mechanism — one index walking in from each end,
- * the crossing, the placing swap); the lecture calls partitioning "the most
- * complex part of quick sort," so it gets the room. The remaining SIX partitions
- * and the single-element base cases are SUMMARIZED — each partition a single move
- * — because they work identically and the detail teaches nothing new (the same
- * argument stacks-postfix-eval made for atomic push/pop after stacks-paren-scanner
- * showed their bodies). A recursion tree builds alongside, and the array fills in
- * with green until every value is in its final position.
+ * The SAME partition code, on data that is already sorted. Where
+ * sorting-quicksort-partition showed the mechanism doing useful work, this shows
+ * the mechanism doing the MOST work for the LEAST result — the O(n^2) worst case
+ * the lecture warns about: "we chose '1' as pivot, and where does it end up —
+ * exactly where it was originally, at the first position… there is no
+ * partitioning to speak of… it turns into an O(n^2) sort, just like a bubble
+ * sort."
  *
- * The array and every intermediate state are the lecture's worked example,
- * verified frame by frame:
+ * The payoff is a SHAPE, not a number. sorting-quicksort-partition built a
+ * balanced four-level tree over thirteen values; this builds a straight line of
+ * seven levels over seven values. The two trees side by side are the lesson.
  *
- *   a = [8,2,5,13,4,19,12,6,3,11,10,7,9]
- *   partition(0,12) -> 6 2 5 7 4 3 [8] 12 19 11 10 13 9        8  -> 6
- *   partition(0,5)  -> 4 2 5 3 [6] 7                           6  -> 4
- *   partition(0,3)  -> 3 2 [4] 5                               4  -> 2
- *   partition(0,1)  -> 2 [3]                                   3  -> 1
- *   partition(7,12) -> 10 9 11 [12] 13 19                      12 -> 10
- *   partition(7,9)  -> 9 [10] 11                               10 -> 8
- *   partition(11,12)-> [13] 19  (swaps a[11] with itself)      13 -> 11
- *   final: 2 3 4 5 6 7 8 9 10 11 12 13 19
+ * The array NEVER changes — it is [1,2,3,4,5,6,7] at every step. Green (role
+ * `sorted`, permanent) fills strictly LEFT TO RIGHT, one cell per partition:
+ * 0,1,2,3,4,5,6. Every partition peels off a single value (its pivot, already in
+ * place) and hands the entire rest of the array to the next call.
  *
- * GREEN (role `sorted`, permanent) is taken in execution order, depth-first, left
- * before right: indices 6,4,2,1,0,3,5,10,8,7,9,11,12. Every cell ends green; a
- * cell never loses the role. Nothing here corrupts memory — no memory-danger
- * marker. WATCH only: one trace, no gates. Metrics hidden. */
+ * The FIRST partition is shown in full, verified against the trace:
+ *
+ *   a = [1,2,3,4,5,6,7],  l = 0, r = 6
+ *   partition(0,6): pivot = a[0] = 1, i = 1, j = 6
+ *     i-scan: a[1]=2 is NOT <= 1, i stops at once (index 1). ONE comparison.
+ *     j-scan: 7>1 j=5; 6>1 j=4; 5>1 j=3; 4>1 j=2; 3>1 j=1; 2>1 j=0;
+ *             a[0]=1 is NOT > 1, j stops at 0. SIX moves.
+ *     i < j: 1 < 0 is FALSE — no swap.  while i <= j: 1 <= 0 FALSE — loop exits.
+ *     swap a[0] with a[0] — the pivot swaps with ITSELF, nothing moves. return 0.
+ *     Left = 0..-1 (EMPTY). Right = 1..6 (six values).
+ *   Every later call repeats this: partition(1,6) pivot 2 stays at [1], empty
+ *   left; partition(2,6)…partition(5,6) the same; then quicksort(a,6,6) is a
+ *   single element, placed with no partition.
+ *
+ * Code listing: IDENTICAL to sorting-quicksort-partition — the partition routine
+ * character for character; only the driver's bounds and the data differ. Said in
+ * a note. Nothing here corrupts memory — no memory-danger marker. WATCH only:
+ * one trace, no gates. Metrics hidden. The final note links forward to
+ * sorting-heapify — a sort that cannot degenerate like this. */
 
 /* One listing, three ds languages, line-aligned to a single 20-line grid, so
- * `line` is a plain number that resolves the same in every language. The recursive
- * quicksort wrapper sits above partition(); `if l < r` (line 2) is what stops the
- * recursion — a segment of one value or none needs no work. */
+ * `line` is a plain number that resolves the same in every language. This is the
+ * SAME code as sorting-quicksort-partition; only the main() driver names the
+ * seven-element array's bounds (0..6 instead of 0..12). */
 const LISTINGS = {
   pseudo: [
     'quicksort(a, l, r)',                            //  1
@@ -2781,7 +2790,7 @@ const LISTINGS = {
     '    return j',                                  // 17
     '',                                              // 18
     'main()',                                        // 19
-    '    quicksort(a, 0, 12)',                       // 20
+    '    quicksort(a, 0, 6)',                        // 20
   ],
   cpp: [
     'void quicksort(int a[], int l, int r) {',       //  1
@@ -2803,7 +2812,7 @@ const LISTINGS = {
     '    return j; }',                               // 17
     '',                                              // 18
     'int main() {',                                  // 19
-    '    quicksort(a, 0, 12); }',                    // 20
+    '    quicksort(a, 0, 6); }',                     // 20
   ],
   java: [
     'void quicksort(int[] a, int l, int r) {',       //  1
@@ -2825,61 +2834,55 @@ const LISTINGS = {
     '    return j; }',                               // 17
     '',                                              // 18
     'void main() {',                                 // 19
-    '    quicksort(a, 0, 12); }',                    // 20
+    '    quicksort(a, 0, 6); }',                     // 20
   ],
 };
 
 /* ---- teaching notes ---- */
 const OPEN_NOTE =
-  'Quicksort works by choosing one value as the PIVOT and rearranging the array so everything ≤ the pivot ' +
-  'ends up to its left and everything > the pivot to its right. That rearranging is called partitioning, ' +
-  'and it is the hard part of quicksort. After it, the pivot is in its final position for good — then ' +
-  'quicksort repeats on each side.';
+  'This is the same code you just watched partition a scrambled array. The only thing different is the ' +
+  'data: seven values that are already in order. Quicksort does not know that. Watch how much work it ' +
+  'does — and how much it accomplishes.';
+
+const IDENTICAL_NOTE =
+  'The partition routine here is character-for-character identical to sorting-quicksort-partition — the ' +
+  'same pivot choice, the same two scans, the same swaps. Nothing about the algorithm changed. Only the ' +
+  'data did, and that is enough to change everything.';
 
 const WALK_NOTE =
-  'i walks rightward looking for a value BIGGER than the pivot — one that is on the wrong side. j walks ' +
-  'leftward looking for a value ≤ the pivot, also on the wrong side. When both have found one, they trade.';
-
-const FIRST_SWAP_NOTE =
-  'Neither value is in its final position — the array is not sorted. All the swap does is move each of ' +
-  'them to the correct SIDE of the pivot.';
-
-const CROSS_NOTE =
-  'When j passes i, the partitioning is finished. Every value at or below index 6 is ≤ the pivot, and ' +
-  'every value above it is > the pivot. The two indices met in the middle and the array is already ' +
-  'divided — it just has the pivot sitting in the wrong place, at the far left.';
+  'j is checking every single value, and every one of them is bigger than the pivot. It will not stop ' +
+  'until it reaches the pivot itself — at the very far end of the array.';
 
 const PLACED_NOTE =
-  '8 is now in its final position. Not its position for this pass — its position in the finished sorted ' +
-  'array. Nothing will ever move it again, even though neither side is sorted yet. That is what ' +
-  'partitioning buys: one value placed permanently, and two smaller problems left over.';
+  '1 is now in its final position: index 0, exactly where it started. Because the pivot was the smallest ' +
+  'value, everything else is larger — so the left side is EMPTY and the right side is all six remaining ' +
+  'values. A good partition splits the work roughly in half; this one shaved off exactly one value and ' +
+  'handed the rest, whole, to the next call.';
 
 const SEAM_NOTE =
-  'That is one partition. Quicksort now does the same thing to each side, and to each side of those, ' +
-  'until every piece is a single value. The remaining partitions work exactly as this one did — from ' +
-  'here each is shown as a single move, so you can watch the array fill in.';
-
-const SINGLE_NOTE =
-  'A single value is already in its final position, so quicksort stops here — l < r is false. The same ' +
-  'test also catches EMPTY segments (l > r), like the right side of this call; they need no step at all.';
+  'That is one partition. It placed one value and left the other six untouched, as a single block. ' +
+  'Quicksort now runs on that block, and the same thing happens again — and again. From here each ' +
+  'partition is shown as a single move, but each one still walks j all the way down, exactly as you just ' +
+  'watched. Watch the green creep one cell to the right, and the tree grow one more level down.';
 
 const FINAL_NOTE =
-  'Each green cell was placed by one partition and never moved again. Count the levels in the tree: ' +
-  'thirteen values, four levels. That is the log n in O(n log n) — each level does about n work, and ' +
-  'there are only about log n levels because every partition roughly halves what is left. One warning, ' +
-  'and it is the reason quicksort is not always the right choice. Try tracing an array that is ALREADY ' +
-  'SORTED — 1 2 3 4 5 — with the first value as pivot. Where does the pivot end up? How big are the two ' +
-  'sides? A tree with n levels instead of log n makes quicksort as slow as bubble sort.';
+  'Now look at the tree: seven values, seven levels — a straight line, not a bush. In ' +
+  'sorting-quicksort-partition, thirteen values made a balanced tree only four levels deep; here every ' +
+  'partition peeled off a single value and passed the entire rest along, so the calls stack up n deep ' +
+  'instead of about log n. n levels, each doing about n work, is O(n²) — no faster than the bubble sort ' +
+  'quicksort is supposed to beat. And the input that caused it was the one you might have called easiest: ' +
+  'an array already in order, with the first value always chosen as pivot.';
 
-/* The final note's challenge — "trace an already-sorted array" — is answered by a
- * companion animation running this exact code on [1,2,3,4,5,6,7]. The link is the
- * answer; it sits at the END of the note, after the questions. Same link-in-note
- * mechanism as sorting-heapify / sorting-heapsort-dual. */
-const FINAL_NOTE_LINKED = [FINAL_NOTE, ' ', { href: 'sorting-quicksort-worstcase.html', text: 'See what happens when the array is already sorted' }];
+/* The final note carries the forward link to sorting-heapify (a sort whose worst
+ * case is still O(n log n) — it cannot degenerate like this). The link-in-note
+ * mechanism is the same one sorting-heapify / sorting-heapsort-dual already use. */
+const FINAL_NOTE_LINKED = [FINAL_NOTE, ' ', { href: 'sorting-heapify.html', text: 'See a sort that cannot degenerate like this' }];
 
 /* Simulate one partition on a copy of arr[l..r]; return the split index, the
  * resulting segment values, and the pivot value at its resting place. Pure — used
- * to precompute the recursion tree and each summarized partition's end state. */
+ * to precompute the recursion tree and each summarized partition's end state.
+ * IDENTICAL to sorting-quicksort-partition; on already-sorted data it returns
+ * p == l and an unchanged segment every time. */
 function partitionPlan(arr, l, r) {
   const b = arr.slice();
   const pivot = b[l];
@@ -2894,10 +2897,10 @@ function partitionPlan(arr, l, r) {
 }
 
 /* Build the whole recursion tree up front (all nodes laid out from step 0 as
- * `pending`, so nothing jumps). A node's LABEL is its range, not its values —
- * the values are already on screen in the array. Empty segments (l > r) get no
- * node; single elements are leaves. Children are pushed left-before-right so the
- * tree layout places lower ranges to the left. */
+ * `pending`, so nothing jumps). On already-sorted data the left side of every
+ * partition is empty (l > r, no node), so each node has exactly ONE child — the
+ * tree degenerates into a single descending chain, seven nodes for seven values.
+ * A node's LABEL is its range; the values are already on screen in the array. */
 function buildTree(arr) {
   const nodes = [];
   const work = arr.slice();
@@ -2916,8 +2919,8 @@ function buildTree(arr) {
 }
 
 function* trace() {
-  const a = [8, 2, 5, 13, 4, 19, 12, 6, 3, 11, 10, 7, 9];
-  const R0 = a.length - 1;                               // 12
+  const a = [1, 2, 3, 4, 5, 6, 7];
+  const R0 = a.length - 1;                               // 6
   const tree = buildTree(a);
   const state = new Map(tree.map(n => [n.id, 'pending'])); // pending | active | exited
   const sorted = new Set();                              // indices in final position (green)
@@ -2928,8 +2931,7 @@ function* trace() {
   let pivotCell = null;           // the persistent amber pivot cell (first partition only)
   let markL = null, markR = null; // l and r marker positions (the current segment bounds)
   let curNode = null;             // node id whose step is showing now (blue fill)
-  let firstSummaryDone = false;   // say "i and j are no longer tracked" exactly once
-  let singleNoteDone = false;     // the empty/single explanation, once
+  let firstSummaryDone = false;   // say "each partition is one move" exactly once
 
   const markers = () => {
     const m = [];
@@ -2943,7 +2945,7 @@ function* trace() {
   /* The array: green (`sorted`, permanent) wins, then a cell acted on this step
    * (`active`, blue fill), then the amber `compared` outline — the scanned cell in
    * the first partition, or the whole segment being partitioned in the summary,
-   * plus the persistent first-partition pivot cell. */
+   * plus the persistent first-partition pivot cell. The values never change. */
   const arrayPanel = (compared, active) => ({
     render: 'box',
     rowLabel: 'a',
@@ -2957,10 +2959,11 @@ function* trace() {
     markers: markers(),
   });
 
-  /* The recursion tree. Node label is the range ([l..r], or [l] for a leaf); once
-   * a partition's pivot is placed (green), the node shows p=<pivot>. `active` (blue
-   * fill) marks the node whose step is current; `state` is the outline — pending
-   * (dim), active (blue), exited (green). */
+  /* The recursion tree — a single descending chain. Node label is the range
+   * ([l..r], or [l] for the leaf); once a partition's pivot is placed (green), the
+   * node shows p=<pivot>. `active` (blue fill) marks the node whose step is
+   * current; `state` is the outline — pending (dim), active (blue), exited
+   * (green). */
   const treePanel = () => ({
     layout: 'tree',
     nodes: tree.map(nd => ({
@@ -2989,92 +2992,77 @@ function* trace() {
     panels: { array: arrayPanel(compared, active), tree: treePanel(), vars: varsPanel(hot) },
   });
 
-  /* ============ the FIRST partition, in full detail (lines 8..17) ============ */
-
-  function* scanI() {
-    while (i <= R0 && a[i] <= pivot) {
-      yield snap({ line: 12, tag: 'compare', hot: 'i', compared: [i],
-        narrate: `a[${i}] is ${a[i]}, which is ≤ the pivot ${pivot}, so i moves on.` });
-      i += 1;
-    }
-    yield snap({ line: 12, tag: 'compare', hot: 'i', compared: [i],
-      narrate: `a[${i}] is ${a[i]}, which is bigger than the pivot ${pivot}. i stops here — ${a[i]} is on the wrong side.` });
-  }
-  function* scanJ() {
-    while (a[j] > pivot) {
-      yield snap({ line: 13, tag: 'compare', hot: 'j', compared: [j],
-        narrate: `a[${j}] is ${a[j]}, which is bigger than the pivot, so j moves on.` });
-      j -= 1;
-    }
-    yield snap({ line: 13, tag: 'compare', hot: 'j', compared: [j],
-      narrate: `a[${j}] is ${a[j]}, which is ≤ the pivot ${pivot}. j stops here.` });
-  }
-  function* whileTop() {
-    yield snap({ line: 11, tag: 'test',
-      narrate: `i is ${i}, j is ${j} — i is not past j, so there is still a stretch between them to scan.` });
-  }
-  function* swapIJ(narrate, note) {
-    yield snap({ line: 14, tag: 'test', active: [i, j],
-      narrate: `i is ${i}, j is ${j}. i is left of j, so their two values are on the wrong sides — swap them.` });
-    const vi = a[i], vj = a[j];
-    a[i] = vj; a[j] = vi;
-    yield snap({ line: 15, tag: 'swap', narrate, note, active: [i, j] });
-  }
-
+  /* ============ the FIRST partition, in full detail (lines 8..17) ============
+   * On already-sorted data the outer while runs exactly ONCE: i stops at the first
+   * comparison, j trudges the whole way down to the pivot, they cross without ever
+   * swapping, and the pivot swaps with itself. */
   function* firstPartition() {
     curNode = id(0, R0); state.set(curNode, 'active');
     markL = 0; markR = R0;
     // SETUP (lines 8, 9, 10)
     pivot = a[0]; pivotCell = 0;
-    yield snap({ line: 8, tag: 'assign', hot: 'pivot', narrate: 'The simplest pivot is the first value: 8.' });
+    yield snap({ line: 8, tag: 'assign', hot: 'pivot', note: IDENTICAL_NOTE,
+      narrate: 'The pivot is the first value: 1. It is also the smallest value in the array, which is the whole problem.' });
     i = 1;
     yield snap({ line: 9, tag: 'assign', hot: 'i', narrate: 'i starts just to the right of the pivot, at index 1.' });
     j = R0;
-    yield snap({ line: 10, tag: 'assign', hot: 'j', note: WALK_NOTE, narrate: 'j starts at the far right, index 12.' });
-    // ITERATION 1 (i:1->3, j:12->11, swap)
-    yield* whileTop(); yield* scanI(); yield* scanJ();
-    yield* swapIJ('13 and 7 trade places. Both are now on the side they belong on.', FIRST_SWAP_NOTE);
-    // ITERATION 2 (i:3->5, j:11->8, swap)
-    yield* whileTop(); yield* scanI(); yield* scanJ();
-    yield* swapIJ('19 and 3 trade places.');
-    // ITERATION 3 (i:5->6, j:8->7, swap)
-    yield* whileTop(); yield* scanI(); yield* scanJ();
-    yield* swapIJ('12 and 6 trade places.');
-    // ITERATION 4 — the crossing, no swap
-    yield* whileTop(); yield* scanI(); yield* scanJ();
-    yield snap({ line: 14, tag: 'test', note: CROSS_NOTE,
-      narrate: 'i is 7 and j is 6 — j has passed i. There is nothing left between them, so there is nothing to swap.' });
-    // loop exit
-    yield snap({ line: 11, tag: 'test', narrate: '7 ≤ 6 is false, so the scanning is over.' });
-    // final swap (line 16): pivot -> index 6, GREEN
-    { const vl = a[0], vj = a[j]; a[0] = vj; a[j] = vl; }
-    pivotCell = null; sorted.add(6); i = null; j = null; pivot = 8;
+    yield snap({ line: 10, tag: 'assign', hot: 'j', narrate: 'j starts at the far right, index 6.' });
+    // the single outer iteration
+    yield snap({ line: 11, tag: 'test',
+      narrate: 'i is 1, j is 6 — i is not past j, so there is a stretch between them to scan.' });
+    // i-scan: ONE comparison, i stops at once
+    yield snap({ line: 12, tag: 'compare', hot: 'i', compared: [i],
+      narrate: 'a[1] is 2, which is bigger than the pivot. i stops at once — there is nothing to its left that belongs on the other side.' });
+    // j-scan: six moves down the whole array, then the pivot stops it
+    let moveNo = 0;
+    while (a[j] > pivot) {
+      moveNo += 1;
+      yield snap({ line: 13, tag: 'compare', hot: 'j', compared: [j],
+        note: moveNo === 3 ? WALK_NOTE : undefined,
+        narrate: `${a[j]} is bigger, j moves on.` });
+      j -= 1;
+    }
+    yield snap({ line: 13, tag: 'compare', hot: 'j', compared: [j],
+      narrate: 'a[0] is 1 — the pivot itself, which is not bigger than the pivot. j finally stops, at index 0.' });
+    // if i < j — FALSE, no swap. Neither cell is acted on: no blue fill.
+    yield snap({ line: 14, tag: 'test',
+      narrate: 'i is 1 and j is 0. i is not left of j — they crossed before they ever met a value worth swapping, so nothing is swapped.' });
+    // loop exit (line 11 re-test)
+    yield snap({ line: 11, tag: 'test',
+      narrate: '1 ≤ 0 is false, so the loop is over. Not one value was swapped.' });
+    // final swap (line 16): pivot -> index 0, GREEN. It swaps with itself.
+    { const vl = a[0], vj = a[j]; a[0] = vj; a[j] = vl; }   // a[0] <-> a[0]: nothing moves
+    pivotCell = null; sorted.add(0); i = null; j = null; pivot = 1;
     yield snap({ line: 16, tag: 'swap', note: PLACED_NOTE, active: [0],
-      narrate: 'The pivot trades places with a[j]. 8 is now green — this is its final position in the sorted array, and nothing will move it again.' });
+      narrate: 'The pivot swaps with a[0] — with itself. Nothing moves. 1 is now green: its final position is index 0, exactly where it began.' });
     // return (line 17): the seam
     markL = null; markR = null; pivot = null;
     yield snap({ line: 17, tag: 'return', note: SEAM_NOTE,
-      narrate: 'partition returns 6 — the index where the pivot ended up.' });
+      narrate: 'partition returns 0 — the index where the pivot ended up. The left side is empty; the right side is everything else.' });
     state.set(curNode, 'exited'); curNode = null;
   }
 
-  /* ============ a SUMMARIZED partition — 3 steps (line 3) ============ */
+  /* ============ a SUMMARIZED partition — 3 steps (line 3) ============
+   * Same three-step shape as sorting-quicksort-partition. On sorted data the pivot
+   * is already in place every time: nothing moves, but j still had to walk the
+   * whole segment to prove it. */
   function* summarizedPartition(l, r, ctx) {
     const nid = id(l, r);
     const plan = partitionPlan(a, l, r);
     curNode = nid; state.set(nid, 'active');
     markL = l; markR = r; i = null; j = null; pivot = a[l];
     const seg = []; for (let k = l; k <= r; k++) seg.push(k);
-    const where = ctx ? ` — everything ${ctx.side} of the ${ctx.pivotVal}` : '';
+    const where = ctx ? ` — everything to the right of the ${ctx.pivotVal}` : '';
     const note = firstSummaryDone ? undefined
-      : 'From here i and j are not tracked — they show as dashes. Watch the pivot of each segment turn green.';
+      : 'From here each partition is shown as a single move — but each one still walks j all the way down, ' +
+        'exactly as you just watched. i and j are no longer tracked; they show as dashes. Watch the pivot ' +
+        'of each segment turn green, one cell to the right, and the tree grow one more level down.';
     firstSummaryDone = true;
     // 1. the call — the segment is highlighted so it is clear WHICH part is worked on
     yield snap({ line: 3, tag: 'call', compared: seg, note,
       narrate: `quicksort now partitions indices ${l} to ${r}${where}.` });
-    // 2. the segment rearranges in one move; the pivot cell takes the blue fill.
-    // Some partitions move nothing — the pivot is already in place and every value
-    // is already on the correct side (partition(11,12) swaps a[11] with itself).
+    // 2. the segment does not rearrange — the pivot is already in place. The pivot
+    // cell takes the blue fill; every other value stays put.
     const before = a.slice(l, r + 1);
     const moved = before.some((v, k) => v !== plan.seg[k]);
     for (let k = l; k <= r; k++) a[k] = plan.seg[k - l];
@@ -3082,7 +3070,7 @@ function* trace() {
     yield snap({ line: 3, tag: 'partition', compared: seg.filter(k => k !== plan.p), active: [plan.p],
       narrate: moved
         ? `The pivot is ${plan.pivotVal}. It moves to index ${plan.p} — everything smaller ends to its left, everything larger to its right.`
-        : `The pivot is ${plan.pivotVal}, already in place: everything here is on the correct side of it, so no value moves. It still takes its final position.` });
+        : `The pivot is ${plan.pivotVal}. Every value to its right is larger, so it stays at index ${plan.p} — but j still had to walk the whole way down to prove it. Nothing moves.` });
     // 3. the pivot is placed for good — green
     sorted.add(plan.p);
     const done = sorted.size === a.length;
@@ -3100,13 +3088,11 @@ function* trace() {
     markL = idx; markR = idx; i = null; j = null; pivot = null;
     sorted.add(idx);
     const done = sorted.size === a.length;
-    const note = done ? FINAL_NOTE_LINKED : (singleNoteDone ? undefined : SINGLE_NOTE);
-    singleNoteDone = true;
     yield snap({ line: 2, tag: 'base',
       narrate: done
         ? 'Every value is in its final position. The array is sorted.'
         : `quicksort(a, ${idx}, ${idx}) — one value, so l < r is false and there is nothing to do. It is already in its final position.`,
-      note });
+      note: done ? FINAL_NOTE_LINKED : undefined });
     curNode = null;
   }
 
@@ -3118,29 +3104,29 @@ function* trace() {
     yield* qsort(l, p - 1, { pivotVal: a[p], side: 'left' }, false);
     yield* qsort(p + 1, r, { pivotVal: a[p], side: 'right' }, false);
   }
-  // the first partition returns its split index (6) for the recursion
-  function* firstPartitionAndReturn() { yield* firstPartition(); return 6; }
+  // the first partition returns its split index (0) for the recursion
+  function* firstPartitionAndReturn() { yield* firstPartition(); return 0; }
 
   /* ---------- STEP 0 — nothing has executed ---------- */
   curNode = id(0, R0); state.set(curNode, 'active'); markL = 0; markR = R0;
   yield snap({ line: null, tag: 'init', note: OPEN_NOTE,
-    narrate: 'Thirteen values, unsorted. l and r mark the part of the array we are working on — here, all of it.' });
+    narrate: 'Seven values, already in order. l and r mark the part of the array we are working on — here, all of it. Quicksort does not know it is already sorted.' });
 
   yield* qsort(0, R0, null, true);
 }
 
 const SPEC = {
-  title: 'Quicksort: sorting by repeated partitioning',
-  subtitle: 'One partition in full, then the same move all the way down',
+  title: 'When quicksort goes wrong',
+  subtitle: 'The same code, on data that is already sorted',
   profile: 'standard',
   columns: 2,
   languages: ['pseudo', 'cpp', 'java'],
 
-  // Four panels. The array and the recursion tree are BOTH structure panels; the
-  // array alone is ~1030px, so they cannot share a row — the engine stacks them
-  // vertically (each on its own row, neither scrolling horizontally). The code and
-  // the compact Variables strip share the row above. Everything resolves once on
-  // load and holds, so nothing moves as steps advance (pac.verifyHeights()).
+  // Four panels, the same four as sorting-quicksort-partition. The array is the
+  // widest structure; the recursion tree is TALL and NARROW (a degenerate chain),
+  // so it packs beside the code while the array keeps its own row. Everything
+  // resolves once on load and holds, so nothing moves as steps advance
+  // (pac.verifyHeights()).
   panels: [
     { type: 'code',  id: 'code',  title: 'quicksort',
       listings: LISTINGS, labels: { pseudo: 'pseudocode', cpp: 'C++', java: 'Java' } },

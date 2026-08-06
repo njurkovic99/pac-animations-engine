@@ -234,6 +234,7 @@ Pseudocode canonical; Java and C++ as toggles.
 | 7 | Recursion — Hanoi | `recursion-hanoi` | S | — |
 | 8 | Algorithm analysis | `complexity-growth-curves` | **G** | — |
 | 9 | Quicksort partition | `sorting-quicksort-partition` | S | **A6 (KEY)** |
+| 9a | Quicksort — **worst case** (already-sorted input) | `sorting-quicksort-worstcase` | **P** | A6 |
 | 10 | Heap — validity | `heap-is-this-valid` | **P** | — |
 | 11 | Heapsort — **build the heap** (part 1 of 2) | `sorting-heapify` | S | A7 (part 1) |
 | 12 | Heapsort — array ↔ tree, extract & sink (part 2 of 2) | `sorting-heapsort-dual` | S | A7 (part 2) |
@@ -246,6 +247,21 @@ Pseudocode canonical; Java and C++ as toggles.
 | 19 | Tree height | `trees-recursive-height` | T | **A12** |
 | 20 | Graphs — matrix ↔ list | `graphs-representations` | S | **A13** |
 | 21 | Graph traversal | `graphs-bfs-dfs` | S | — |
+
+**Quicksort worst case (row 9a).** A companion to row 9, running the *same
+partition code, character for character* on an already-sorted array
+`[1,2,3,4,5,6,7]`. It answers the challenge `sorting-quicksort-partition` ends on
+("trace an array that is already sorted") and the two are cross-linked in their
+final notes. The payoff is a **shape**: where row 9's thirteen values build a
+balanced four-level tree, row 9a's seven values build a straight descending chain
+of seven levels — the recursion tree the lecture describes when it says the sort
+"turns into an O(n²) sort, just like a bubble sort." The array never changes; the
+green settled region fills strictly left-to-right, one cell per partition. Its
+final note links forward to `sorting-heapify` — a sort whose worst case is still
+O(n log n). Not a separate KEY; it deepens A6. The degenerate tree is *taller than
+the structure ceiling by design* — it scrolls vertically within its panel (active
+node kept in view), because shrinking the one shape that IS the lesson would defeat
+it.
 
 **Heapsort split (A7).** Heapsort was one animation (`sorting-heapsort-dual`); it
 ran too long, so building the max heap is split off into `sorting-heapify` (part
