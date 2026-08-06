@@ -174,7 +174,7 @@ Roles, grouped by meaning:
 
 Treatments that are implemented in `engine/styles.css` (verify here before using a
 role): `member` (full border), `stale` (greyed, no border), `empty` (dashed border +
-placeholder glyph), `active` (blue FILL — a cell being acted on this step),
+faint X, blank value slot), `active` (blue FILL — a cell being acted on this step),
 `compared` (amber outline — read/compared this step, or a displaced value like a
 partition pivot), `ok` (green outline), `error` (red border + text), and `sorted`
 (green FILL — a value in its **final sorted position**, permanent, never released).
@@ -752,17 +752,21 @@ cell's contents changed.
 |---|---|---|
 | member | full border, value at normal weight | part of the structure now |
 | `stale` | value still shown, greyed (~40%), no member outline | was written, no longer part of the structure |
-| `empty` | dashed/dim border, faint placeholder glyph | no meaningful value yet |
+| `empty` | dashed/dim border, faint X across the interior, value slot blank | no meaningful value yet |
 
 The member/stale distinction carries the weight — a student must read "no longer in the
 queue" without effort. **Distinguish states by shape and outline, not brightness
 alone**; two things differing only in opacity are hard to tell apart at a glance.
 
-**One placeholder glyph, used everywhere.** The same mark serves an unwritten array cell
-and a standalone variable with no meaningful value yet (`ch` before the first
-assignment). There is no principled difference: both are declared storage holding an
-indeterminate value. An early draft of this rule invented a distinction that does not
-exist. Membership is carried by outline, greying, and markers — not by the glyph.
+**One placeholder, used everywhere.** The same mark — a faint X drawn corner to corner
+across the cell, with **nothing in the value slot** — serves an unwritten array cell and a
+standalone variable with no meaningful value yet (`ch` before the first assignment). There
+is no principled difference: both are declared storage holding an indeterminate value. An
+early draft of this rule invented a distinction that does not exist. Membership is carried
+by outline, greying, and markers — not by the glyph. **No character (not a dash) sits in
+the slot:** a dash reads as a value, and next to the sorting animations' negatives (-1, -3)
+specifically as a minus sign; the X alone carries the whole meaning. The X stays fainter
+than any real value and differs from a `stale` value by SHAPE, not brightness.
 
 **A real value always shows itself.** A variable holding a sentinel renders that
 sentinel at normal weight, never as a placeholder: `front -1` is a stored value the code

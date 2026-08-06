@@ -309,8 +309,11 @@ function* trace() {
 
   /* ================================ the trace ================================ */
 
-  // STEP 0 — nothing has executed. The valid max heap heapify produced.
-  yield snap({ line: null, tag: 'init', note: OPEN_NOTE,
+  // STEP 0 — nothing has executed. The valid max heap heapify produced. The note
+  // links BACK to part 1 here, at the opening — a student landing on part 2 first
+  // needs the prerequisite when they arrive, not when they leave.
+  yield snap({ line: null, tag: 'init',
+    note: [OPEN_NOTE, ' ', { href: 'sorting-heapify.html', text: 'See how this heap was built' }],
     narrate: 'A valid max heap. The largest value, 9, is at the root — the same six values as a tree and as an array.' });
 
   // main calls sort (line 21). The call has a visible origin.

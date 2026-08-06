@@ -37,7 +37,12 @@
  * cell whose value varies in length (e.g. an error name) never resizes the strip
  * as the value changes — the width analogue of the engine's reserved heights. */
 
-const PLACEHOLDER = '—';   // em-dash: the value of indeterminate storage
+// Indeterminate storage renders as the X ALONE (drawn in CSS across an `empty`
+// cell). No character sits in the value slot: a dash there can read as a value --
+// specifically as a minus sign next to the sorting animations' negative numbers
+// (-1, -3). The empty string still reserves the value slot's height (min-height),
+// so an empty cell keeps a member's dimensions. (A7 item 55.)
+const PLACEHOLDER = '';
 
 export function mount(body) { body.innerHTML = '<div class="pac-cells"></div>'; }
 
@@ -97,7 +102,7 @@ export function render(body, data, ctx) {
     col.className = 'pac-cell-col pac-cell-parked';
     const box = document.createElement('div');
     box.className = 'pac-cell';
-    box.innerHTML = '<span class="pac-cell-value">—</span>';   // reserves the box band height
+    box.innerHTML = '<span class="pac-cell-value"></span>';    // hidden; reserves the box band height only
     const index = document.createElement('div');
     index.className = 'pac-cell-index';
     index.textContent = '[0]';                                 // reserves the index band height
@@ -117,11 +122,11 @@ export function render(body, data, ctx) {
     // the engine's reserved heights (master invariant).
     if (c.minCh) cell.style.minWidth = `${c.minCh}ch`;
     if (mode === 'bar') cell.style.height = `${20 + 70 * (+c.value / max)}px`;
-    // ONE placeholder glyph for indeterminate storage — an unwritten array cell
-    // and an unassigned standalone variable are the same thing. An `empty` cell
-    // always shows the em-dash "—" (over the dashed box + faint X from CSS),
-    // never a real value. A real stored value (including a sentinel like -1) is
-    // NOT `empty` and renders normally.
+    // ONE placeholder for indeterminate storage — an unwritten array cell and an
+    // unassigned standalone variable are the same thing: an `empty` cell, drawn as
+    // the dashed box + faint X from CSS with NOTHING in the value slot. A real
+    // stored value (including a sentinel like -1) is NOT `empty` and renders
+    // normally.
     const value = c.role === 'empty' ? PLACEHOLDER : c.value;
     cell.innerHTML = (!markers && c.label ? `<span class="pac-cell-label">${esc(c.label)}</span>` : '') +
                      `<span class="pac-cell-value">${esc(value)}</span>`;

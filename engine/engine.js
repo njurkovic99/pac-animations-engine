@@ -1094,10 +1094,12 @@ const DANGER_MARK = '⚠';
  * Render segmented content (narration or a note) into `el`.
  *
  * `content` is either a plain string (the common case -- nearly every step),
- * or an array of segments. A segment is a string, or an object; an object with
- * `danger: true` renders a leading red ⚠ and the danger-red colour (--error),
- * naming a memory-integrity violation. Returns true iff anything was written,
- * so the caller can collapse an empty note box.
+ * or an array of segments. A segment is a string, or an object:
+ *   - `{ danger: true, text }` renders a leading red ⚠ and the danger-red colour
+ *     (--error), naming a memory-integrity violation.
+ *   - `{ href, text }` renders an inline link (opens in a new tab) -- used to
+ *     bridge related animations, e.g. part 2's opening note back to part 1.
+ * Returns true iff anything was written, so the caller can collapse an empty note.
  */
 function renderSegments(el, content) {
   el.textContent = '';
@@ -1114,6 +1116,15 @@ function renderSegments(el, content) {
       span.className = 'pac-danger';
       span.textContent = `${DANGER_MARK} ${seg.text ?? ''}`;
       el.appendChild(span);
+      wrote = true;
+    } else if (typeof seg.href === 'string') {
+      const a = document.createElement('a');
+      a.className = 'pac-seg-link';
+      a.href = seg.href;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.textContent = seg.text ?? seg.href;
+      el.appendChild(a);
       wrote = true;
     } else if (typeof seg.text === 'string') {
       el.appendChild(document.createTextNode(seg.text));
