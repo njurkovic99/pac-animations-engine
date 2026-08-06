@@ -683,7 +683,16 @@ export class Engine {
       if (el === this.stage) continue;
       const c = getComputedStyle(el);
       if (c.display === 'none') continue;
-      avail -= el.offsetHeight + parseFloat(c.marginTop) + parseFloat(c.marginBottom);
+      // The note box is the one footer element allowed to GROW past its reservation
+      // to fit a long closing note (it is the last element on the page, so growing
+      // pushes nothing). Charge the stage only its RESERVED --note-h, never its
+      // grown height, so a long note spills into the bottom slack instead of
+      // shrinking the stage -- which is what keeps the controls fixed as steps
+      // advance regardless of note length. Every other child uses its live height.
+      const h = el === this.noteBox
+        ? (parseFloat(getComputedStyle(root).getPropertyValue('--note-h')) || el.offsetHeight)
+        : el.offsetHeight;
+      avail -= h + parseFloat(c.marginTop) + parseFloat(c.marginBottom);
     }
     const sm = getComputedStyle(this.stage);
     avail -= parseFloat(sm.marginTop) + parseFloat(sm.marginBottom);

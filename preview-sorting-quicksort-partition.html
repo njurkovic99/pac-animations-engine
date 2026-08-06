@@ -270,11 +270,21 @@ body {
   border-radius: var(--radius);
   padding: 10px 14px;
   margin-top: 8px;
-  /* Reserved at a constant height so a note appearing or disappearing never
-   * moves anything above it (the controls) -- see the footer note in :root. A
-   * longer note scrolls internally rather than growing the box. */
-  height: var(--note-h);
-  overflow: auto;
+  /* Reserved at a constant MINIMUM height, and the ONE box allowed to grow past
+   * its reservation instead of scrolling. The note is the LAST element on the
+   * page -- nothing sits below it -- so growing it downward pushes nothing. Every
+   * OTHER panel is capped precisely because something below it would move.
+   *   - min-height keeps the reservation: an empty or short note leaves the slot
+   *     exactly --note-h tall, so a note appearing or disappearing never shifts
+   *     the controls above it (the whole reason the reservation exists).
+   *   - a note LONGER than the reservation extends BELOW the slot, into the bottom
+   *     slack the stage leaves empty -- to fit its full text, no internal scrollbar
+   *     ever. The stage is sized against the RESERVED --note-h, never this grown
+   *     height (see _availableStageHeight), so the growth spills into that slack
+   *     and the stage / controls / narration keep their exact positions.
+   * The narration bar above is deliberately NOT part of this exception: it stays a
+   * fixed height (it sits above the note, and capping it keeps the two distinct). */
+  min-height: var(--note-h);
   color: var(--text-dim);
   font-size: 13px;
   line-height: 1.55;
@@ -2266,7 +2276,16 @@ class Engine {
       if (el === this.stage) continue;
       const c = getComputedStyle(el);
       if (c.display === 'none') continue;
-      avail -= el.offsetHeight + parseFloat(c.marginTop) + parseFloat(c.marginBottom);
+      // The note box is the one footer element allowed to GROW past its reservation
+      // to fit a long closing note (it is the last element on the page, so growing
+      // pushes nothing). Charge the stage only its RESERVED --note-h, never its
+      // grown height, so a long note spills into the bottom slack instead of
+      // shrinking the stage -- which is what keeps the controls fixed as steps
+      // advance regardless of note length. Every other child uses its live height.
+      const h = el === this.noteBox
+        ? (parseFloat(getComputedStyle(root).getPropertyValue('--note-h')) || el.offsetHeight)
+        : el.offsetHeight;
+      avail -= h + parseFloat(c.marginTop) + parseFloat(c.marginBottom);
     }
     const sm = getComputedStyle(this.stage);
     avail -= parseFloat(sm.marginTop) + parseFloat(sm.marginBottom);
@@ -2871,6 +2890,12 @@ const FINAL_NOTE =
   'SORTED — 1 2 3 4 5 — with the first value as pivot. Where does the pivot end up? How big are the two ' +
   'sides? A tree with n levels instead of log n makes quicksort as slow as bubble sort.';
 
+/* The final note's challenge — "trace an already-sorted array" — is answered by a
+ * companion animation running this exact code on [1,2,3,4,5,6,7]. The link is the
+ * answer; it sits at the END of the note, after the questions. Same link-in-note
+ * mechanism as sorting-heapify / sorting-heapsort-dual. */
+const FINAL_NOTE_LINKED = [FINAL_NOTE, ' ', { href: 'sorting-quicksort-worstcase.html', text: 'See what happens when the array is already sorted' }];
+
 /* Simulate one partition on a copy of arr[l..r]; return the split index, the
  * resulting segment values, and the pivot value at its resting place. Pure — used
  * to precompute the recursion tree and each summarized partition's end state. */
@@ -3082,7 +3107,7 @@ function* trace() {
     const done = sorted.size === a.length;
     yield snap({ line: 3, tag: 'sorted',
       narrate: done ? 'Every value is in its final position. The array is sorted.' : `${plan.pivotVal} is in its final position.`,
-      note: done ? FINAL_NOTE : undefined });
+      note: done ? FINAL_NOTE_LINKED : undefined });
     state.set(nid, 'exited'); curNode = null; pivot = null;
     return plan.p;
   }
@@ -3094,7 +3119,7 @@ function* trace() {
     markL = idx; markR = idx; i = null; j = null; pivot = null;
     sorted.add(idx);
     const done = sorted.size === a.length;
-    const note = done ? FINAL_NOTE : (singleNoteDone ? undefined : SINGLE_NOTE);
+    const note = done ? FINAL_NOTE_LINKED : (singleNoteDone ? undefined : SINGLE_NOTE);
     singleNoteDone = true;
     yield snap({ line: 2, tag: 'base',
       narrate: done

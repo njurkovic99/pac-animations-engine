@@ -266,11 +266,21 @@ body {
   border-radius: var(--radius);
   padding: 10px 14px;
   margin-top: 8px;
-  /* Reserved at a constant height so a note appearing or disappearing never
-   * moves anything above it (the controls) -- see the footer note in :root. A
-   * longer note scrolls internally rather than growing the box. */
-  height: var(--note-h);
-  overflow: auto;
+  /* Reserved at a constant MINIMUM height, and the ONE box allowed to grow past
+   * its reservation instead of scrolling. The note is the LAST element on the
+   * page -- nothing sits below it -- so growing it downward pushes nothing. Every
+   * OTHER panel is capped precisely because something below it would move.
+   *   - min-height keeps the reservation: an empty or short note leaves the slot
+   *     exactly --note-h tall, so a note appearing or disappearing never shifts
+   *     the controls above it (the whole reason the reservation exists).
+   *   - a note LONGER than the reservation extends BELOW the slot, into the bottom
+   *     slack the stage leaves empty -- to fit its full text, no internal scrollbar
+   *     ever. The stage is sized against the RESERVED --note-h, never this grown
+   *     height (see _availableStageHeight), so the growth spills into that slack
+   *     and the stage / controls / narration keep their exact positions.
+   * The narration bar above is deliberately NOT part of this exception: it stays a
+   * fixed height (it sits above the note, and capping it keeps the two distinct). */
+  min-height: var(--note-h);
   color: var(--text-dim);
   font-size: 13px;
   line-height: 1.55;
