@@ -139,7 +139,7 @@ with per-field anchors), STREAM (console I/O), CHART (series over n), **CALLSTAC
 
 ---
 
-## WHAT'S DONE (5 animations, all merged to main + live)
+## WHAT'S DONE (10 animations, all merged to main + live)
 
 1. **recursion-fib-levels** (ds A5) — recursion trace, `level`/`depth` node meta.
 2. **lists-doubly-insert-order** (ds A10) — 4-line doubly-linked insertion; the
@@ -149,6 +149,11 @@ with per-field anchors), STREAM (console I/O), CHART (series over n), **CALLSTAC
    **CELLS rendering contract** and the **master layout invariant**. Renamed the
    CALLSTACK panel to **"Function calls"** (student-visible only) so it can't be
    confused with the actual stack in A3/A4.
+10. **sorting-quicksort-worstcase** (ds) — already-sorted input; nothing ever moves.
+9. **sorting-heapsort-dual** (ds A7) — extraction, shrinking tree, green from the right.
+8. **sorting-heapify** (ds) — building the heap, dual tree+array view.
+7. **sorting-quicksort-partition** (ds A6 KEY) — partition in full + the whole sort.
+6. **stacks-postfix-eval** (ds A4) — the operand-order trap; the clean one-round build.
 5. **stacks-paren-scanner** (ds A3) — array stack + scanner, three expressions each
    isolating one error, ending on the post-loop check the lecture leaves as an open
    question. Added the **vertical CELLS mode** (column, [0] at bottom, markers left).
@@ -184,7 +189,59 @@ deferred): append `?a=ds-a1` to the src.
 
 ---
 
-## WHERE WE STOPPED — A3 SHIPPED. NEXT UP: `stacks-postfix-eval` (ds A4)
+## WHERE WE STOPPED — THE SORTING BLOCK IS DONE. NEXT: `sorting-timing-chart`
+
+**10 animations** built, reviewed, merged, live. The sorting block is complete and
+chained by links.
+
+**Next: `sorting-timing-chart` (ds A7's second backer).** It debuts the **CHART
+renderer — designed in panel-inventory, never built** (check HANDOFF's designed-vs-built
+table). ds7 asks students to plot heapsort against a slow sort over increasing n, so it
+pairs directly with the heapsort animations. It is a one-new-capability build, not a
+pure inherit — budget accordingly.
+
+**Ten ds animations remain** (the slate grew from 20 to 22 with `sorting-heapify` and
+`sorting-quicksort-worstcase`):
+- *Cheap, pure inherit:* `recursion-factorial-stack`, `recursion-hanoi`,
+  `heap-is-this-valid`, `pointers-address-model`
+- *Moderate:* `lists-insert-alpha` (A9), `trees-bst-operations` (A11),
+  `trees-recursive-height` (A12), `hashing-collision-strategies` (A8)
+- *New capability:* `sorting-timing-chart` (CHART), `graphs-representations` (A13) and
+  `graphs-bfs-dfs` (graph layout, which NODES nominally supports but has never done)
+- *Shared:* `complexity-growth-curves` (also aJava, needs CHART)
+
+The trees and graphs will stress the structure-region height ceiling. If they hold, the
+layout rules are settled.
+
+---
+
+## THE SORTING BLOCK — five animations, one lesson
+
+Built in this order, each linking to the next at the moment its own note raises the
+question:
+
+    sorting-quicksort-partition  — partition in full, then the whole sort via the
+                                   recursion tree; ends with all 13 cells green
+              -> "what if the array is already sorted?"
+    sorting-quicksort-worstcase  — [1..7], nothing ever moves, tree degenerates to a
+                                   straight line; the O(n^2) claim made visible
+              -> "see a sort that cannot degenerate"
+    sorting-heapify              — [1,9,2,4,6,8] -> [9,6,8,4,1,2], dual tree+array view
+              -> "see how the values actually get sorted"
+    sorting-heapsort-dual        — extraction; the tree SHRINKS as green grows from the
+                                   right; ends [1,2,4,6,8,9]
+              -> back to heapify: "see how this heap was built"
+
+All traces verified frame-by-frame against the lecture diagrams (`qs.html`, `hs.html`).
+
+**Splitting heapsort into two animations was the right call** and is the model for any
+algorithm with two distinct phases: heapify and extraction are separate functions,
+separate diagrams, separate ideas, and part 2 opens on exactly the array part 1
+produced. The seam is invisible if viewed back to back.
+
+---
+
+## (superseded) A3 notes — kept for the design record
 
 **5 animations** built, reviewed, merged, live. `stacks-paren-scanner` (ds A3) came
 with a substantial engine rebuild — see "WHAT A3 COST" below before estimating A4.

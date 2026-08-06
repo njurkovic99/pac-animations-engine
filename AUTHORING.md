@@ -172,30 +172,10 @@ Roles, grouped by meaning:
 | this-step activity | `active`, `compared`, `swapped`, `probe` |
 | outcome | `sorted`, `ok`, `error` |
 
-Treatments that are implemented in `engine/styles.css` (verify here before using a
-role): `member` (full border), `stale` (greyed, no border), `empty` (dashed border +
-faint X, blank value slot), `active` (blue FILL — a cell being acted on this step),
-`compared` (amber outline — read/compared this step, or a displaced value like a
-partition pivot), `ok` (green outline), `error` (red border + text), and `sorted`
-(green FILL — a value in its **final sorted position**, permanent, never released).
-`swapped` and `probe` have no distinct treatment; use `active` for a swap and
-`compared` for a probe until one is genuinely needed.
-
-**`sorted` vs `ok`, and the two green channels.** `sorted` is green *fill*; a stable
-structure member (a linked-list node linked in) is green *outline*. Different channels
-— outline = membership, fill = activity/state — so a cell can carry both if ever
-needed, and there is no ambiguity. Green fill and blue fill are **mutually exclusive**:
-a value in its final place is not being acted on, so a cell taking `sorted` drops any
-`active` fill on the same step. Every sorting animation uses `sorted` for its settled
-region (heapsort grows it from the right, bubble/selection from the end, insertion from
-the left); a finished sort ends with every cell green. Do not invent a different
-treatment for a settled region.
-
 > **Open item:** `AUTHORING.md` and `PANEL-INVENTORY.md` historically listed two
 > different, non-overlapping role sets. The table above is the union as understood
-> after `queues-count-vs-rear`, with treatments reconciled against `engine/` after
-> `sorting-quicksort-partition`. Do not add a role without checking whether an
-> existing one already means it.
+> after `queues-count-vs-rear`. Verify against `engine/` and correct both docs. Do
+> not add a role without checking whether an existing one already means it.
 
 Serves arrays, sorting bars, hash buckets, matrices, memory blocks, variable
 tables, stack frames, vtables. Full rendering rules in Part 5.
@@ -398,6 +378,37 @@ narration (the bar — what THIS line does, right now, one or two sentences, pre
 tense). If it's about the *algorithm, a pitfall, or a what-if*, it's a note (the
 box).
 
+## Links between animations
+
+A note may carry a link to another animation, appearing only while that note shows:
+
+```js
+note: [
+  "…challenge text…",
+  { link: { href: 'sorting-heapsort-dual.html',
+            text: 'See how the values actually get sorted' } }
+]
+```
+
+- **Opens in a new tab** (`target="_blank"`, `rel="noopener"`). Required, not
+  optional: these are usually embedded in a Canvas iframe, and a plain link would load
+  a full animation inside a small box with no way back.
+- **Relative href**, so it works identically on GitHub Pages, in an iframe, and in a
+  local preview. Never hardcode the Pages URL.
+- The bundled preview builder must handle a target that is not alongside it — point at
+  the live URL or render the link inert. Never emit a link that 404s.
+
+**Each link is a pedagogical decision, not a cross-reference.** Add one where an
+animation's own note raises a question that another animation answers, and put it at
+the END of that note so the student meets the question first. A link at step 0 is for
+a prerequisite the student may not have seen (heapsort-dual points back at heapify,
+since it opens on a heap someone else built).
+
+The sorting chain is the model: quicksort-partition asks what happens on sorted data →
+worstcase; worstcase says the fix is a sort that cannot degenerate → heapify; heapify
+asks how the heap gets used → heapsort-dual; and heapsort-dual points back to heapify.
+Four animations, one lesson, each seam answering a question already posed.
+
 ## The post-watch challenge
 
 An animation may end with a **challenge**: a "what if" posed to the student who
@@ -558,6 +569,18 @@ grows into it. Empty space at the foot of the shorter column, or to the right of
 last panel in a row, is the correct look — it reads as "this column has less in it,"
 which is true.
 
+### Standing practice: every engine change gets a before/after diff
+
+Any change to layout, sizing, or placement logic is re-verified across **every**
+animation in the repo before the PR opens, and the PR reports what CHANGED — panel
+positions and resolved sizes before and after, stage height before and after, and one
+line per changed animation saying whether it is an improvement, neutral, or a
+regression. Say so plainly when something got worse.
+
+A change that improves the animation being built while quietly degrading three others
+is a net loss, and the only way to know is to look every time. Do not wait to be
+asked. `pac.verifyHeights()` makes the height half of this one command.
+
 ### The sizing policy table
 
 Policy is **data, in one table**, applied by **one resolver**. This is the most
@@ -593,6 +616,22 @@ Corollary, and it cuts both ways: **unused space has no cost, but unused space i
 a hole to fill.** A panel that leaves a visible gap because it was pinned too small is
 a defect; a panel that grows past its content to close a gap is also a defect. Floors
 and ceilings, not fixed values, and not stretching.
+
+### Two exceptions to the capping rule
+
+**The note box EXPANDS rather than scrolling.** It is the last element on the page,
+so nothing sits below it and growing costs nothing. Its *reserved height* is
+unchanged — that reservation is what stops the controls moving when a note appears —
+but a note longer than the reservation extends BELOW it, into space nothing else
+occupies. Every other panel is capped precisely because something below it would
+move. The narration bar is not included: it sits above the note and is short by
+design.
+
+**A panel that fits in the width remaining on a row uses it**, rather than breaking
+to a new row because an earlier panel broke. The flow rule originally only moved
+panels *down*, so a wide structure panel breaking to its own row dragged every later
+panel with it — leaving a small panel below while the space beside the code sat
+empty. Re-test each panel against the space actually available.
 
 ### Column ends do not align, and that is correct
 
@@ -674,34 +713,9 @@ scrolled structure teaches nothing.
 - **The sum of a row's widths plus gaps never exceeds the viewport.** No panel may be
   positioned partly outside it. Off-screen content is unreachable, which is strictly
   worse than any amount of wasted space.
-- If a structure genuinely cannot fit beside the code minimum, it takes **its own
-  full-width row**, and the remaining panels pack into the rows above and below it —
-  see the packing rule next. Only a *lone* panel wider than the whole stage is the
-  "animation is too wide, redesign it" case (fewer cells, a different layout, a split
-  view); it is never resolved by shrinking a structure or letting a panel overflow.
-
-**A panel that fits in the width remaining on a row uses it — the flow packs, it does
-not only move down.** When a wide structure claims its own row, a small bookkeeping
-panel is NOT dragged below it if it would have fit in the empty width beside the code.
-Panels are placed in declaration (reading) order by **first fit**: each lands in the
-earliest row with room for it; only a panel that fits nowhere opens a new row. So a
-13-cell array (`sorting-quicksort-partition`, the widest structure the engine draws)
-resolves to *row 1: code · Variables*, *row 2: the array* — the Variables strip sits
-beside the code in the space the array left empty, not stranded below it. Declaration
-order is unchanged; this changes only WHERE a panel lands. (This packing only engages
-when a structure cannot fit beside the code; every narrower animation keeps the plain
-two-column flow, unchanged.)
-
-Because packing uses width to save height, a *second* structure often lands beside the
-code rather than on its own row: the full quicksort adds a recursion tree, and the tree
-(narrow) packs beside the code while the array keeps its own row — so the whole tree is
-visible without vertical scrolling, which stacking it under the array could not manage.
-When the packed rows still exceed the viewport height, the same resolution order as the
-two-column layout applies, so the **controls and note stay on screen** (the one failure
-the layout must prevent): the code gives its extra rows back to the 15-line floor and
-scrolls; then structures give height back and **scroll vertically** (never horizontally),
-the active node kept in view. Books never shrink. A short viewport therefore shows less
-and scrolls more, but never loses the note or overflows the width.
+- If a structure genuinely cannot fit beside the code minimum, **the animation is too
+  wide and must be redesigned** — fewer cells, a different layout, a split view. It is
+  never resolved by shrinking the structure or letting a panel overflow.
 
 Structure panels sharing a row sit adjacent, each at its own natural width, sharing
 the row's height (so tops and bottoms align). They do not split the row evenly and
@@ -752,21 +766,19 @@ cell's contents changed.
 |---|---|---|
 | member | full border, value at normal weight | part of the structure now |
 | `stale` | value still shown, greyed (~40%), no member outline | was written, no longer part of the structure |
-| `empty` | dashed/dim border, faint X across the interior, value slot blank | no meaningful value yet |
+| `empty` | dashed/dim border, faint corner-to-corner X | no meaningful value yet |
 
 The member/stale distinction carries the weight — a student must read "no longer in the
 queue" without effort. **Distinguish states by shape and outline, not brightness
 alone**; two things differing only in opacity are hard to tell apart at a glance.
 
-**One placeholder, used everywhere.** The same mark — a faint X drawn corner to corner
-across the cell, with **nothing in the value slot** — serves an unwritten array cell and a
-standalone variable with no meaningful value yet (`ch` before the first assignment). There
-is no principled difference: both are declared storage holding an indeterminate value. An
-early draft of this rule invented a distinction that does not exist. Membership is carried
-by outline, greying, and markers — not by the glyph. **No character (not a dash) sits in
-the slot:** a dash reads as a value, and next to the sorting animations' negatives (-1, -3)
-specifically as a minus sign; the X alone carries the whole meaning. The X stays fainter
-than any real value and differs from a `stale` value by SHAPE, not brightness.
+**One placeholder glyph, used everywhere: a thin X, and nothing else.** No dash, no
+dot — the X alone. A hyphen inside a value slot reads as a value, and in the sorting
+animations specifically it reads as a minus sign. The same mark serves an unwritten
+array cell and a standalone variable with no meaningful value yet (`ch` before the
+first assignment). There is no principled difference: both are declared storage holding an
+indeterminate value. An early draft of this rule invented a distinction that does not
+exist. Membership is carried by outline, greying, and markers — not by the glyph.
 
 **A real value always shows itself.** A variable holding a sentinel renders that
 sentinel at normal weight, never as a placeholder: `front -1` is a stored value the code
@@ -805,24 +817,22 @@ raw array into a data structure.**
 - **A marker means a stored variable.** There is no "derived" or "computed" style. If a
   value is not stored by the representation shown, it gets no marker — its absence is
   information.
-- **Two markers on one cell** render side by side, overlapping neither each other, the
+- **Markers on one cell render SIDE BY SIDE**, overlapping neither each other, the
   index label above, nor the neighbouring labels. Common (a one-element queue has
-  `front == rear`; heapsort clusters `root`/`child`/`end`), not an edge case. **The cell
-  column is sized ONCE, at load, for the maximum number of markers that ever share a single
-  cell anywhere in the trace, then held constant** — so a second (or third) marker landing
-  on a cell never widens it and no cell shifts between steps. Same rule as every other
-  dimension: resolve the max over the whole trace, once, then hold. An array whose markers
-  never collide keeps a normal column; one that reaches two (queues, heapify, quicksort) is
-  sized for two from step 0; one that reaches three (heapsort-dual) is sized for three. (An
-  earlier revision tried stacking markers vertically to avoid the widening; it read badly —
-  the carets drifted too far from the cells they point at — so side-by-side with a
-  once-sized column is the rule.)
+  `front == rear`), not an edge case.
+- **The inter-cell gap is sized from the trace's worst case, once, at load.** Walk
+  the trace, find the highest number of markers that will ever share a single cell,
+  and set the gap wide enough for that many. Hold it constant. An animation whose
+  markers never collide keeps a normal gap; one that reaches three is sized for three
+  from step 0. Without this, cell spacing grows when markers cluster and every cell to
+  the right shifts — the master invariant broken by the marker lane.
+  *Stacking markers vertically was tried instead and reverted: it bounds the width
+  cleanly but separates a marker from the cell it points at, which is worse. Do not
+  re-propose it.*
 - **A marker at a sentinel index** (-1, meaning "points at nothing") parks left of cell
   `[0]`, dimmed, label still visible. It must read as "not pointing yet," not as missing.
   It shares the marker lane with pointing markers, so leaving the sentinel is a purely
-  lateral move. The parked lane reserves a constant width too (sized once for the most
-  markers ever parked at the same time, or nothing if none ever park), so a marker parking
-  or leaving -1 never shifts cell `[0]`.
+  lateral move.
 
 Inherited by the stack animations (`top`), binary search (`low`/`mid`/`high`), and the
 sorting animations (`i`/`j`).
@@ -865,6 +875,28 @@ modified." This is intended — neither overrides the other.
 
 Do not use fill for membership or outline for activity. Two clear stories: "where are we
 in joining/leaving" (outline) and "which node is this line touching" (fill).
+
+### `sorted` — green FILL, "in its final position"
+
+A third fill state, for sorting animations. **Green fill means this value is in the
+position it will occupy in the finished sorted array.** Not "correct for this pass",
+not "on the right side of the pivot" — permanent. A cell that takes it never loses it.
+
+- Green **fill** = permanently placed (sorting). Green **outline** = stable member of
+  the structure (linked lists). Different channels, so no ambiguity.
+- Green and blue fill are mutually exclusive: a value being acted on this step is by
+  definition not settled. A cell becoming `sorted` releases any activity fill on the
+  same step.
+- It accumulates in whatever order the algorithm places values — scattered and
+  depth-first in quicksort, right-to-left in heapsort, strictly left-to-right in
+  quicksort's worst case. **A finished sort ends with every cell green**, which is the
+  correct terminal picture for all of them.
+
+Why not amber for "not in the right place": amber means `unlinked`, i.e. *not a member
+of the structure*, which is binary and structural. "Not in the right place" is a
+gradient — mid-algorithm it is true of nearly every element, so the colour would stop
+carrying information. Green marks the small, growing set of things that ARE settled,
+which is the useful half.
 
 ## Memory-danger marker (red ⚠)
 
