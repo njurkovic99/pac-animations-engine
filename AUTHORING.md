@@ -502,6 +502,31 @@ indentation say "spaces" or "indent level"; for lines of code say "line"; for st
 of an algorithm say "stage" or name the operation. "Indented 0 steps" collides with
 the execution-step meaning.
 
+## Second person — address the reader as "you"
+
+Where narration or a note describes something the reader might **do, think, or get
+wrong**, address them directly as **"you"** — never "a student", "students often",
+"one might", or "people tend to". Third-person framing puts the reader *outside* the
+situation, which is exactly backwards in a note warning about a mistake they are
+likely to make themselves.
+
+- Bad: "a student testing on a few thousand elements might reasonably conclude both
+  algorithms are fine, and for that array they would be right."
+- Good: "if you test on a few thousand elements you might reasonably conclude both
+  algorithms are fine, and for that array you would be right."
+
+The test: **if the sentence is about the reader's own likely thinking or action, it
+says "you".** Two things this does NOT touch:
+
+- **Statements of fact about the algorithm stay impersonal.** "The bubble sort does
+  four times the work," not "you do four times the work." Likewise the agentless
+  common-mistake form — "A common mistake is to run `temp.prev = ins` first" — names
+  no third-person actor and is the established style; leave it.
+- **Backstage code comments stay third-person.** A comment like `// students read
+  level as depth` is the author's rationale to future authors, not the animation
+  speaking to a reader — it correctly stays third-person. This rule governs
+  student-facing `narrate`/`note` text only.
+
 ## Backstage stays backstage
 
 - **No assignment references in student-visible text.** The assignment an animation
