@@ -33,6 +33,7 @@ ${panel('cells.js', 'cellsPanel')}
 ${panel('nodes.js', 'nodesPanel')}
 ${panel('stream.js', 'streamPanel')}
 ${panel('chart.js', 'chartPanel')}
+${panel('slider.js', 'sliderPanel')}
 ${panel('callstack.js', 'callstackPanel')}
 ${overlay}
 ${engine}

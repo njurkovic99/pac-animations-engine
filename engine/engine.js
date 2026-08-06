@@ -17,12 +17,14 @@ import * as cellsPanel     from './panels/cells.js';
 import * as nodesPanel     from './panels/nodes.js';
 import * as streamPanel    from './panels/stream.js';
 import * as chartPanel     from './panels/chart.js';
+import * as sliderPanel    from './panels/slider.js';
 import * as callstackPanel from './panels/callstack.js';
 import { Overlay }         from './overlay/arrows.js';
 
 const RENDERERS = {
   code: codePanel, cells: cellsPanel, nodes: nodesPanel,
-  stream: streamPanel, chart: chartPanel, callstack: callstackPanel,
+  stream: streamPanel, chart: chartPanel, slider: sliderPanel,
+  callstack: callstackPanel,
 };
 
 const MAX_STEPS = 5000;
@@ -77,6 +79,11 @@ export class Engine {
     this.i = 0;
     this.steps = [];
     this._flashedAt = -1;              // last step index the narration pulsed on
+    // Optional slider (a narrow WATCH-only exception -- see panels/slider.js). Its
+    // remembered value drives the chart marker + readout via spec.slider.frame(n)
+    // when live; null when the animation declares no slider.
+    this.sliderCfg = spec.slider ?? null;
+    this.sliderN   = this.sliderCfg ? (this.sliderCfg.default ?? this.sliderCfg.min ?? 0) : 0;
     this._build();
     this.loadTrace(this.trace);
   }
@@ -818,6 +825,40 @@ export class Engine {
     this.render();
   }
 
+  /* ---------- slider (WATCH-only exception, see panels/slider.js) ---------- */
+
+  /** The slider is live only once the trace has reached the step it is declared to
+   *  go live on (its last step by default). Inert everywhere else. */
+  _sliderLive() {
+    if (!this.sliderCfg) return false;
+    const live = this.sliderCfg.liveStep ?? (this.steps.length - 1);
+    return this.i >= live;
+  }
+
+  /** The student moved the slider. Remember the value and re-read ONLY the panels
+   *  the slider drives (spec.slider.frame(n) -> {panelId: data}); the step, the
+   *  narration, and the note are untouched. Ignored while the slider is inert. */
+  onSlide(n) {
+    if (!this._sliderLive()) return;
+    this.sliderN = n;
+    this._applySliderFrame();
+  }
+
+  /** Render the slider-driven panels (the chart marker + the readout) at the
+   *  remembered slider value, over whatever the current step painted. No step
+   *  change, no re-layout -- the panels were sized once for the whole trace, so
+   *  nothing moves as the slider is dragged. */
+  _applySliderFrame() {
+    if (!this.sliderCfg?.frame) return;
+    const frame = this.sliderCfg.frame(this.sliderN) ?? {};
+    for (const [id, data] of Object.entries(frame)) {
+      const p = this.panels.get(id);
+      if (!p) continue;
+      p.ctx.anchors.clear();
+      p.renderer.render(p.el.querySelector('.pac-panel-body'), data, p.ctx, { lang: this.lang, step: this.step });
+    }
+  }
+
   /* ---------- construction ---------- */
 
   _build() {
@@ -931,8 +972,11 @@ export class Engine {
       else this[act]();
     });
 
-    // Back-stepping via keyboard, because beginners miss steps.
+    // Back-stepping via keyboard, because beginners miss steps. A focused form
+    // control (the slider) owns its own arrow keys -- adjusting the thumb must not
+    // also advance the step -- so ignore arrows aimed at an input.
     window.addEventListener('keydown', e => {
+      if (e.target && e.target.tagName === 'INPUT') return;
       if (e.key === 'ArrowRight') this.next();
       if (e.key === 'ArrowLeft')  this.prev();
     });
@@ -1013,6 +1057,12 @@ export class Engine {
 
     this._followActive();
     this.overlay.draw(step.arrows ?? [], this.panels);
+
+    // When the slider is live, re-read its driven panels (chart marker + readout)
+    // at the remembered value AFTER the step painted, so landing on the live step
+    // -- or stepping back onto it -- resumes where the slider was left rather than
+    // snapping to the step-authored default. A no-op on every other step.
+    if (this._sliderLive()) this._applySliderFrame();
 
     // Narration and notes are both SEGMENTED content: a plain string, or an
     // array of segments where {danger:true, text} renders a leading red warning
