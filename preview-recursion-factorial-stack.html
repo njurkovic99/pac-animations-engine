@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>sorting-timing-chart — preview</title>
+<title>recursion-factorial-stack — preview</title>
 <style>/* pac-animations — design system
    15 tokens replacing the 188 distinct color values found across the
    original 25 animation files. */
@@ -2992,279 +2992,275 @@ function mountAnimation(spec, el = document.getElementById('pac')) {
   return eng;
 }
 
-/* ds — A7 "Sorting" (second backer; the first is sorting-heapsort-dual).
+/* ds — "the simplest example of recursion", traced through the call stack.
  *
- * NOT a code trace. There is no algorithm being stepped through here: this
- * animation shows the RESULT of running two sorts at increasing sizes, which is
- * exactly what ds7 asks students to produce -- "Draw a graph of execution time
- * versus number of elements for both algorithms. What are your conclusions?" So
- * there is no CODE panel and no highlighted line; `line` is null on every step,
- * and each step plots one measurement rather than executing one statement.
+ * THE LESSON is NOT the descent. Students watch a recursive function call
+ * itself and assume the work happens on the way DOWN. It does not: going down,
+ * every call DEFERS and nothing is computed. Every multiplication happens on the
+ * way back UP, after the base case finally returns an actual value. The two
+ * directions have to FEEL different, so the animation shows both in one place —
+ * the call stack building to five frames with nothing multiplied, then unwinding
+ * as each frame performs the product it has been holding.
  *
- * THE NUMBERS ARE MODELLED, NOT MEASURED, and the animation says so on screen
- * (step 0's note). They are computed from the growth curves, not timed on a real
- * machine:
+ * Line 5 (`return n * factorial(n - 1)`) is the whole animation: the
+ * multiplication CANNOT happen until the call to its right has returned. Line 5
+ * is highlighted on the DESCENT (as each frame defers) and again on the ASCENT
+ * (as each frame finally multiplies) — the same line, two different times, which
+ * is exactly the point.
  *
- *     bubble    t = 1.5e-9 * n^2           seconds   ->  1.5e-6 * n^2       ms
- *     heapsort  t = 9.0e-9 * n * log2(n)   seconds   ->  9.0e-6 * n log2 n  ms
+ * THREE panels (profile 'standard'):
+ *   calls    CALLSTACK ("Function calls") — main + factorial(4..1) = FIVE frames,
+ *            all visible. This animation is the reason the CALLSTACK ceiling was
+ *            raised from 3 to min(deepest reached, 6): here the whole stack IS the
+ *            lesson, so a scrolling call stack would hide the thing being taught.
+ *            Each frame shows only its bound `n` — n lives in the frames, where it
+ *            belongs, and seeing the same name bound to a different value in each
+ *            frame is a large part of the point. No result locals: the arithmetic
+ *            lives in the cascade, and keeping every frame one line tall is what
+ *            makes "five frames, all visible" hold exactly.
+ *   cascade  STREAM — the lecture's expansion, one line per step, accumulating
+ *            downward. Written top-to-bottom on the DESCENT (each deferral), then
+ *            continuing downward on the ASCENT (each multiplication): the same
+ *            panel tells both halves of the story.
+ *   code     CODE — the lecture's code, unchanged, ds language tabs.
  *
- *     n        bubble     heapsort   ratio
- *     5000      37 ms      0.55 ms     67x
- *     10000    150 ms      1.20 ms    125x
- *     15000    338 ms      1.87 ms    181x
- *     20000    600 ms      2.57 ms    233x
- *     25000    938 ms      3.29 ms    285x
- *     30000   1350 ms      4.01 ms    337x
+ * THE CASCADE is SEVEN lines — the lecture's factorial(4) expansion "minus the
+ * f(0) level" (§ re-check). The lecture recurses to zero and shows `1 * f(0)`;
+ * this code's test is `n <= 1`, so factorial(1) answers immediately and the two
+ * f(0) lines never appear. Seven lines sit within STREAM's 8-row ceiling, so the
+ * central display never scrolls with no exception required — the only sizing
+ * policy this animation touches is the CALLSTACK ceiling (engine SIZE_POLICY).
  *
- * The formula positions the plotted points and the marker dots; the displayed
- * numbers at the six measured sizes are the canonical table above (so narration,
- * note, and readout agree to the digit). Between the measured sizes the slider
- * reads straight off the formula. Presenting these as timed measurements would
- * mislead a student comparing against their own experiment -- so the step-0 note
- * states plainly that these are modelled curves showing the SHAPE of the growth.
- *
- * TWO new capabilities debut here (both budgeted, neither a pure inherit):
- *   1. the CHART renderer (engine/panels/chart.js) -- fixed axes from step 0, one
- *      line per series, points added incrementally, a slider-driven marker.
- *   2. the SLIDER (engine/panels/slider.js) -- a narrow, deliberate exception to
- *      WATCH-only: it explores the same data without branching or judging. No
- *      question, no right answer, no alternate path; the step sequence is
- *      unaffected. THINK gates remain forbidden and deferred (PLANNED.md).
- *
- * The RATIO column is the payoff, not the chart. On a linear time axis heapsort
- * hugs zero and reads as "instant" rather than "growing slowly"; the ratio, which
- * itself climbs from 67x to 337x, is the n^2-versus-n-log-n signature made
- * legible. ds7 asks "What are your conclusions?", so the animation draws THREE --
- * at small, medium, and large n -- each attached to the step whose evidence is on
- * screen. WATCH only apart from the slider: one trace, no gates. Metrics hidden. */
+ * NO array, NO tree, NO variables strip: everything the student needs is the
+ * stack, the expansion, and the code. factorial(0) is never called; nothing is
+ * multiplied during the descent; five frames show the same parameter name with
+ * five different values — all correct, and all the lesson.
+ */
 
-/* ---- the two modelled curves (milliseconds) ---- */
-const bubbleMs = n => 1.5e-6 * n * n;
-const heapMs   = n => 9.0e-6 * n * Math.log2(n);
-
-/* Fixed domain -- the axes are resolved to this from step 0 and never rescale as
- * points appear (the chart equivalent of a panel that never resizes). yMax = 1500
- * clears the bubble sort's 1350 ms at n = 30000 with a little headroom. */
-const XMAX = 30000;
-const YMAX = 1500;
-const NS   = [5000, 10000, 15000, 20000, 25000, 30000];
-
-const XTICKS = [0, 5000, 10000, 15000, 20000, 25000, 30000]
-  .map(v => ({ v, label: v === 0 ? '0' : `${v / 1000}k` }));
-const YTICKS = [0, 300, 600, 900, 1200, 1500].map(v => ({ v, label: String(v) }));
-
-/* Series colours come from the existing design tokens -- no new colour values.
- * Amber for the slow n^2 curve, blue (the app accent) for the n log n curve. */
-const BUB  = 'var(--warn)';
-const HEAP = 'var(--accent)';
-
-const BUB_PTS  = NS.map(n => ({ x: n, y: bubbleMs(n) }));
-const HEAP_PTS = NS.map(n => ({ x: n, y: heapMs(n) }));
-
-/* Canonical displayed values at the six measured sizes (the table above), so the
- * readout matches the narration and notes exactly. Between measured sizes the
- * slider computes from the formula. */
-const CANON = {
-  5000:  { b: 37,   h: 0.55, r: 67 },
-  10000: { b: 150,  h: 1.20, r: 125 },
-  15000: { b: 338,  h: 1.87, r: 181 },
-  20000: { b: 600,  h: 2.57, r: 233 },
-  25000: { b: 938,  h: 3.29, r: 285 },
-  30000: { b: 1350, h: 4.01, r: 337 },
+/* One listing, three ds languages, line-aligned to a single 8-line grid so `line`
+ * is a plain number that resolves the same in every variant. The line meanings
+ * are fixed: line 2 is the test, line 3 the base-case return, line 5 the recursive
+ * call AND the multiplication that waits on it, line 8 the print in main. */
+const LISTINGS = {
+  pseudo: [
+    'factorial(n)',                       // 1
+    '    if n <= 1',                      // 2
+    '        return 1',                   // 3
+    '    else',                           // 4
+    '        return n * factorial(n - 1)',// 5
+    '',                                   // 6
+    'main()',                             // 7
+    '    print factorial(4)',             // 8
+  ],
+  java: [
+    'int factorial(int n) {',                  // 1
+    '    if (n <= 1)',                          // 2
+    '        return 1;',                        // 3
+    '    else',                                 // 4
+    '        return n * factorial(n - 1); }',   // 5
+    '',                                         // 6
+    'void main() {',                            // 7
+    '    print(factorial(4)); }',               // 8
+  ],
+  cpp: [
+    'int factorial(int n) {',                  // 1
+    '    if (n <= 1)',                          // 2
+    '        return 1;',                        // 3
+    '    else',                                 // 4
+    '        return n * factorial(n - 1); }',   // 5
+    '',                                         // 6
+    'int main() {',                             // 7
+    '    cout << factorial(4); }',              // 8
+  ],
 };
-function vals(n) {
-  if (CANON[n]) return CANON[n];
-  const b = bubbleMs(n), h = heapMs(n);
-  return { b: Math.round(b), h: Math.round(h * 100) / 100, r: Math.round(b / h) };
-}
-const msBub   = v => `${v} ms`;
-const msHeap  = h => `${h.toFixed(2)} ms`;
-const ratioStr = r => `${r}×`;
 
-const SLIDER_DEFAULT = 15000;
+/* ---- teaching notes ---- */
+const SETUP_NOTE =
+  'A recursive function calls itself on a smaller problem, and keeps doing that until the problem is small ' +
+  'enough to answer outright — the BASE CASE. Watch two things: how deep the stack gets before anything is ' +
+  'actually computed, and when the multiplications happen.';
 
-/* ---- chart data: the two series (first k points) + an optional marker ---- */
-function chartData(k, markerN) {
-  const series = [
-    { name: 'bubble',   color: BUB,  points: BUB_PTS.slice(0, k) },
-    { name: 'heapsort', color: HEAP, points: HEAP_PTS.slice(0, k) },
-  ];
-  let marker = null;
-  if (markerN != null) {
-    const v = vals(markerN);
-    marker = {
-      x: markerN,
-      callouts: [
-        { color: BUB,  y: bubbleMs(markerN), label: msBub(v.b) },
-        { color: HEAP, y: heapMs(markerN),   label: msHeap(v.h) },
-      ],
-    };
-  }
-  return {
-    series,
-    xLabel: 'number of elements (n)',
-    yLabel: 'time (ms)',
-    xMax: XMAX, yMax: YMAX,
-    xTicks: XTICKS, yTicks: YTICKS,
-    marker,
-  };
-}
+const SUSPEND_NOTE =
+  'Nothing has been multiplied yet. The expression 4 * factorial(3) cannot be evaluated until the ' +
+  'right-hand side returns a number, so this frame is SUSPENDED — it sits on the stack holding its n and ' +
+  'waiting.';
 
-/* ---- readout: a compact [n] [bubble] [heapsort] [ratio] row ----
- * Fixed per-cell widths (minCh) so a value changing length as the slider sweeps
- * never resizes the strip (the width analogue of the engine's reserved heights). */
-function readoutCells(n) {
-  const v = vals(n);
-  return {
-    render: 'box',
-    cells: [
-      { label: 'n',        value: String(n),   minCh: 7 },
-      { label: 'bubble',   value: msBub(v.b),  minCh: 8 },
-      { label: 'heapsort', value: msHeap(v.h), minCh: 8 },
-      { label: 'ratio',    value: ratioStr(v.r), minCh: 6 },
-    ],
-  };
-}
-function readoutPlaceholder() {
-  return {
-    render: 'box',
-    cells: [
-      { label: 'n',        value: '', role: 'empty', minCh: 7 },
-      { label: 'bubble',   value: '', role: 'empty', minCh: 8 },
-      { label: 'heapsort', value: '', role: 'empty', minCh: 8 },
-      { label: 'ratio',    value: '', role: 'empty', minCh: 6 },
-    ],
-  };
-}
+const THREE_FRAMES_NOTE =
+  'Three frames now, each holding a different n, each waiting on the one above it. This is what the call ' +
+  'stack is FOR — every suspended call keeps its own copy of n, and they do not interfere.';
 
-/* ---- narration + notes (the instructor's framing, echoed) ---- */
-const MODELLED_NOTE =
-  'These curves are MODELLED, not measured — they are computed from n² for the bubble sort ' +
-  'and n log n for the heapsort, so they show the SHAPE of the growth rather than what any particular ' +
-  'machine would report. Your own program will give different absolute numbers. The shape is what ' +
-  'matters, and the shape is what you are looking for.';
+const BASE_NOTE =
+  'Everything up to this point was deferral. The base case is what stops the recursion and starts the ' +
+  'arithmetic. Without it, or with it written wrong, the calls never stop — that is what a stack overflow is.';
 
-const SMALL_NOTE =
-  'CONCLUSION AT SMALL SIZES. 37 ms is not a wait — a student testing on a few thousand elements ' +
-  'might reasonably conclude both algorithms are fine, and for that array they would be right. The ratio ' +
-  'is already 67 to 1, but neither number is big enough to hurt. This is exactly why slow algorithms ' +
-  'survive testing: at the sizes people try first, everything works.';
+const ASCENT_NOTE =
+  'Here is the point of the whole animation. Going DOWN, nothing was computed — every call just deferred to ' +
+  'a smaller one. Coming back UP, each frame performs the multiplication it has been holding. The work ' +
+  'happens on the return, in reverse order of the calls.';
 
-const DOUBLE_NOTE =
-  'That is the whole difference in one line. Double the input and an n² algorithm does four times the ' +
-  'work, while an n log n algorithm does a little over twice as much. Watch the gap between the two curves.';
+const FINAL_NOTE =
+  'Four multiplications, and every one of them happened after the deepest call had already returned. Read ' +
+  'the cascade from the top down and you are watching the descent; read it from the bottom up and you are ' +
+  'watching the arithmetic. ' +
+  "Two things worth knowing. The lecture's own expansion goes one level further than this code does — it " +
+  'shows 1 * f(0) — because it recurses to zero, while the test here is n <= 1 and so factorial(1) answers ' +
+  'immediately. Both give 24; the base case is a choice, and it has to match the test. ' +
+  'And factorial is a bad reason to use recursion. A loop does the same job with one frame instead of five. ' +
+  'The lecture says as much: it is here to be understood, not to be copied.';
 
-const MEDIUM_NOTE =
-  'CONCLUSION AT MEDIUM SIZES. Tripling the input from 5000 tripled the heapsort’s work — but ' +
-  'multiplied the bubble sort’s by NINE. That is n² in one sentence: three times the data, nine ' +
-  'times the work. The bubble sort has crossed from ‘instant’ into ‘noticeable’, and the ' +
-  'heapsort has not moved perceptibly. The ratio has gone from 67 to 181, and notice what that means — ' +
-  'the gap is not a constant handicap, it is widening.';
+/* The cascade is written under a 13-space hang so every `=` lines up beneath the
+ * `=` in `factorial(4) = ...` (STREAM lines are `white-space: pre`, so the leading
+ * spaces are preserved). Each string is appended on the step that computes it. */
+const HANG = '             '; // 13 spaces: aligns with the `=` after "factorial(4) "
 
-const LARGE_NOTE =
-  'CONCLUSION AT LARGE SIZES. Over a second against four milliseconds. At this point the difference is no ' +
-  'longer about speed, it is about what is possible: the bubble sort’s curve keeps steepening, so ' +
-  '300,000 elements would take it about two and a half MINUTES while the heapsort takes about 45 ms. This ' +
-  'is the practical conclusion — a faster machine does not rescue an n² algorithm. Ten times the ' +
-  'hardware buys you about three times the array size, and then you are stuck again. Choosing the algorithm ' +
-  'is worth more than choosing the computer.';
-
-const SLIDER_NOTE =
-  'Sweep it and watch the RATIO column rather than either time: 67× at 5000, 181× at 15000, ' +
-  '337× at 30000. A ratio that itself keeps growing is what a difference in growth RATE looks like. ' +
-  'Your assignment asks for this graph from real measurements. Your absolute numbers will differ from these ' +
-  '— the two shapes will not.';
-
-/* ---- the trace: eight plotted measurements, then the slider goes live ---- */
 function* trace() {
-  const slider = live => ({ live });
+  const casc = [];   // the expansion, accumulated one line per step
 
-  // STEP 0 -- empty chart, axes drawn and labelled at their final scale, no points.
-  yield {
-    line: null, tag: 'setup', note: MODELLED_NOTE,
-    narrate: 'Two sorting algorithms, timed on the same data at increasing sizes.',
-    panels: { chart: chartData(0, null), readout: readoutPlaceholder(), slider: slider(false) },
-  };
+  // A factorial frame shows only its bound n. `hot` gives n the blue activity fill
+  // on the step it is bound (a frame's entry). main() is the driver at the bottom.
+  // Every caller frame carries the line it is parked on (main → 8, a suspended
+  // factorial → its line-5 recursive call); the active top frame's own call line is
+  // dropped from `parked` because it is the bright active line.
+  const mainF = () => ({ fn: 'main', vars: [], call: 8 });
+  const facF  = (n, hot = false) => ({
+    fn: 'factorial',
+    vars: [{ name: 'n', value: n, role: hot ? 'active' : undefined }],
+    call: 5,
+  });
 
-  // STEP 1 (n = 5000) -- SMALL.
-  yield {
-    line: null, tag: 'plot', note: SMALL_NOTE,
-    narrate: 'At 5000 elements the bubble sort takes 37 ms and the heapsort 0.55 ms.',
-    panels: { chart: chartData(1, null), readout: readoutCells(5000), slider: slider(false) },
-  };
+  const snap = ({ line, tag, narrate, note, frames, cascNew = false }) => ({
+    line, tag, narrate, note,
+    parked: frames.slice(0, -1).map(f => f.call).filter(v => v != null),
+    panels: {
+      calls: { frames: frames.map((f, i) => ({ fn: f.fn, vars: f.vars, active: i === frames.length - 1 })) },
+      cascade: { lines: casc.map((text, i) => ({ text, dir: 'out', isNew: cascNew && i === casc.length - 1 })) },
+    },
+  });
 
-  // STEP 2 (n = 10000).
-  yield {
-    line: null, tag: 'plot', note: DOUBLE_NOTE,
-    narrate: 'Doubling to 10000 elements roughly QUADRUPLES the bubble sort: 37 ms to 150 ms. ' +
-             'The heapsort only about doubles.',
-    panels: { chart: chartData(2, null), readout: readoutCells(10000), slider: slider(false) },
-  };
+  /* ===================== STEP 0 — before anything runs ===================== */
+  // main is the driver, shown so the calls have a visible origin; the cascade is
+  // empty. No line highlighted.
+  yield snap({
+    line: null, tag: 'init', frames: [mainF()],
+    narrate: 'factorial(4). The definition is n! = n * (n-1)! — the function is written in terms of itself.',
+    note: SETUP_NOTE,
+  });
 
-  // STEP 3 (n = 15000) -- MEDIUM.
-  yield {
-    line: null, tag: 'plot', note: MEDIUM_NOTE,
-    narrate: 'At 15000: 338 ms against 1.87 ms.',
-    panels: { chart: chartData(3, null), readout: readoutCells(15000), slider: slider(false) },
-  };
+  /* ========================= THE DESCENT ==================================== */
+  // main calls factorial(4). main is still the active frame; factorial(4) is
+  // entered on the next step.
+  yield snap({
+    line: 8, tag: 'call', frames: [mainF()],
+    narrate: 'main calls factorial(4). To print the result, factorial(4) has to be evaluated first.',
+  });
 
-  // STEP 4 (n = 20000) -- one sentence, ratio named, no note.
-  yield {
-    line: null, tag: 'plot',
-    narrate: 'At 20000: 600 ms against 2.57 ms — the bubble sort now takes 233 times as long.',
-    panels: { chart: chartData(4, null), readout: readoutCells(20000), slider: slider(false) },
-  };
+  // factorial(4): test, false. The frame is pushed with n = 4 bound.
+  yield snap({
+    line: 2, tag: 'test', frames: [mainF(), facF(4, true)],
+    narrate: '4 is not <= 1, so this is not the base case.',
+  });
 
-  // STEP 5 (n = 25000) -- one sentence, ratio named, no note.
-  yield {
-    line: null, tag: 'plot',
-    narrate: 'At 25000: 938 ms against 3.29 ms — 285 times as long.',
-    panels: { chart: chartData(5, null), readout: readoutCells(25000), slider: slider(false) },
-  };
+  // factorial(4): line 5 — defer. It cannot multiply yet; it calls factorial(3).
+  casc.push('factorial(4) = 4 * factorial(3)');
+  yield snap({
+    line: 5, tag: 'defer', frames: [mainF(), facF(4)], cascNew: true,
+    narrate: 'To compute 4 * factorial(3), factorial(3) has to be computed first. The multiplication waits.',
+    note: SUSPEND_NOTE,
+  });
 
-  // STEP 6 (n = 30000) -- LARGE.
-  yield {
-    line: null, tag: 'plot', note: LARGE_NOTE,
-    narrate: 'At 30000: 1350 ms against 4 ms. 337 times as long.',
-    panels: { chart: chartData(6, null), readout: readoutCells(30000), slider: slider(false) },
-  };
+  // factorial(3): test, false.
+  yield snap({
+    line: 2, tag: 'test', frames: [mainF(), facF(4), facF(3, true)],
+    narrate: '3 is not <= 1 either, so factorial(3) is not the base case.',
+  });
 
-  // STEP 7 -- the slider goes live.
-  yield {
-    line: null, tag: 'read', note: SLIDER_NOTE,
-    narrate: 'Drag the slider to read both times at any size.',
-    panels: { chart: chartData(6, SLIDER_DEFAULT), readout: readoutCells(SLIDER_DEFAULT), slider: slider(true) },
-  };
+  // factorial(3): line 5 — defer, calls factorial(2).
+  casc.push(HANG + '= 4 * (3 * factorial(2))');
+  yield snap({
+    line: 5, tag: 'defer', frames: [mainF(), facF(4), facF(3)], cascNew: true,
+    narrate: 'factorial(3) defers the same way: 3 * factorial(2) has to wait for factorial(2). Two frames are suspended now.',
+  });
+
+  // factorial(2): test, false.
+  yield snap({
+    line: 2, tag: 'test', frames: [mainF(), facF(4), facF(3), facF(2, true)],
+    narrate: '2 is not <= 1, so factorial(2) is not the base case either.',
+  });
+
+  // factorial(2): line 5 — defer, calls factorial(1). Three factorial frames now
+  // suspended, each waiting on the one above it.
+  casc.push(HANG + '= 4 * (3 * (2 * factorial(1)))');
+  yield snap({
+    line: 5, tag: 'defer', frames: [mainF(), facF(4), facF(3), facF(2)], cascNew: true,
+    narrate: 'factorial(2) defers too: 2 * factorial(1) waits for factorial(1). This is as deep as the recursion goes.',
+    note: THREE_FRAMES_NOTE,
+  });
+
+  /* ========================= THE BASE CASE ================================= */
+  // factorial(1): test — TRUE. Five frames on the stack now, and still nothing
+  // has been multiplied.
+  yield snap({
+    line: 2, tag: 'base', frames: [mainF(), facF(4), facF(3), facF(2), facF(1, true)],
+    narrate: '1 is <= 1. This is the base case — the first call that can answer without asking anything else.',
+  });
+
+  // factorial(1): line 3 — return 1. The first actual number.
+  casc.push(HANG + '= 4 * (3 * (2 * 1))');
+  yield snap({
+    line: 3, tag: 'return', frames: [mainF(), facF(4), facF(3), facF(2), facF(1)], cascNew: true,
+    narrate: 'factorial(1) returns 1. An actual number, at last.',
+    note: BASE_NOTE,
+  });
+
+  /* ========================= THE ASCENT ==================================== */
+  // Each return pops a frame and performs the multiplication that was waiting, in
+  // reverse order of the calls. factorial(1) has popped; factorial(2) resumes.
+  casc.push(HANG + '= 4 * (3 * 2)');
+  yield snap({
+    line: 5, tag: 'mul', frames: [mainF(), facF(4), facF(3), facF(2)], cascNew: true,
+    narrate: 'factorial(2) was waiting on that 1. Now it can finish: 2 * 1 is 2.',
+    note: ASCENT_NOTE,
+  });
+
+  // factorial(2) has popped; factorial(3) resumes: 3 * 2 = 6.
+  casc.push(HANG + '= 4 * 6');
+  yield snap({
+    line: 5, tag: 'mul', frames: [mainF(), facF(4), facF(3)], cascNew: true,
+    narrate: 'factorial(3) was waiting on factorial(2). Now 3 * 2 is 6.',
+  });
+
+  // factorial(3) has popped; factorial(4) resumes: 4 * 6 = 24.
+  casc.push(HANG + '= 24');
+  yield snap({
+    line: 5, tag: 'mul', frames: [mainF(), facF(4)], cascNew: true,
+    narrate: 'The last frame finishes: 4 * 6 is 24.',
+  });
+
+  // factorial(4) has popped; main receives 24 and prints it.
+  yield snap({
+    line: 8, tag: 'print', frames: [mainF()],
+    narrate: 'factorial(4) returns 24 to main, which prints it.',
+    note: FINAL_NOTE,
+  });
 }
 
 const SPEC = {
-  title: 'Two sorts, one graph',
-  subtitle: 'How execution time grows with the number of elements',
+  title: 'Recursion: the work happens on the way back',
+  subtitle: 'Tracing factorial(4) through the call stack',
   profile: 'standard',
   columns: 2,
+  languages: ['pseudo', 'java', 'cpp'],
 
-  // Three panels, in reading order: the chart the student watches fill in, the
-  // readout that carries the lesson (the ratio), then the slider control. No CODE
-  // panel -- this animation plots a result, it does not trace a statement, so no
-  // line is ever highlighted. Everything resolves once on load and holds, so
-  // nothing moves as steps advance or as the slider is dragged (pac.verifyHeights()).
+  // Declared in reading order; the engine places them. The call stack (what the
+  // student watches change frame by frame) and the expansion it produces flow down
+  // the right column; the code anchors the left. STREAM is declared last — it is
+  // what the program builds up, reading as a continuation of the code beside it.
   panels: [
-    { type: 'chart',  id: 'chart',   title: 'Execution time vs. number of elements', structure: true },
-    { type: 'cells',  id: 'readout', title: 'At this size', compact: true },
-    { type: 'slider', id: 'slider',  title: 'Read the times at any size', compact: true },
+    { type: 'callstack', id: 'calls', title: 'Function calls' },
+    { type: 'code', id: 'code', title: 'factorial(n)',
+      listings: LISTINGS, labels: { pseudo: 'pseudocode', java: 'Java', cpp: 'C++' } },
+    { type: 'stream', id: 'cascade', title: 'The expansion' },
   ],
-
-  // The slider is a narrow WATCH-only exception (panels/slider.js). It is inert
-  // until the last step (liveStep), then live; moving it re-reads the chart marker
-  // and the readout at the chosen n via frame(n), changing neither step nor note.
-  slider: {
-    min: 1000, max: 30000, step: 1000, default: SLIDER_DEFAULT, liveStep: 7,
-    label: 'number of elements',
-    format: n => String(n),
-    inertHint: 'Available once the graph is complete.',
-    liveHint: 'Live — drag to read the times at any size.',
-    frame: n => ({ chart: chartData(6, n), readout: readoutCells(n) }),
-  },
 
   initialTrace: 'run',
   traces: {

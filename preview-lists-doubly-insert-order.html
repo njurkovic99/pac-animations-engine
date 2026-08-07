@@ -89,11 +89,11 @@ body {
 
 /* ---- open-in-own-window link (see AUTHORING.md "Open-in-own-window link") ----
  * The escape hatch every animation carries: a self-link (target="_blank") that
- * opens the page full-window, where there's no Canvas chrome. The engine shows
- * it prominently only when embedded (window.self !== window.top) and hides it
- * standalone. Colour is --warn amber-orange so it stands out from body text
- * without reading as the --error danger red; styled as a plain link (icon +
- * underline on hover) so it reads as a helpful hint, not a content warning. */
+ * opens the page full-window, where there's no Canvas chrome. SAME wording, SAME
+ * style, ALWAYS visible -- identical in every context, so a preview shows the
+ * exact control a student meets inside Canvas. Colour is --warn amber-orange so it
+ * stands out from body text without reading as the --error danger red; styled as a
+ * plain link (icon + underline on hover), never a content warning. */
 .pac-openwin {
   display: inline-block;
   margin: -6px 0 var(--gap);
@@ -1849,7 +1849,7 @@ const AUTOPLAY_MS = 900;
  * (AUTHORING.md "Panel sizing policy".) */
 const SIZE_POLICY = {
   code:      { floorRows: 15, ceiling: 'listing',     width: 'content', minCh: 60 }, // ≥15 rows; width = longest line (≥60 chars floor, capped there ceiling), leftover empty
-  callstack: { floorRows: 2,  ceiling: { frames: 3 }, scroll: true, width: 'natural' }, // ≤3 frames; natural width. 3 covers main→sort→siftDown (and every animation built so far); deeper recursion scrolls, active frame in view
+  callstack: { floorRows: 2,  ceiling: { frames: 6 }, scroll: true, width: 'natural' }, // ≤ min(deepest stack the trace reaches, 6 frames); natural width. The panel already sizes to min(content, ceiling) via the max-across-steps pass, so this cap only bites past 6: a 2-deep trace still gets a 2-frame panel, factorial(4) (main→4 calls) gets 5, and recursion deeper than 6 scrolls with the active frame in view — where the repetitive middle frames are the right thing to hide
   stream:    { floorRows: 2,  ceiling: { rows: 8 },   scroll: true, width: 'column' },  // ≤8 rows; matches its column
   structure: { floorRows: 2,  ceiling: 'halfStage',   scroll: true, width: 'natural' }, // ≤half stage (v-scroll ok); natural width, never h-scrolls
   strip:     { floorRows: 2,  ceiling: null,          width: 'natural' },  // exact content; natural width
@@ -2787,27 +2787,23 @@ class Engine {
    * The open-in-own-window escape hatch (AUTHORING.md "Open-in-own-window
    * link"). Canvas steals ~300px of chrome before an embedded animation even
    * begins; a self-link with target="_blank" opens the same page in a new tab
-   * where it gets the whole window. It is iframe-aware: a lifeline shown
-   * prominently when embedded, silent when the animation is already
-   * full-window (standalone). Built into the engine, so every animation
-   * inherits it -- no per-animation opt-in.
+   * where it gets the whole window. SAME wording, SAME style, ALWAYS visible --
+   * identical in every context. Students meet this inside Canvas, so the amber
+   * lifeline is the real control; standalone is where WE review, and a review
+   * that shows something different from what a student sees is a review of the
+   * wrong thing. So there is no iframe-awareness here: keeping it identical means
+   * every preview shows the actual control. Built into the engine, so every
+   * animation inherits it -- no per-animation opt-in, and one built next year
+   * gets it without anyone remembering. Its line is in the header above the
+   * stage, reserved from step 0, so nothing moves.
    */
   _buildOpenWindowLink() {
     const link = this.root.querySelector('.pac-openwin');
     if (!link) return;
-    // The iframe's own URL, which is exactly what we want to open full-window.
+    // The page's own URL, which is exactly what we want to open full-window.
     link.href = window.location.href;
-    // window.self !== window.top is the embedding test. The identity comparison
-    // is same-origin-safe: it never touches a cross-origin property, so it
-    // cannot throw even when Canvas serves the page from another origin.
-    const embedded = window.self !== window.top;
-    if (embedded) {
-      link.textContent = '⛶ Scrolling to see it all? Open in its own window';
-      link.hidden = false;
-    } else {
-      // Already full-window -- the hint would just be noise, so stay silent.
-      link.hidden = true;
-    }
+    link.hidden = false;                       // always present
+    link.textContent = '⛶ Scrolling to see it all? Open in its own window';
   }
 
   // Switching language relayouts (not just re-renders): a shorter/longer listing
