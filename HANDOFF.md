@@ -142,7 +142,7 @@ recursion-factorial-stack       ds
 recursion-fib-levels            ds A5   BUILT
 recursion-hanoi                 ds
 sorting-quicksort-partition     ds A6 KEY
-heap-is-this-valid              ds      predict
+heap-is-this-valid              ds      confusion-first (WATCH)   BUILT
 sorting-heapsort-dual           ds A7   array<->tree dual view
 sorting-timing-chart            ds A7   CHART renderer
 hashing-collision-strategies    ds A8
