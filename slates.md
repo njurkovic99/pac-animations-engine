@@ -235,7 +235,7 @@ Pseudocode canonical; Java and C++ as toggles.
 | 8 | Algorithm analysis | `complexity-growth-curves` | **G** | — |
 | 9 | Quicksort partition | `sorting-quicksort-partition` | S | **A6 (KEY)** |
 | 9a | Quicksort — **worst case** (already-sorted input) | `sorting-quicksort-worstcase` | **P** | A6 |
-| 10 | Heap — validity | `heap-is-this-valid` | **P** | — |
+| 10 | Heap — validity | `heap-is-this-valid` | T | — |
 | 11 | Heapsort — **build the heap** (part 1 of 2) | `sorting-heapify` | S | A7 (part 1) |
 | 12 | Heapsort — array ↔ tree, extract & sink (part 2 of 2) | `sorting-heapsort-dual` | S | A7 (part 2) |
 | 13 | Timing vs n | `sorting-timing-chart` | **G** | **A7** |

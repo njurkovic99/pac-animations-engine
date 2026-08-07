@@ -322,6 +322,25 @@ body {
 }
 .pac-note-flash { animation: pac-note-flash 0.55s ease-out; }
 
+/* ---- attribution footer (engine-level, every animation) ----
+ * A static credit line, rendered by the engine below the note box so every
+ * animation carries it automatically. Muted (--text-dim, quieter than the
+ * narration's --text) and italic so it reads as a caption/footer, not content;
+ * no new colour token. It sits at the very bottom, BELOW the one element that
+ * grows (the note box, which expands past its reservation to fit long text), so
+ * the attribution is the only thing permitted to move between steps as note
+ * length varies. That is safe: it is static and carries no per-step information,
+ * and nothing sits below it. Everything ABOVE the note -- controls, narration,
+ * panels -- stays immovable because the stage is sized against the note's
+ * RESERVED height (see _availableStageHeight), never its grown height. */
+.pac-attribution {
+  margin-top: 10px;
+  font-style: italic;
+  font-size: 11px;
+  color: var(--text-dim);
+  text-align: left;
+}
+
 /* ---- memory-danger marker ----
  * A red warning triangle (⚠) + --error on any narration or note segment that
  * names a memory-integrity violation. Project-wide, cross-course convention.
@@ -2654,7 +2673,8 @@ class Engine {
         <span class="pac-progress"></span>
       </div>
       <div class="pac-narrate"></div>
-      <div class="pac-note pac-note-empty" role="note"></div>`;
+      <div class="pac-note pac-note-empty" role="note"></div>
+      <div class="pac-attribution">Designed by Dr. Neven Jurkovic with help from Claude AI</div>`;
 
     this.root.querySelector('.pac-title').textContent = s.title ?? '';
     this.root.querySelector('.pac-sub').textContent = s.subtitle ?? '';
