@@ -85,27 +85,18 @@ body {
 
 /* ---- open-in-own-window link (see AUTHORING.md "Open-in-own-window link") ----
  * The escape hatch every animation carries: a self-link (target="_blank") that
- * opens the page full-window, where there's no Canvas chrome. ALWAYS PRESENT, in
- * both contexts -- only its prominence changes, carried by data-embedded:
- *   - embedded  -> prominent amber (--warn) lifeline, stands out from body text
- *                  without reading as the --error danger red;
- *   - standalone -> still there, just quieter: muted (--text-dim), smaller, no
- *                  amber -- a plain offer, so the control is visible (and testable)
- *                  in a local preview or a directly-opened page, not only in Canvas.
- * Styled as a plain link (icon + underline on hover), never a content warning. */
+ * opens the page full-window, where there's no Canvas chrome. SAME wording, SAME
+ * style, ALWAYS visible -- identical in every context, so a preview shows the
+ * exact control a student meets inside Canvas. Colour is --warn amber-orange so it
+ * stands out from body text without reading as the --error danger red; styled as a
+ * plain link (icon + underline on hover), never a content warning. */
 .pac-openwin {
   display: inline-block;
   margin: -6px 0 var(--gap);
-  text-decoration: none;
-  /* standalone (quiet) is the base; embedded upgrades it below */
-  color: var(--text-dim);
-  font-size: 12px;
-  font-weight: 400;
-}
-.pac-openwin[data-embedded="true"] {
   color: var(--warn);
   font-size: 13px;
   font-weight: 500;
+  text-decoration: none;
 }
 .pac-openwin:hover  { text-decoration: underline; }
 .pac-openwin:focus-visible { outline: 2px solid var(--warn); outline-offset: 2px; }

@@ -978,23 +978,23 @@ because one click gives the full view.
 - A small control links to itself with `target="_blank"`, placed in the header near the
   title. **Engine-rendered, always present** — never per-animation authored, so an
   animation built next year gets it without anyone remembering.
-- **Always present in BOTH contexts — never hidden.** Iframe-aware
-  (`window.self !== window.top`) changes only its *prominence*, not its presence:
-  - **embedded** → prominent, amber `--warn`, worded as the lifeline it is
-    ("⛶ Scrolling to see it all? Open in its own window").
-  - **standalone** → still there, just **quieter**: muted (`--text-dim`), smaller, no
-    amber, a plain offer ("⛶ Open in its own window").
-- **Color:** amber `--warn` only when embedded (never error red, which would read as
-  alarm); muted when standalone. Styled clearly as a link in both.
+- **Same wording, same style, always visible — identical in every context.** No
+  iframe-awareness: the link does not change by embedded vs standalone. Recorded verbatim
+  so it is not invented again:
+  - **wording:** `⛶ Scrolling to see it all? Open in its own window`
+  - **colour:** `--warn` amber-orange, never error red (which would read as alarm)
+  - **size:** 13px, weight 500
 - Its line is reserved in the header from step 0, so its height never changes as steps
-  advance, and the two contexts are separate page loads — switching never moves anything.
+  advance and nothing moves.
 
-**Why never hidden standalone.** Hiding the standalone case (the original rule said
-"minimized or hidden", and *hidden* was what got built) made the one control that cannot
-be exercised inside Canvas invisible everywhere it *could* be: every local preview and
-every directly-opened live page. A control you can only see in the one place you cannot
-test it is a control you cannot verify. Quiet-but-present costs one muted line and fixes
-that.
+**Why identical, not context-dependent.** Students meet this control *inside Canvas*, so
+the amber lifeline is the real one; standalone is where **we** review, and a review that
+shows something different from what a student sees is a review of the wrong thing. Keeping
+them identical means every local preview and every directly-opened page shows the actual
+control — the one thing that cannot be exercised inside Canvas is verified everywhere
+else. (Two earlier rules failed this: "minimized or hidden" made *hidden* standalone,
+invisible in every preview; a later muted-standalone variant made previews show a
+different control than students get. Same style everywhere is what holds.)
 
 This dissolves the "how far do I accommodate low-res screens" question: make the embedded
 view fit reasonably for the majority; the link covers everyone else.
