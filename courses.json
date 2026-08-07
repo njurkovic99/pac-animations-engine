@@ -22,7 +22,7 @@
         ] },
       { "topic": "2.5 Recursion; 4.2.3 Implementing Recursion",
         "animations": [
-          { "file": "recursion-factorial-stack",  "backs": null },
+          { "file": "recursion-factorial-stack",  "backs": null, "built": true },
           { "file": "recursion-fib-levels",       "backs": "A5", "built": true },
           { "file": "recursion-hanoi",            "backs": null }
         ] },

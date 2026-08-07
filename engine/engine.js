@@ -56,7 +56,7 @@ const AUTOPLAY_MS = 900;
  * (AUTHORING.md "Panel sizing policy".) */
 const SIZE_POLICY = {
   code:      { floorRows: 15, ceiling: 'listing',     width: 'content', minCh: 60 }, // ≥15 rows; width = longest line (≥60 chars floor, capped there ceiling), leftover empty
-  callstack: { floorRows: 2,  ceiling: { frames: 3 }, scroll: true, width: 'natural' }, // ≤3 frames; natural width. 3 covers main→sort→siftDown (and every animation built so far); deeper recursion scrolls, active frame in view
+  callstack: { floorRows: 2,  ceiling: { frames: 6 }, scroll: true, width: 'natural' }, // ≤ min(deepest stack the trace reaches, 6 frames); natural width. The panel already sizes to min(content, ceiling) via the max-across-steps pass, so this cap only bites past 6: a 2-deep trace still gets a 2-frame panel, factorial(4) (main→4 calls) gets 5, and recursion deeper than 6 scrolls with the active frame in view — where the repetitive middle frames are the right thing to hide
   stream:    { floorRows: 2,  ceiling: { rows: 8 },   scroll: true, width: 'column' },  // ≤8 rows; matches its column
   structure: { floorRows: 2,  ceiling: 'halfStage',   scroll: true, width: 'natural' }, // ≤half stage (v-scroll ok); natural width, never h-scrolls
   strip:     { floorRows: 2,  ceiling: null,          width: 'natural' },  // exact content; natural width
