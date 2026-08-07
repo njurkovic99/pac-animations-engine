@@ -722,6 +722,34 @@ the row's height (so tops and bottoms align). They do not split the row evenly a
 they do not stretch. Two views of one structure — the heap's tree and its array — must
 be side by side, never stacked, or the correspondence that is the lesson is lost.
 
+**The height placement is a GLOBAL balance, not a forward-only flow.** "Panels flow
+down the right column, then the left" describes the *result*, not the mechanism. The
+engine enumerates every split `k` — right column gets `book[0..k)`, left gets
+`code` + `book[k..)`, declaration order preserved — and picks the `k` whose *taller*
+column is shortest (ties broken toward the two columns ending closest together). So
+**"why is this panel here" is nearly always "every alternative was taller"**: before
+investigating a placement, compute the other splits. In `recursion-factorial-stack`
+(code + two book panels, `calls` and `cascade`), putting the expansion beneath the
+code is split `k=1` at a 445px stage; both book panels right is `k=2` at 428px — the
+balancer tried both and chose 428. The empty space below an 8-line code panel is then
+just the shorter-column foot gap (item 24), not a hole a later panel could fill: moving
+`cascade` into it only relocates and enlarges the leftover.
+
+**Book panels NEVER share a row — and that is a consequence of where the fit logic
+lives, not a decision anyone made.** The horizontal first-fit that lets panels sit
+side by side exists ONLY in the `singleCol` wide-structure packer, which an animation
+enters only when a structure is too wide to sit beside the code. Two book panels in the
+ordinary two-column path therefore always stack, however much width the row has spare —
+`recursion-factorial-stack` stacks 541px of panels in a 1172px row, giving a 428px stage
+where side by side would give roughly 208px. This is NOT the panel-count density rule
+(that governs how *many* panels an animation has, not whether two short ones may share a
+row), and it was never a deliberate call — it falls out of the fit logic's location.
+**Do not add side-by-side book packing now:** it changes every animation's layout for a
+benefit that is invisible whenever there is height to spare, and no built animation is
+cramped by it. Revisit only if an animation is genuinely height-cramped with two short
+book panels — and the fix is to let the height balancer *consider pairing them as one
+row* among its splits, not a new placement rule bolted on beside the existing one.
+
 ### Panel count — soft ceiling of 6 for `standard`
 
 `beginner` caps at 3, enforced. `standard` was documented as unbounded, which is how
