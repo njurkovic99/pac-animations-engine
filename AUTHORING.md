@@ -976,12 +976,25 @@ own tab. This makes Canvas fit a non-problem: the embedded view can be a little 
 because one click gives the full view.
 
 - A small control links to itself with `target="_blank"`, placed in the header near the
-  title.
-- **Iframe-aware** (`window.self !== window.top`): **embedded** → shown prominently, it's
-  a lifeline ("⛶ Scrolling to see it all? Open in its own window"). **Standalone** →
-  minimized or hidden.
-- **Color: warn amber-orange (`--warn`)**, never error red, which would read as alarm.
-  Styled clearly as a link.
+  title. **Engine-rendered, always present** — never per-animation authored, so an
+  animation built next year gets it without anyone remembering.
+- **Always present in BOTH contexts — never hidden.** Iframe-aware
+  (`window.self !== window.top`) changes only its *prominence*, not its presence:
+  - **embedded** → prominent, amber `--warn`, worded as the lifeline it is
+    ("⛶ Scrolling to see it all? Open in its own window").
+  - **standalone** → still there, just **quieter**: muted (`--text-dim`), smaller, no
+    amber, a plain offer ("⛶ Open in its own window").
+- **Color:** amber `--warn` only when embedded (never error red, which would read as
+  alarm); muted when standalone. Styled clearly as a link in both.
+- Its line is reserved in the header from step 0, so its height never changes as steps
+  advance, and the two contexts are separate page loads — switching never moves anything.
+
+**Why never hidden standalone.** Hiding the standalone case (the original rule said
+"minimized or hidden", and *hidden* was what got built) made the one control that cannot
+be exercised inside Canvas invisible everywhere it *could* be: every local preview and
+every directly-opened live page. A control you can only see in the one place you cannot
+test it is a control you cannot verify. Quiet-but-present costs one muted line and fixes
+that.
 
 This dissolves the "how far do I accommodate low-res screens" question: make the embedded
 view fit reasonably for the majority; the link covers everyone else.

@@ -994,27 +994,35 @@ export class Engine {
    * The open-in-own-window escape hatch (AUTHORING.md "Open-in-own-window
    * link"). Canvas steals ~300px of chrome before an embedded animation even
    * begins; a self-link with target="_blank" opens the same page in a new tab
-   * where it gets the whole window. It is iframe-aware: a lifeline shown
-   * prominently when embedded, silent when the animation is already
-   * full-window (standalone). Built into the engine, so every animation
-   * inherits it -- no per-animation opt-in.
+   * where it gets the whole window. It is iframe-aware, but ALWAYS PRESENT in
+   * both contexts -- only its prominence changes:
+   *   - EMBEDDED  -> prominent amber lifeline, worded as the rescue it is.
+   *   - STANDALONE -> still there, just quieter (muted, smaller, no amber).
+   * Never hidden. Hiding it standalone (the old behaviour) made it invisible in
+   * every local preview and every directly-opened live page, so the one control
+   * that cannot be tested inside Canvas could not be verified anywhere else
+   * either. Built into the engine, so every animation inherits it -- no
+   * per-animation opt-in, and one built next year gets it without anyone
+   * remembering to add it. Its line is in the header above the stage, so its
+   * height is reserved from step 0 in either context and nothing moves.
    */
   _buildOpenWindowLink() {
     const link = this.root.querySelector('.pac-openwin');
     if (!link) return;
     // The iframe's own URL, which is exactly what we want to open full-window.
     link.href = window.location.href;
+    link.hidden = false;                       // always present, in both contexts
     // window.self !== window.top is the embedding test. The identity comparison
     // is same-origin-safe: it never touches a cross-origin property, so it
     // cannot throw even when Canvas serves the page from another origin.
     const embedded = window.self !== window.top;
-    if (embedded) {
-      link.textContent = '⛶ Scrolling to see it all? Open in its own window';
-      link.hidden = false;
-    } else {
-      // Already full-window -- the hint would just be noise, so stay silent.
-      link.hidden = true;
-    }
+    // Prominence (colour, size, weight) is carried by CSS off this data flag; the
+    // wording differs because the embedded case is a rescue ("you're scrolling")
+    // while the standalone case is a plain offer.
+    link.dataset.embedded = String(embedded);
+    link.textContent = embedded
+      ? '⛶ Scrolling to see it all? Open in its own window'
+      : '⛶ Open in its own window';
   }
 
   // Switching language relayouts (not just re-renders): a shorter/longer listing
