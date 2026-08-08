@@ -736,31 +736,38 @@ body {
  * that once and holds it, and nothing resizes as things move -- only positions
  * change (the master invariant). It never needs to scroll at the design size.
  *
- * Two channels, mirroring the other panels:
- *   - the SINGLE real disk is a neutral filled bar; the BUNDLE is drawn in the
- *     --warn amber so it can never be read as one fat disk -- amber says "many
- *     disks, moved by machinery not yet explained", the same "present but not yet
- *     settled" sense it carries as a node's `unlinked` outline;
- *   - `data-active` paints the blue activity fill on whichever item moves THIS
- *     step -- the same blue "being modified now" signal cells/nodes/frames use. */
+ * The real disk and the bundle share ONE resting treatment -- same fill, same
+ * outline, same label styling -- and differ by SHAPE ALONE: one solid bar
+ * labelled "disk n" versus several thin tapering lines labelled "n − 1 disks".
+ * One difference doing one job cannot be misread; two things differing in colour
+ * AND shape would leave the reader guessing which difference carries the meaning.
+ * The bundle is deliberately NOT given a colour of its own -- in particular not
+ * --warn, which means `unlinked` in a structure panel, and the bundle is a member
+ * of the structure it sits on, so it must not wear it. The blue activity fill is
+ * the panel's ONLY meaningful colour, applied identically to whichever item -- disk
+ * or bundle -- moves THIS step (the same "being modified now" signal cells/nodes/
+ * frames use). */
 .pac-pegs { display: block; }
 .pac-peg-post { fill: var(--border); }
 .pac-peg-base { fill: var(--border); }
 .pac-peg-name { fill: var(--text); font-family: var(--mono); font-size: 13px; font-weight: 600; text-anchor: middle; }
 .pac-peg-role { fill: var(--text-dim); font-family: var(--mono); font-size: 11px; text-anchor: middle; }
 
-/* The one real disk: a neutral bar whose WIDTH encodes its size (the rule being
- * enforced -- never a larger disk on a smaller one -- made visible). */
-.pac-disk-box { fill: var(--panel-header); stroke: var(--text-dim); stroke-width: 1.2; transition: fill .15s, stroke .15s; }
-.pac-disk-label { fill: var(--text); font-family: var(--mono); font-size: 11px; text-anchor: middle; }
-.pac-disk[data-active="true"] .pac-disk-box { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
-
-/* The bundle: thin, clearly separated, upward-tapering lines = a miniature stack,
- * in the bundle amber, with an "n − 1 disks" label -- unmistakably a MANY. */
-.pac-bundle-bar { fill: var(--warn); transition: fill .15s; }
-.pac-bundle-label { fill: var(--warn); font-family: var(--mono); font-size: 10.5px; font-weight: 600; text-anchor: middle; }
-.pac-bundle[data-active="true"] .pac-bundle-bar   { fill: var(--accent); }
-.pac-bundle[data-active="true"] .pac-bundle-label { fill: var(--accent); }
+/* Resting treatment, shared by the real disk (a solid bar whose WIDTH encodes its
+ * size -- the "never a larger disk on a smaller one" rule made visible) and by
+ * every bundle line. Identical fill, outline, and label; only the shape differs. */
+.pac-disk-box, .pac-bundle-bar {
+  fill: var(--panel-header); stroke: var(--text-dim); stroke-width: 1.2;
+  transition: fill .15s, stroke .15s;
+}
+.pac-disk-label, .pac-bundle-label {
+  fill: var(--text); font-family: var(--mono); font-size: 11px; text-anchor: middle;
+}
+/* Activity fill: the one meaningful colour, on whichever item moves this step. */
+.pac-disk[data-active="true"] .pac-disk-box,
+.pac-bundle[data-active="true"] .pac-bundle-bar {
+  fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5;
+}
 
 /* ---- CHART panel ----
  * A STRUCTURE panel: it never scrolls, in either axis. The SVG carries a fixed
@@ -1673,8 +1680,12 @@ const pegsPanel = (() => { /* PEGS panel — three pegs with disks (and bundles)
  *   - a DISK's width varies with `size`, because "never a larger disk on a
  *     smaller one" is the rule being enforced and it has to be visible;
  *   - a BUNDLE must read as MANY disks, never as one fat disk — so it is drawn
- *     as a set of thin, separated, upward-tapering lines (a miniature stack) in
- *     a DISTINCT colour from the single real disk, with an "n − 1 disks" label.
+ *     as a set of thin, separated, upward-tapering lines (a miniature stack),
+ *     with an "n − 1 disks" label. It is distinguished from the real disk by
+ *     SHAPE ALONE, and wears the real disk's exact resting colour: --warn (amber)
+ *     means `unlinked` in a structure panel, and the bundle is a member of the
+ *     structure it sits on, so it must not be coloured with it (or with any other
+ *     colour of its own — one difference, shape, does the one job).
  *
  * MASTER INVARIANT: every dimension here — peg spacing, peg height, each disk's
  * width, the bundle's size — is a FIXED constant or a pure function of the
@@ -1766,9 +1777,9 @@ function disk(it, cx, top) {
 
 /* A bundle: B_BARS thin lines, widest at the bottom and tapering upward so it
  * reads as a MINIATURE STACK — many disks, not one — plus the "n − 1 disks"
- * label beneath the lines. Drawn in the bundle colour (distinct from the real
- * disk) so it can never be mistaken for a single fat disk; `active` switches it
- * to the blue activity colour while it travels. */
+ * label beneath the lines. It wears the real disk's exact colour and is set apart
+ * by SHAPE ALONE (thin stacked lines vs one solid bar); `active` gives it the
+ * blue activity fill while it travels, identically to the real disk. */
 function bundle(it, cx, top) {
   let bars = '';
   for (let k = 0; k < B_BARS; k++) {                 // k = 0 is the bottom (widest) line

@@ -21,8 +21,12 @@
  *   - a DISK's width varies with `size`, because "never a larger disk on a
  *     smaller one" is the rule being enforced and it has to be visible;
  *   - a BUNDLE must read as MANY disks, never as one fat disk — so it is drawn
- *     as a set of thin, separated, upward-tapering lines (a miniature stack) in
- *     a DISTINCT colour from the single real disk, with an "n − 1 disks" label.
+ *     as a set of thin, separated, upward-tapering lines (a miniature stack),
+ *     with an "n − 1 disks" label. It is distinguished from the real disk by
+ *     SHAPE ALONE, and wears the real disk's exact resting colour: --warn (amber)
+ *     means `unlinked` in a structure panel, and the bundle is a member of the
+ *     structure it sits on, so it must not be coloured with it (or with any other
+ *     colour of its own — one difference, shape, does the one job).
  *
  * MASTER INVARIANT: every dimension here — peg spacing, peg height, each disk's
  * width, the bundle's size — is a FIXED constant or a pure function of the
@@ -114,9 +118,9 @@ function disk(it, cx, top) {
 
 /* A bundle: B_BARS thin lines, widest at the bottom and tapering upward so it
  * reads as a MINIATURE STACK — many disks, not one — plus the "n − 1 disks"
- * label beneath the lines. Drawn in the bundle colour (distinct from the real
- * disk) so it can never be mistaken for a single fat disk; `active` switches it
- * to the blue activity colour while it travels. */
+ * label beneath the lines. It wears the real disk's exact colour and is set apart
+ * by SHAPE ALONE (thin stacked lines vs one solid bar); `active` gives it the
+ * blue activity fill while it travels, identically to the real disk. */
 function bundle(it, cx, top) {
   let bars = '';
   for (let k = 0; k < B_BARS; k++) {                 // k = 0 is the bottom (widest) line
