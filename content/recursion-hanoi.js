@@ -26,12 +26,10 @@
  * four?" — the closing note poses exactly that, because doubling is what makes 64
  * disks absurd.
  *
- * A NOTE ON PART 1: recursion-hanoi-leap is not present in this repository. The
- * step-0 link the design calls for ("See the assumption this pays back" ->
- * recursion-hanoi-leap.html) is therefore OMITTED rather than emitted as a 404
- * (AUTHORING.md forbids a dead link). The instructor's part-1 framing is kept in
- * the notes verbatim; it reads as "recall the idea we deferred", and the reference
- * resolves the moment part 1 is built alongside this file.
+ * CROSS-LINK TO PART 1: recursion-hanoi-leap is built and lives alongside this
+ * file, so the step-0 note carries a link back to it ("See the assumption this
+ * pays back"). Part 1's final note links forward here; the two seams close the
+ * loop, as the design calls for.
  */
 
 /* One listing, three ds languages, line-aligned to a single 10-line grid so `line`
@@ -151,9 +149,22 @@ function* trace() {
       // if it coincides, so the bright line always wins.
       parked: stack.slice(0, -1).map(f => f.call).filter(v => v != null),
       panels: {
+        // The shared PEGS renderer (engine/panels/pegs.js, built general for part 1)
+        // takes a peg as an ordered list of ITEMS bottom-to-top, each a disk of a
+        // given `size` or a bundle. Part 2 uses real disks only: one item per rank,
+        // its width carrying the rank, and the disk moved THIS step flagged `active`
+        // (the blue fill) — the same per-item activity channel the bundle used.
         pegs: {
-          pegs: ['A', 'B', 'C'].map(L => ({ label: L, role: roles[L] ?? null, disks: state[L].slice() })),
-          active,
+          pegs: ['A', 'B', 'C'].map(L => ({
+            id: L,
+            role: roles[L] ?? null,
+            items: state[L].map(rank => ({
+              kind: 'disk',
+              size: rank,
+              label: String(rank),
+              active: !!(active && active.peg === L && active.rank === rank),
+            })),
+          })),
         },
         calls: {
           frames: stack.map((f, i) => {
@@ -171,7 +182,8 @@ function* trace() {
   yield snap({
     line: null, tag: 'init',
     narrate: 'Three disks on peg A. Move them all to C, never putting a larger disk on a smaller one.',
-    note: SETUP_NOTE,
+    note: [SETUP_NOTE + ' ',
+      { link: { href: 'recursion-hanoi-leap.html', text: 'See the assumption this pays back' } }],
   });
 
   /* main calls MoveTower(3, A, C, B) — frame pushed, arguments bound, roles set.

@@ -726,29 +726,44 @@ body {
 .pac-edge { stroke: var(--border); stroke-width: 1.2; fill: none; }
 .pac-edge[data-state="taken"] { stroke: var(--accent); }
 
-/* ---- PEGS panel ----
- * Pegs with ordered stacks of disks, drawn at NATURAL pixel size (width + height
- * set on the SVG) like the NODES panel. A STRUCTURE panel: sized once from the
- * whole trace (pegs.js) and held, so nothing resizes as disks move. Disk WIDTH
- * carries the rank, so a larger disk on a smaller one is unmistakable. The post
- * and base are muted structure; a disk is a neutral slab with a --text-dim
- * outline; the one disk moved on a step takes the blue activity FILL (the same
- * "acted on now" channel as nodes/cells). Colours are tokens only. */
+/* ---- PEGS panel (see panels/pegs.js, AUTHORING.md "pegs and disks") ----
+ * Three pegs with disks/bundles stacked on them. A STRUCTURE panel rendered at a
+ * FIXED natural size (the SVG's width/height are constants): the engine measures
+ * that once and holds it, and nothing resizes as things move -- only positions
+ * change (the master invariant). It never needs to scroll at the design size.
+ *
+ * The real disk and the bundle share ONE resting treatment -- same fill, same
+ * outline, same label styling -- and differ by SHAPE ALONE: one solid bar
+ * labelled "disk n" versus several thin tapering lines labelled "n − 1 disks".
+ * One difference doing one job cannot be misread; two things differing in colour
+ * AND shape would leave the reader guessing which difference carries the meaning.
+ * The bundle is deliberately NOT given a colour of its own -- in particular not
+ * --warn, which means `unlinked` in a structure panel, and the bundle is a member
+ * of the structure it sits on, so it must not wear it. The blue activity fill is
+ * the panel's ONLY meaningful colour, applied identically to whichever item -- disk
+ * or bundle -- moves THIS step (the same "being modified now" signal cells/nodes/
+ * frames use). */
 .pac-pegs { display: block; }
 .pac-peg-post { fill: var(--border); }
-.pac-peg-base { fill: var(--text-dim); }
-.pac-disk rect {
+.pac-peg-base { fill: var(--border); }
+.pac-peg-name { fill: var(--text); font-family: var(--mono); font-size: 13px; font-weight: 600; text-anchor: middle; }
+.pac-peg-role { fill: var(--text-dim); font-family: var(--mono); font-size: 11px; text-anchor: middle; }
+
+/* Resting treatment, shared by the real disk (a solid bar whose WIDTH encodes its
+ * size -- the "never a larger disk on a smaller one" rule made visible) and by
+ * every bundle line. Identical fill, outline, and label; only the shape differs. */
+.pac-disk-box, .pac-bundle-bar {
   fill: var(--panel-header); stroke: var(--text-dim); stroke-width: 1.2;
   transition: fill .15s, stroke .15s;
 }
-/* Activity FILL: the disk being placed THIS step reads blue, matching the code
- * line and its call frame. */
-.pac-disk[data-active="true"] rect { fill: var(--accent-soft); stroke: var(--accent); }
-.pac-disk-label { fill: var(--text); font-family: var(--mono); font-size: 11px; text-anchor: middle; }
-.pac-peg-label {
-  fill: var(--text); font-family: var(--mono); font-size: 13px; font-weight: 600; text-anchor: middle;
+.pac-disk-label, .pac-bundle-label {
+  fill: var(--text); font-family: var(--mono); font-size: 11px; text-anchor: middle;
 }
-.pac-peg-role { fill: var(--text-dim); font-family: var(--mono); font-size: 10px; text-anchor: middle; }
+/* Activity fill: the one meaningful colour, on whichever item moves this step. */
+.pac-disk[data-active="true"] .pac-disk-box,
+.pac-bundle[data-active="true"] .pac-bundle-bar {
+  fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5;
+}
 
 /* ---- CHART panel ----
  * A STRUCTURE panel: it never scrolls, in either axis. The SVG carries a fixed
