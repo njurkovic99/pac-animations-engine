@@ -19,12 +19,13 @@ import * as streamPanel    from './panels/stream.js';
 import * as chartPanel     from './panels/chart.js';
 import * as sliderPanel    from './panels/slider.js';
 import * as callstackPanel from './panels/callstack.js';
+import * as pegsPanel      from './panels/pegs.js';
 import { Overlay }         from './overlay/arrows.js';
 
 const RENDERERS = {
   code: codePanel, cells: cellsPanel, nodes: nodesPanel,
   stream: streamPanel, chart: chartPanel, slider: sliderPanel,
-  callstack: callstackPanel,
+  callstack: callstackPanel, pegs: pegsPanel,
 };
 
 const MAX_STEPS = 5000;
@@ -1127,11 +1128,11 @@ function panelKind(p) {
   if (p.structure === true)  return 'structure';
   if (p.structure === false) return 'book';
   if (p.type === 'callstack' || p.type === 'stream' || p.compact) return 'book';
-  // NODES/CHART draw the whole structure and default to structure; a CELLS panel
-  // is more often an auxiliary strip (pointer variables, an invariant readout)
-  // than the structure itself, so it defaults to bookkeeping and opts in with
-  // `structure: true` (the array/stack it IS the structure of).
-  if (p.type === 'nodes' || p.type === 'chart') return 'structure';
+  // NODES/CHART/PEGS draw the whole structure and default to structure; a CELLS
+  // panel is more often an auxiliary strip (pointer variables, an invariant
+  // readout) than the structure itself, so it defaults to bookkeeping and opts in
+  // with `structure: true` (the array/stack it IS the structure of).
+  if (p.type === 'nodes' || p.type === 'chart' || p.type === 'pegs') return 'structure';
   return 'book';
 }
 

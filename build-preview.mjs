@@ -51,6 +51,7 @@ ${panel('stream.js', 'streamPanel')}
 ${panel('chart.js', 'chartPanel')}
 ${panel('slider.js', 'sliderPanel')}
 ${panel('callstack.js', 'callstackPanel')}
+${panel('pegs.js', 'pegsPanel')}
 ${overlay}
 ${engine}
 ${content}
