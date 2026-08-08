@@ -726,6 +726,30 @@ body {
 .pac-edge { stroke: var(--border); stroke-width: 1.2; fill: none; }
 .pac-edge[data-state="taken"] { stroke: var(--accent); }
 
+/* ---- PEGS panel ----
+ * Pegs with ordered stacks of disks, drawn at NATURAL pixel size (width + height
+ * set on the SVG) like the NODES panel. A STRUCTURE panel: sized once from the
+ * whole trace (pegs.js) and held, so nothing resizes as disks move. Disk WIDTH
+ * carries the rank, so a larger disk on a smaller one is unmistakable. The post
+ * and base are muted structure; a disk is a neutral slab with a --text-dim
+ * outline; the one disk moved on a step takes the blue activity FILL (the same
+ * "acted on now" channel as nodes/cells). Colours are tokens only. */
+.pac-pegs { display: block; }
+.pac-peg-post { fill: var(--border); }
+.pac-peg-base { fill: var(--text-dim); }
+.pac-disk rect {
+  fill: var(--panel-header); stroke: var(--text-dim); stroke-width: 1.2;
+  transition: fill .15s, stroke .15s;
+}
+/* Activity FILL: the disk being placed THIS step reads blue, matching the code
+ * line and its call frame. */
+.pac-disk[data-active="true"] rect { fill: var(--accent-soft); stroke: var(--accent); }
+.pac-disk-label { fill: var(--text); font-family: var(--mono); font-size: 11px; text-anchor: middle; }
+.pac-peg-label {
+  fill: var(--text); font-family: var(--mono); font-size: 13px; font-weight: 600; text-anchor: middle;
+}
+.pac-peg-role { fill: var(--text-dim); font-family: var(--mono); font-size: 10px; text-anchor: middle; }
+
 /* ---- CHART panel ----
  * A STRUCTURE panel: it never scrolls, in either axis. The SVG carries a fixed
  * viewBox (chart.js) and is sized to the region the engine gives it; the plot

@@ -140,7 +140,7 @@ stacks-paren-scanner            ds A3   predict/trap
 stacks-postfix-eval             ds A4
 recursion-factorial-stack       ds
 recursion-fib-levels            ds A5   BUILT
-recursion-hanoi                 ds
+recursion-hanoi                 ds      PEGS renderer (three disks, seven moves)  BUILT
 sorting-quicksort-partition     ds A6 KEY
 heap-is-this-valid              ds      confusion-first (WATCH)   BUILT
 sorting-heapsort-dual           ds A7   array<->tree dual view
