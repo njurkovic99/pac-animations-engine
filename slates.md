@@ -231,7 +231,8 @@ Pseudocode canonical; Java and C++ as toggles.
 | 4 | Stacks — postfix evaluation | `stacks-postfix-eval` | T | **A4** |
 | 5 | Recursion — factorial unwinding | `recursion-factorial-stack` | T | — |
 | 6 | Recursion — **levels** | `recursion-fib-levels` | **P** | **A5** |
-| 7 | Recursion — Hanoi | `recursion-hanoi` | S | — |
+| 7 | Recursion — Hanoi, **the recursive leap** (part 1 of 2) | `recursion-hanoi-leap` | S | — |
+| 7a | Recursion — Hanoi, concrete three-disk trace (part 2 of 2) | `recursion-hanoi` | S | — |
 | 8 | Algorithm analysis | `complexity-growth-curves` | **G** | — |
 | 9 | Quicksort partition | `sorting-quicksort-partition` | S | **A6 (KEY)** |
 | 9a | Quicksort — **worst case** (already-sorted input) | `sorting-quicksort-worstcase` | **P** | A6 |
@@ -262,6 +263,21 @@ O(n log n). Not a separate KEY; it deepens A6. The degenerate tree is *taller th
 the structure ceiling by design* — it scrolls vertically within its panel (active
 node kept in view), because shrinking the one shape that IS the lesson would defeat
 it.
+
+**Hanoi split (row 7).** Hanoi is two animations, built in order.
+`recursion-hanoi-leap` (part 1) establishes the recursive leap the lecture
+turns on — *"assume you know how to move n−1 rings; then moving n is easy"* —
+by drawing the top n−1 disks as a **bundle** that moves in one step beside the
+one real bottom disk, so the induction hypothesis becomes an object on screen.
+It stays abstract (n disks, n−1 bundled, no concrete count) and is honest that
+each bundle move hides a whole tower's worth of real moves. `recursion-hanoi`
+(part 2) then discharges that debt with a concrete three-disk trace, every move
+shown and nothing bundled; its opening note links back to part 1 and part 1's
+final note links forward to it. Part 1 must be built first — part 2 is
+unreadable without it. Both introduce and reuse the **pegs-and-disks** structure
+panel unchanged: a peg holds an ordered list of items, each a disk of a given
+size (width varies with size — the "never a larger disk on a smaller one" rule
+made visible) or a bundle.
 
 **Heapsort split (A7).** Heapsort was one animation (`sorting-heapsort-dual`); it
 ran too long, so building the max heap is split off into `sorting-heapify` (part

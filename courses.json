@@ -24,6 +24,7 @@
         "animations": [
           { "file": "recursion-factorial-stack",  "backs": null, "built": true },
           { "file": "recursion-fib-levels",       "backs": "A5", "built": true },
+          { "file": "recursion-hanoi-leap",       "backs": null, "built": true },
           { "file": "recursion-hanoi",            "backs": null }
         ] },
       { "topic": "Sorting — Quicksort Partition",
