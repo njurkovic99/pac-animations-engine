@@ -62,7 +62,8 @@ const STACK_GAP = 3;                        // gap between stacked items
  * still fits inside the peg (its top clears the post: 78 < ~107 max), so nothing
  * else shifts. It stays constant across steps as always. */
 const B_BARS = 7, B_BAR_H = 5, B_BAR_GAP = 4;
-const B_MAXW = 90, B_MINW = 46;            // bottom (widest) → top (narrowest) line
+const B_MAXW = 90, B_MINW = 12;            // bottom (widest) → top (barely wider than the
+                                           // POST_W=6 stick), so the stack reads as a TRIANGLE
 const B_BARS_H = B_BARS * B_BAR_H + (B_BARS - 1) * B_BAR_GAP;   // lines block height = 59
 const B_LABEL_H = 15;                       // reserved for the "n − 1 disks" label
 const BUNDLE_H = B_BARS_H + 4 + B_LABEL_H;  // whole bundle block height = 78
