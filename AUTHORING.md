@@ -137,7 +137,7 @@ not.
 
 # PART 2 — PANELS
 
-Five renderers plus CALLSTACK. If you want a seventh, check first whether it is one
+Six renderers plus CALLSTACK. If you want an eighth, check first whether it is one
 of these with a different template — eleven things named separately during design
 turned out to be NODES.
 
@@ -211,6 +211,30 @@ prompt-driven and **no original file modelled input at all**.
 
 `{series: [{name, color, points}], xLabel, yLabel, marker}`. Required, not optional:
 `ds7` grades a plot of execution time vs. n.
+
+## PEGS
+
+`{pegs: [{label, role, disks: [rank, …]}], active: {peg, rank}}`. Pegs, each holding
+an **ordered list of items** drawn bottom-to-top; a rank is a positive number and a
+larger rank draws a **wider slab**, so a larger item resting on a smaller one is
+impossible to miss. Built for Towers of Hanoi (`recursion-hanoi`), but the renderer
+knows nothing about Hanoi's legality rule — it only draws pegs and their ordered
+items, so it serves any "ordered piles on posts" structure.
+
+- `role` is a free caption under the peg's label (`source` / `dest` / `spare`). It
+  updates per step as the running call rebinds the pegs — the **argument exchange**
+  made visible, alongside the same binding in the CALLSTACK.
+- `active: {peg, rank}` names the one item placed **this step**; it takes the blue
+  activity FILL, the same "acted on now" channel as nodes/cells.
+- A **STRUCTURE** panel (kind `structure`, like NODES/CHART): natural pixel size,
+  never horizontally scrolled. Every dimension — peg count, largest rank, tallest a
+  stack ever gets — resolves ONCE over the whole trace and holds, so nothing resizes
+  as items move. A peg holding fewer items than the reserved capacity is just
+  shorter; its post and base do not move. No SIZE_POLICY row of its own: it uses the
+  shared `structure` class.
+
+Serves the Towers of Hanoi (three disks in `recursion-hanoi`), and any future
+stack-of-ranked-items-on-posts structure.
 
 ## CALLSTACK
 
