@@ -139,7 +139,7 @@ with per-field anchors), STREAM (console I/O), CHART (series over n), **CALLSTAC
 
 ---
 
-## WHAT'S DONE (10 animations, all merged to main + live)
+## WHAT'S DONE (15 animations, all merged to main + live)
 
 1. **recursion-fib-levels** (ds A5) — recursion trace, `level`/`depth` node meta.
 2. **lists-doubly-insert-order** (ds A10) — 4-line doubly-linked insertion; the
@@ -149,6 +149,15 @@ with per-field anchors), STREAM (console I/O), CHART (series over n), **CALLSTAC
    **CELLS rendering contract** and the **master layout invariant**. Renamed the
    CALLSTACK panel to **"Function calls"** (student-visible only) so it can't be
    confused with the actual stack in A3/A4.
+15. **recursion-hanoi** (ds) — three disks, seven moves, every call stepped into.
+14. **recursion-hanoi-leap** (ds) — the n−1 bundle: the induction hypothesis drawn.
+    Added the **PEGS renderer**.
+13. **recursion-factorial-stack** (ds) — the work happens on the way BACK. Raised the
+    CALLSTACK ceiling to min(deepest stack, 6 frames).
+12. **heap-is-this-valid** (ds) — five candidates; the array reveals what the tree
+    conceals. Added the **attribution footer**.
+11. **sorting-timing-chart** (ds A7) — the **CHART renderer** and the **slider**, the
+    one narrow WATCH-only exception.
 10. **sorting-quicksort-worstcase** (ds) — already-sorted input; nothing ever moves.
 9. **sorting-heapsort-dual** (ds A7) — extraction, shrinking tree, green from the right.
 8. **sorting-heapify** (ds) — building the heap, dual tree+array view.
@@ -189,30 +198,47 @@ deferred): append `?a=ds-a1` to the src.
 
 ---
 
-## WHERE WE STOPPED — THE SORTING BLOCK IS DONE. NEXT: `sorting-timing-chart`
+## WHERE WE STOPPED — 15 ANIMATIONS. NEXT: `pointers-address-model` (or your pick)
 
-**10 animations** built, reviewed, merged, live. The sorting block is complete and
-chained by links.
+Fifteen built, reviewed, merged, live. The **recursion block** is the newest: factorial
+(the call stack), the Hanoi leap (the induction hypothesis as an object on screen), and
+Hanoi proper (three disks, seven moves), the last two cross-linked.
 
-**Next: `sorting-timing-chart` (ds A7's second backer).** It debuts the **CHART
-renderer — designed in panel-inventory, never built** (check HANDOFF's designed-vs-built
-table). ds7 asks students to plot heapsort against a slow sort over increasing n, so it
-pairs directly with the heapsort animations. It is a one-new-capability build, not a
-pure inherit — budget accordingly.
+**Six ds animations remain.** Three are cheap, pure inherit:
+`pointers-address-model` (CELLS + arrows), `lists-insert-alpha` (A9, arrows),
+`trees-recursive-height` (A12 — leans directly on the recursion work just finished).
+Two are moderate: `trees-bst-operations` (A11), `hashing-collision-strategies` (A8).
+Two carry the **last unbuilt capability, graph layout in NODES**:
+`graphs-representations` (A13) and `graphs-bfs-dfs`.
 
-**Ten ds animations remain** (the slate grew from 20 to 22 with `sorting-heapify` and
-`sorting-quicksort-worstcase`):
-- *Cheap, pure inherit:* `recursion-factorial-stack`, `recursion-hanoi`,
-  `heap-is-this-valid`, `pointers-address-model`
-- *Moderate:* `lists-insert-alpha` (A9), `trees-bst-operations` (A11),
-  `trees-recursive-height` (A12), `hashing-collision-strategies` (A8)
-- *New capability:* `sorting-timing-chart` (CHART), `graphs-representations` (A13) and
-  `graphs-bfs-dfs` (graph layout, which NODES nominally supports but has never done)
-- *Shared:* `complexity-growth-curves` (also aJava, needs CHART)
+---
 
-The trees and graphs will stress the structure-region height ceiling. If they hold, the
-layout rules are settled.
+## PROCESS RULES EARNED THE HARD WAY — read before the next build
 
+A long stretch of confusion in this session traced to four causes, none of them about
+the animations. All four are now fixed, and the fixes only hold if they are kept:
+
+**1. Exactly ONE branch exists at a time.** Sixteen merged branches had accumulated on
+the remote, and Claude Code kept reusing whichever it touched last — which put work on
+branches cut from stale bases. **Branch deletion is part of the merge ritual, not a
+someday task:** merge → `git checkout main` → `git pull` → `git push origin --delete
+BRANCH` → `git fetch --prune`. With one branch, "which branch" is never a question.
+
+**2. Branch from the animation you are extending**, not from `main`, when it is not yet
+merged. `recursion-hanoi` was cut from main while part 1 sat unmerged, so the
+instruction "reuse part 1's pegs panel" was impossible to follow — the branch did not
+contain it — and a second PEGS renderer was written, which then conflicted.
+
+**3. A fix verified against an uncommitted working copy tells us nothing.** Three
+times a fix was reported as verified while nothing had been pushed. The only state
+either side can see is what is on the remote. Verification must follow the push.
+
+**4. Say WHERE to look.** Four rounds were spent on a note-link that worked the whole
+time: it lived in the FINAL note, and the review instruction was "open it and look" —
+every previous link had been on step 0. When a link or a payoff is on the last step,
+the instruction must say *step to the end*.
+
+---
 ---
 
 ## THE SORTING BLOCK — five animations, one lesson

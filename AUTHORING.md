@@ -621,7 +621,7 @@ important structural rule in this document, and it was learned the expensive way
 | Panel | Floor | Ceiling | Beyond ceiling |
 |---|---|---|---|
 | CODE | 15 rows; ~60 chars wide | listing length; longest line | scroll |
-| CALLSTACK | 2 rows | 3 frames | scroll, active frame in view |
+| CALLSTACK | 2 rows | min(deepest stack, 6 frames) | scroll, active frame in view |
 | STREAM | 2 rows | 8 rows | scroll, newest line in view |
 | structure (CELLS/NODES) | content | half the stage (height only) | scroll vertically; **never horizontally** |
 | strips | 2 rows | exact content | — |
@@ -957,6 +957,30 @@ of the structure*, which is binary and structural. "Not in the right place" is a
 gradient — mid-algorithm it is true of nearly every element, so the colour would stop
 carrying information. Green marks the small, growing set of things that ARE settled,
 which is the useful half.
+
+## A token may be borrowed as a PIGMENT
+
+`--warn` means `unlinked` in a structure panel, and it also colours the
+open-in-own-window link, a STREAM input prompt, two focus rings, and one of
+`sorting-timing-chart`'s two curves. That is not five meanings — it is one meaning
+plus four borrowings.
+
+**The test is whether the context HAS a colour channel the token would contradict.**
+Structure panels do: outline means membership, fill means activity. A token carrying
+one of those meanings must not appear there saying something else — which is exactly
+why the amber bundle in `recursion-hanoi-leap` was wrong. A disk on a peg *is* a
+member of the structure it sits on, so amber asserted the opposite of a fact, and the
+bundle was recoloured to the real disk's treatment (shape alone distinguishes them).
+
+A chart series, a link's focus ring, and a STREAM prompt have no such channel. A chart
+needs two distinguishable series colours and which tokens supply them is arbitrary —
+note that `--accent` is borrowed there too, despite meaning "active this step"
+everywhere else. Borrowing paint where nothing is being said with colour is fine;
+saying a second thing with it where colour already speaks is not.
+
+Audited inventory, if this is ever questioned again: six `--warn` uses — `unlinked`
+node outlines and the open-window link (its two jobs), plus two link focus rings, the
+STREAM `dir: 'in'` prompt, and the bubble-sort series. Four borrowings, no collisions.
 
 ## Memory-danger marker (red ⚠)
 

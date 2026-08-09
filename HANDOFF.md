@@ -39,22 +39,32 @@ estimating an animation.
 
 | Capability | Designed in | Built? | Debuts on |
 |---|---|---|---|
-| CODE / CELLS / NODES / STREAM / CHART | panel-inventory §2 | YES | — |
+| CODE / CELLS / NODES / STREAM | panel-inventory §2 | YES | — |
 | Arrow overlay | panel-inventory §3 | YES | `lists-doubly-insert-order` |
 | CALLSTACK panel | AUTHORING, panel-inventory §2 | YES | `lists-array-insert-delete` |
 | Caller-line dimming | AUTHORING | YES | `lists-array-insert-delete` |
 | Bounded stage / pinned note | AUTHORING | YES | `lists-array-insert-delete` |
-| **Index-pointer markers** | AUTHORING "Planned primitive" | **NO** | `queues-count-vs-rear` |
-| **Race driver (lockstep generators)** | AUTHORING exec-model table, panel-inventory §4 | **NO** | `queues-count-vs-rear` |
-| `stale` CELLS role | panel-inventory §2 | unverified | `queues-count-vs-rear` |
+| Index-pointer markers | AUTHORING | YES | `queues-count-vs-rear` |
+| `stale` CELLS role | panel-inventory §2 | YES | `queues-count-vs-rear` |
+| Vertical CELLS (column, markers left) | AUTHORING | YES | `stacks-paren-scanner` |
+| `sorted` role — green fill | AUTHORING | YES | `sorting-quicksort-partition` |
+| Links inside notes | AUTHORING | YES | `sorting-heapsort-dual` |
+| CHART renderer | panel-inventory §2 | YES | `sorting-timing-chart` |
+| Slider (narrow WATCH-only exception) | AUTHORING, PLANNED | YES | `sorting-timing-chart` |
+| PEGS renderer | AUTHORING | YES | `recursion-hanoi-leap` |
+| Attribution footer | AUTHORING | YES | engine-level, all animations |
+| Race driver (lockstep generators) | AUTHORING, panel-inventory §4 | YES, but **NO USER** in the repo | intended `sorting-race-statements` |
+| **Graph layout in NODES** | panel-inventory §2 | **NO** | `graphs-representations` |
 | Loop controls (step out / run to end) | AUTHORING | NO | first loop animation |
 | THINK mode | this doc | NO | deferred in full |
 
-`queues-count-vs-rear` therefore carries **two** unbuilt capabilities, not one.
-It is the race driver's first real exercise as much as the index pointer's —
-budget accordingly, and do not treat a slow first draft there as a process
-problem. The animation after it (stacks, A3) inherits both and is the honest
-throughput test.
+**Only ONE unbuilt capability remains for Phase 1: graph layout in NODES**, needed by
+`graphs-representations` (A13) and `graphs-bfs-dfs`. Everything else on the ds slate is
+a pure inherit. Budget those two accordingly and treat the rest as cheap.
+
+The race driver is built and working but nothing exercises it — `queues-count-vs-rear`
+was designed as a race and then dropped to a single representation. Treat it as
+untested in production until `sorting-race-statements`.
 
 Known doc conflict, unresolved: `AUTHORING.md` lists CELLS roles as
 `active, compared, ok, error, empty`; `panel-inventory.md` §2 lists
@@ -144,7 +154,7 @@ recursion-hanoi                 ds      PEGS renderer (three disks, seven moves)
 sorting-quicksort-partition     ds A6 KEY
 heap-is-this-valid              ds      confusion-first (WATCH)   BUILT
 sorting-heapsort-dual           ds A7   array<->tree dual view
-sorting-timing-chart            ds A7   CHART renderer
+sorting-timing-chart            ds A7   BUILT (CHART + slider)
 hashing-collision-strategies    ds A8
 pointers-address-model          ds
 lists-insert-alpha              ds A9   arrows
