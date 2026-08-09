@@ -414,10 +414,13 @@ note: [
 ]
 ```
 
-A link segment is a **flat `{ href, text }`** — NOT `{ link: { href, text } }`. The
-engine's `renderSegments` matches `seg.href` directly; a wrapped `{ link: {…} }`
-segment matches no branch and is **dropped** (and, since the hardening below, warns
-to the console). All seven note-links in the repo use the flat form.
+A link segment is a **flat `{ href, text }`** — that is the canonical form, and all
+seven note-links in the repo use it. Author it flat. As a safety net the engine's
+`renderSegments` **also** accepts the nested `{ link: { href, text } }` shape (an
+early version of this very doc showed it, and it silently rendered nothing for a
+release), so a mis-shaped link can never vanish without a trace again. A segment that
+is none of a string, `{ danger, text }`, a link in either shape, or `{ text }` is
+**warned to the console** rather than dropped.
 
 - **Opens in a new tab** (`target="_blank"`, `rel="noopener"`). Required, not
   optional: these are usually embedded in a Canvas iframe, and a plain link would load
