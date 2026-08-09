@@ -409,10 +409,15 @@ A note may carry a link to another animation, appearing only while that note sho
 ```js
 note: [
   "…challenge text…",
-  { link: { href: 'sorting-heapsort-dual.html',
-            text: 'See how the values actually get sorted' } }
+  { href: 'sorting-heapsort-dual.html',
+    text: 'See how the values actually get sorted' }
 ]
 ```
+
+A link segment is a **flat `{ href, text }`** — NOT `{ link: { href, text } }`. The
+engine's `renderSegments` matches `seg.href` directly; a wrapped `{ link: {…} }`
+segment matches no branch and is **dropped** (and, since the hardening below, warns
+to the console). All seven note-links in the repo use the flat form.
 
 - **Opens in a new tab** (`target="_blank"`, `rel="noopener"`). Required, not
   optional: these are usually embedded in a Canvas iframe, and a plain link would load

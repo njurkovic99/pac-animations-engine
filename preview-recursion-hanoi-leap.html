@@ -3166,6 +3166,15 @@ function renderSegments(el, content) {
     } else if (typeof seg.text === 'string') {
       el.appendChild(document.createTextNode(seg.text));
       wrote = true;
+    } else {
+      // An object segment matching NO branch above is a shape mistake -- almost
+      // always a link written as the wrapped `{ link: { href, text } }` instead of
+      // the flat `{ href, text }` this function expects. Silently dropping it (the
+      // old behaviour) hid two broken cross-animation links for a whole release, so
+      // make it LOUD: the segment still does not render, but the console now names
+      // the exact gotcha instead of the author discovering it by a missing link.
+      console.warn('[pac] note/narration segment not rendered -- unrecognised shape:', seg,
+        '\n  A link segment is FLAT { href, text }, NOT { link: { href, text } }.');
     }
   }
   return wrote;
@@ -3293,7 +3302,7 @@ const FINAL_NOTE = [
   'and that debt is real. Part 2 pays it in full — a concrete tower, every move shown, nothing bundled. ' +
   'One thing to carry there: what if n were 1? Then line 2 is true, the bundle and the recursion vanish, and ' +
   'line 3 moves a single disk. That base case is what every bundle move here eventually bottoms out in. ',
-  { link: { href: 'preview-recursion-hanoi.html', text: 'Part 2: watch the bundles paid off, disk by disk' } },
+  { href: 'preview-recursion-hanoi.html', text: 'Part 2: watch the bundles paid off, disk by disk' },
 ];
 
 /* ---- state builders ---------------------------------------------------------

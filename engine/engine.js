@@ -1186,6 +1186,15 @@ function renderSegments(el, content) {
     } else if (typeof seg.text === 'string') {
       el.appendChild(document.createTextNode(seg.text));
       wrote = true;
+    } else {
+      // An object segment matching NO branch above is a shape mistake -- almost
+      // always a link written as the wrapped `{ link: { href, text } }` instead of
+      // the flat `{ href, text }` this function expects. Silently dropping it (the
+      // old behaviour) hid two broken cross-animation links for a whole release, so
+      // make it LOUD: the segment still does not render, but the console now names
+      // the exact gotcha instead of the author discovering it by a missing link.
+      console.warn('[pac] note/narration segment not rendered -- unrecognised shape:', seg,
+        '\n  A link segment is FLAT { href, text }, NOT { link: { href, text } }.');
     }
   }
   return wrote;
