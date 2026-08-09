@@ -183,7 +183,7 @@ function* trace() {
     line: null, tag: 'init',
     narrate: 'Three disks on peg A. Move them all to C, never putting a larger disk on a smaller one.',
     note: [SETUP_NOTE + ' ',
-      { link: { href: 'recursion-hanoi-leap.html', text: 'See the assumption this pays back' } }],
+      { href: 'recursion-hanoi-leap.html', text: 'See the assumption this pays back' }],
   });
 
   /* main calls MoveTower(3, A, C, B) — frame pushed, arguments bound, roles set.

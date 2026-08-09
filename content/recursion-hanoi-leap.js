@@ -111,7 +111,7 @@ const FINAL_NOTE = [
   'and that debt is real. Part 2 pays it in full — a concrete tower, every move shown, nothing bundled. ' +
   'One thing to carry there: what if n were 1? Then line 2 is true, the bundle and the recursion vanish, and ' +
   'line 3 moves a single disk. That base case is what every bundle move here eventually bottoms out in. ',
-  { link: { href: 'recursion-hanoi.html', text: 'Part 2: watch the bundles paid off, disk by disk' } },
+  { href: 'recursion-hanoi.html', text: 'See the assumption paid off, with three real disks' },
 ];
 
 /* ---- state builders ---------------------------------------------------------
