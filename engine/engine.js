@@ -1174,18 +1174,35 @@ function renderSegments(el, content) {
       span.textContent = `${DANGER_MARK} ${seg.text ?? ''}`;
       el.appendChild(span);
       wrote = true;
-    } else if (typeof seg.href === 'string') {
+    } else if (typeof seg.href === 'string' || (seg.link && typeof seg.link.href === 'string')) {
+      // Render a link segment in EITHER shape: the canonical FLAT { href, text }
+      // that every shipped cross-link uses, OR the nested { link: { href, text } }
+      // an early AUTHORING example showed. The nested form used to fall through
+      // every branch and render NOTHING -- a note link that silently vanished for a
+      // whole release. Accepting both means a mis-shaped link can never disappear
+      // without a trace; FLAT stays canonical (see AUTHORING "Links between
+      // animations"). This reconciles this branch's flat link DATA with the tolerant
+      // reader from the recursion-hanoi-leap branch (8e65d5c) -- one renderer, either
+      // shape, so the two half-fixes can never drift back apart.
+      const lk = typeof seg.href === 'string' ? seg : seg.link;
       const a = document.createElement('a');
       a.className = 'pac-seg-link';
-      a.href = seg.href;
+      a.href = lk.href;
       a.target = '_blank';
       a.rel = 'noopener';
-      a.textContent = seg.text ?? seg.href;
+      a.textContent = lk.text ?? lk.href;
       el.appendChild(a);
       wrote = true;
     } else if (typeof seg.text === 'string') {
       el.appendChild(document.createTextNode(seg.text));
       wrote = true;
+    } else {
+      // A segment matching NO branch above is a genuine shape mistake: not a string,
+      // not { danger, text }, not a link in EITHER accepted shape, not { text }.
+      // Silently dropping it (the old behaviour) hid two broken cross-animation links
+      // for a whole release, so warn instead of vanishing -- the author sees it here
+      // rather than by hunting a missing note.
+      console.warn('[pac] note/narration segment not rendered -- unrecognised shape:', seg);
     }
   }
   return wrote;
