@@ -414,10 +414,12 @@ note: [
 ]
 ```
 
-The link segment is `{ href, text }` at the top level of the note array — NOT
-`{ link: { href, text } }`. The engine's `renderSegments` reads `seg.href`
-directly; a nested `link` object renders nothing (the segment is silently
-dropped). All shipped cross-links use the flat form.
+The link segment is `{ href, text }` at the top level of the note array — the
+canonical form all shipped cross-links use. The engine also tolerates the nested
+`{ link: { href, text } }` shape (an early example here showed it), so a link in
+either shape renders; prefer the flat form. Historically the nested shape fell
+through `renderSegments` and rendered NOTHING — a note link silently missing —
+which is why the engine now accepts both rather than dropping one on the floor.
 
 - **Opens in a new tab** (`target="_blank"`, `rel="noopener"`). Required, not
   optional: these are usually embedded in a Canvas iframe, and a plain link would load
