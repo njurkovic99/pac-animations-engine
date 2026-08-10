@@ -2,14 +2,14 @@
  *
  * From lists2.html, the four lines that insert `ins` before `temp`:
  *
- *     ins.prev      = temp.prev
- *     ins.next      = temp
- *     ins.prev.next = ins          <- dereferences what line 1 set
- *     temp.prev     = ins
+ *     ins^.prev       = temp^.prev
+ *     ins^.next       = temp
+ *     ins^.prev^.next = ins        <- dereferences what line 1 set
+ *     temp^.prev      = ins
  *
- * Line 3 reads `ins.prev`, which line 1 wrote. Do line 4 first and line 1
- * reads a pointer that already points at `ins`, so `ins.prev` becomes `ins`
- * itself; line 3 then overwrites `ins.next` with `ins`. The new node points at
+ * Line 3 reads `ins^.prev`, which line 1 wrote. Do line 4 first and line 1
+ * reads a pointer that already points at `ins`, so `ins^.prev` becomes `ins`
+ * itself; line 3 then overwrites `ins^.next` with `ins`. The new node points at
  * itself in both directions, the front of the list never learns it exists, and
  * -- in Neven's words -- simply "losing it" is not an option.
  *
@@ -21,10 +21,10 @@ const HEAD = 'n12';
 const LISTINGS = {
   pseudo: [
     '// insert node ins before node temp',
-    'ins.prev = temp.prev',
-    'ins.next = temp',
-    'ins.prev.next = ins',
-    'temp.prev = ins',
+    'ins^.prev = temp^.prev',
+    'ins^.next = temp',
+    'ins^.prev^.next = ins',
+    'temp^.prev = ins',
   ],
   java: [
     '// insert node ins before node temp',
@@ -44,18 +44,18 @@ const LISTINGS = {
 
 /* The four assignments, as data. Both orderings reuse them. */
 const OPS = {
-  A: { line: 2, name: 'ins.prev = temp.prev',
+  A: { line: 2, name: 'ins^.prev = temp^.prev',
        apply: m => { m[m.ins].prev = m[m.temp].prev; return m.ins; },
-       say:   m => `ins.prev now points where temp.prev points — to ${label(m, m[m.temp].prev)}.` },
-  B: { line: 3, name: 'ins.next = temp',
+       say:   m => `ins^.prev now points where temp^.prev points — to ${label(m, m[m.temp].prev)}.` },
+  B: { line: 3, name: 'ins^.next = temp',
        apply: m => { m[m.ins].next = m.temp; return m.ins; },
-       say:   () => `ins.next points forward at temp. The new node is now linked in from its own side.` },
-  C: { line: 4, name: 'ins.prev.next = ins',
+       say:   () => `ins^.next points forward at temp. The new node is now linked in from its own side.` },
+  C: { line: 4, name: 'ins^.prev^.next = ins',
        apply: m => { const p = m[m.ins].prev; if (p == null) return null; m[p].next = m.ins; return p; },
-       say:   m => `Follow ins.prev to ${label(m, m[m.ins].prev)}, then set its next to ins. This line depends on line 2 having run.` },
-  D: { line: 5, name: 'temp.prev = ins',
+       say:   m => `Follow ins^.prev to ${label(m, m[m.ins].prev)}, then set its next to ins. This line depends on line 2 having run.` },
+  D: { line: 5, name: 'temp^.prev = ins',
        apply: m => { m[m.temp].prev = m.ins; return m.temp; },
-       say:   () => `temp.prev now points to ins. 25 ↔ 37 is now linked in both directions.` },
+       say:   () => `temp^.prev now points to ins. 25 ↔ 37 is now linked in both directions.` },
 };
 
 const ORDER = ['A', 'B', 'C', 'D'];
@@ -66,7 +66,7 @@ const label = (m, id) => (id == null ? 'null' : m[id].value);
  *  it has both a prev and a next, AND both neighbours point back at it. Until
  *  then the inserted node is 'unlinked' (see AUTHORING.md "Node membership
  *  state"). This is stricter than mere forward reachability -- after
- *  ins.prev.next = ins the node is reachable, but temp.prev still points past
+ *  ins^.prev^.next = ins the node is reachable, but temp^.prev still points past
  *  it, so it is not yet a full member. */
 function linkedIn(m, id) {
   const n = m[id];
@@ -173,12 +173,12 @@ const SETUP =
   'link it in.';
 
 const PITFALL =
-  'A common mistake is to run temp.prev = ins first: then ins.prev = temp.prev copies a ' +
-  'pointer that already points back at ins, so ins.prev points to ins itself.';
+  'A common mistake is to run temp^.prev = ins first: then ins^.prev = temp^.prev copies a ' +
+  'pointer that already points back at ins, so ins^.prev points to ins itself.';
 
 const CHALLENGE =
-  'What if line 4 (ins.prev.next = ins) had run before line 2 (ins.prev = temp.prev)? Trace it ' +
-  'yourself: which node would ins.prev still point at, and what would line 4 then write through?';
+  'What if line 4 (ins^.prev^.next = ins) had run before line 2 (ins^.prev = temp^.prev)? Trace it ' +
+  'yourself: which node would ins^.prev still point at, and what would line 4 then write through?';
 
 /* A note per assignment, keyed by op letter. Only the ordering-critical first
  * assignment and the final one carry commentary. */

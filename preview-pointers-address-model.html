@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>lists-doubly-insert-order — preview</title>
+<title>pointers-address-model — preview</title>
 <style>/* pac-animations — design system
    15 tokens replacing the 188 distinct color values found across the
    original 25 animation files. */
@@ -724,21 +724,6 @@ body {
  * green `member` therefore also shows a blue activity fill in the same step
  * (amber-outline + blue-fill, or green-outline + blue-fill). */
 .pac-node[data-active="true"]    .pac-node-box { fill: var(--accent-soft); }
-
-/* Per-FIELD states on a record node (see panels/nodes.js recordNode). These are
- * declared AFTER the node-level membership strokes above so they override them
- * for a single field, at equal specificity.
- *  - `.pac-field-empty`: INDETERMINATE storage -- a freshly allocated record cell
- *    not yet written (backing value `undefined`, distinct from a nil pointer's
- *    `null`). The dashed dimmed box + a thin X, the SVG analogue of a CELLS
- *    `empty` cell; overrides the node's amber/green membership stroke so an unset
- *    field never reads as a settled member.
- *  - `.pac-field-active`: the blue activity fill on ONE field (a value copied into
- *    a single cell), the field-granular analogue of the node-level activity fill.
- *    Fill only, so the field keeps the node's outline -- both channels at once. */
-.pac-node .pac-node-box.pac-field-empty  { stroke: var(--border); stroke-dasharray: 3 2; fill: var(--bg); }
-.pac-node .pac-field-x                   { stroke: var(--text-dim); stroke-width: 1; stroke-opacity: .4; fill: none; }
-.pac-node .pac-node-box.pac-field-active { fill: var(--accent-soft); }
 .pac-node-label { fill: var(--text); font-family: var(--mono); font-size: 12px; text-anchor: middle; }
 .pac-node-meta  { fill: var(--text-dim); font-family: var(--mono); font-size: 9.5px; text-anchor: middle; }
 .pac-node[data-state="pending"] .pac-node-label { fill: var(--text-dim); }
@@ -1304,39 +1289,17 @@ function plainNode(n, p, h) {
     ${meta}</g>`;
 }
 
-/** [ prev | value | next ] — the shape of lists.9.gif, made addressable.
- *
- * A field's backing value drives its glyph: the `value` field shows the node's
- * label; a pointer field shows a filled dot (points at something) or the nil
- * glyph. A field whose backing value is `undefined` -- as opposed to `null` -- is
- * INDETERMINATE STORAGE: a freshly allocated record cell not yet written. An unset
- * pointer is a different thing from a nil one, so it renders differently: the
- * dashed dimmed box with a thin X and no glyph, the SVG analogue of a CELLS
- * `empty` cell (AUTHORING.md "empty = indeterminate storage"). `activeFields`
- * lists field names that take the blue activity fill THIS step -- the field-
- * granular analogue of the node-level `active` fill, for a value copied into a
- * single cell. */
+/** [ prev | value | next ] — the shape of lists.9.gif, made addressable. */
 function recordNode(n, p) {
   const fields = n.fields ?? ['prev', 'value', 'next'];
-  const activeF = new Set(n.activeFields ?? []);
   const x0 = p.x - RW / 2;
   let cx = x0;
   const cells = fields.map(f => {
     const fw = (f === 'value' ? 0.42 : 0.29) * RW;
-    const src = f === 'value' ? n.label : n[f];
-    const isEmpty = src === undefined;                  // indeterminate (undefined) vs nil (null)
-    const val = isEmpty ? '' : (f === 'value' ? n.label : (src === null ? '\u2205' : '\u25cf'));
-    const cls = 'pac-node-box' + (isEmpty ? ' pac-field-empty' : '')
-              + (activeF.has(f) ? ' pac-field-active' : '');
-    const x = cx, ix = 7;                               // X inset from the field-box edges
-    const xMark = isEmpty
-      ? `<path class="pac-field-x" d="M ${x + ix} ${p.y + ix} L ${x + fw - ix} ${p.y + RH - ix} `
-        + `M ${x + fw - ix} ${p.y + ix} L ${x + ix} ${p.y + RH - ix}"/>`
-      : '';
-    const g = `<g data-anchor="${n.id}.${f}" data-empty="${isEmpty}">
-        <rect class="${cls}" x="${x}" y="${p.y}" width="${fw}" height="${RH}"/>
-        ${xMark}
-        <text class="pac-node-label" x="${x + fw / 2}" y="${p.y + 24}">${esc(val)}</text></g>`;
+    const val = f === 'value' ? n.label : (n[f] == null ? '\u2205' : '\u25cf');
+    const g = `<g data-anchor="${n.id}.${f}">
+        <rect class="pac-node-box" x="${cx}" y="${p.y}" width="${fw}" height="${RH}"/>
+        <text class="pac-node-label" x="${cx + fw / 2}" y="${p.y + 24}">${esc(val)}</text></g>`;
     cx += fw;
     return g;
   }).join('');
@@ -2175,38 +2138,7 @@ class Engine {
     const items     = [...this.panels.values()];
     const code      = items.find(p => p.kind === 'code');
     const structure = items.filter(p => p.kind === 'structure');
-    let   book      = items.filter(p => p.kind === 'book');
-
-    // ARROW-ENDPOINT ADJACENCY (AUTHORING.md "Arrows keep their endpoints
-    // adjacent"). A cross-panel arrow is DATA -- the overlay draws it against live
-    // boxes but has no say in WHERE panels sit, so two panels wired together can end
-    // up with a third BETWEEN them, and the arrow then has to cross it. The arrow
-    // set is known from the trace before layout resolves, so the panels it
-    // references form a GROUP kept contiguous: the arrow-endpoint BOOK panels are
-    // ordered FIRST (directly under the structure region, itself usually an
-    // endpoint), non-endpoints after, and the column split below is floored (kMin)
-    // so no non-endpoint book panel lands between the region and an endpoint book
-    // panel. A panel that is not an arrow endpoint never sits between two that are.
-    const arrowPanels = new Set();
-    for (const s of this.steps) for (const a of (s.arrows ?? [])) {
-      const fp = String(a.from).split('.')[0], tp = String(a.to).split('.')[0];
-      if (fp && tp && fp !== tp) { arrowPanels.add(fp); arrowPanels.add(tp); }
-    }
-    const isEndpoint = p => arrowPanels.has(p.spec.id ?? p.spec.type);
-    const structIsEndpoint = structure.some(isEndpoint);
-    const groupBook = book.filter(isEndpoint);
-    // Reorder only when arrows tie a book panel to the structure region -- the case
-    // that can trap a non-endpoint between them. Endpoint book panels move to the
-    // front (each subset keeps its declared order), so they sit adjacent to the
-    // region; the split floor then keeps them there.
-    if (structIsEndpoint && groupBook.length && groupBook.length < book.length) {
-      book = [...groupBook, ...book.filter(p => !isEndpoint(p))];
-    }
-    // Every endpoint book panel must stay in the RIGHT column, contiguous with the
-    // structure region (which holds the other endpoint): k below this floor would
-    // drop one to the left column, splitting the group across the divide so its
-    // arrow crosses the code panel to reach it.
-    const kMin = structIsEndpoint ? groupBook.length : 0;
+    const book      = items.filter(p => p.kind === 'book');
 
     const H = this._availableStageHeight();
     const stageW = this.stage.clientWidth;
@@ -2422,11 +2354,8 @@ class Engine {
       const n = (hasBase ? 1 : 0) + arr.length;
       return base + sum(arr) + gap * Math.max(0, n - 1);
     };
-    // k starts at kMin so arrow-endpoint book panels never fall to the left column
-    // (see ARROW-ENDPOINT ADJACENCY above); the balancer then picks the shortest
-    // taller column among the splits that keep the group contiguous.
-    let bestK = kMin, bestStage = Infinity, bestGap = Infinity;
-    for (let k = kMin; k <= book.length; k++) {
+    let bestK = 0, bestStage = Infinity, bestGap = Infinity;
+    for (let k = 0; k <= book.length; k++) {
       const right = colH(regionH, bh.slice(0, k), regionH > 0);
       const left  = colH(codeFloor, bh.slice(k), !!code);
       const stage = Math.max(right, left);
@@ -3268,241 +3197,401 @@ function mountAnimation(spec, el = document.getElementById('pac')) {
   return eng;
 }
 
-/* ds — A10 "Doubly linked list operations"
+/* ds — "What a pointer actually holds" (pointers-address-model)
  *
- * From lists2.html, the four lines that insert `ins` before `temp`:
+ * Memory as one long array of numbered bytes, and what a pointer really is: an
+ * integer stored in that array whose value happens to be an address. The lesson
+ * is ONE CARET. The program builds two student records, then does the same copy
+ * two ways:
  *
- *     ins^.prev       = temp^.prev
- *     ins^.next       = temp
- *     ins^.prev^.next = ins        <- dereferences what line 1 set
- *     temp^.prev      = ins
+ *     s1_pt^ = s2_pt^     copies the RECORD  (line 15) — two records survive
+ *     s1_pt   = s2_pt     copies the POINTER (line 16) — one record leaks
  *
- * Line 3 reads `ins^.prev`, which line 1 wrote. Do line 4 first and line 1
- * reads a pointer that already points at `ins`, so `ins^.prev` becomes `ins`
- * itself; line 3 then overwrites `ins^.next` with `ins`. The new node points at
- * itself in both directions, the front of the list never learns it exists, and
- * -- in Neven's words -- simply "losing it" is not an option.
+ * Both compile; both look correct if you only print s1_pt^.name. The second
+ * silently leaks the record at address 4 and aliases the two variables onto one.
+ * In the lecture's words: "The record starting at location 4 is now permanently
+ * lost, because no pointers are pointing to it."
  *
- * Every arrow on screen is data resolved against a live DOM box. Nothing here
- * is a hand-placed curve. */
+ * This is the memory-danger marker's FIRST real leak. It fires ONCE, on line 16,
+ * and names the diagnosis — "leaked and unreachable" — not just "something is
+ * wrong". Every earlier step is healthy and carries no marker (marking them would
+ * dilute the signal, AUTHORING.md "Memory-danger marker").
+ *
+ * The 8-bit machine has 256 bytes, 0..255; we show the first eleven, 0..10, where
+ * everything happens:
+ *     [0] s1_pt   [1] s2_pt   [2][3] free
+ *     [4][5] record A: name, grade      [6][7] record B: name, grade
+ *     [8][9][10] free
+ * ONE CELL PER FIELD, not per byte (the lecture allots a name two bytes and a
+ * grade one; a name split across two cells would be unreadable and the addressing
+ * logic is identical). The simplification is STATED, in the step-0 note.
+ *
+ * The arrows out of the pointer variables are OURS, drawn for the reader — memory
+ * contains no arrows, only the numbers 4 and 6 sitting in cells 0 and 1 like any
+ * other bytes. An arrow to a LEAKED record is never drawn: that is the whole point
+ * of a leak (AUTHORING.md "Arrows always match the pointer values").
+ *
+ * WATCH only: one trace, no gates. Precomputed snapshots. */
 
-const HEAD = 'n12';
+/* Byte addresses in the shown window. A pointer VARIABLE lives at [0]/[1]; the two
+ * records it can point at start at [4] and [6]. */
+const S1 = 0, S2 = 1;                 // the pointer variables, as bytes in memory
+const A_NAME = 4, A_GRADE = 5;        // record A
+const B_NAME = 6, B_GRADE = 7;        // record B
+const CELLS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+const REC = { [A_NAME]: null, [A_GRADE]: null, [B_NAME]: null, [B_GRADE]: null };
 
+/* One listing, three ds language variants. Pseudocode follows the lecture's
+ * Pascal-flavoured notation, since the caret IS the subject. C++ uses * and ->.
+ * Java has no caret and no *p = *q, so line 15 becomes a field-by-field copy with
+ * a comment that says so honestly (AUTHORING.md "ds — language variants"; the Java
+ * note makes the larger point). All three are line-aligned to 18 lines, so `line`
+ * resolves the same number in every variant. */
 const LISTINGS = {
   pseudo: [
-    '// insert node ins before node temp',
-    'ins^.prev = temp^.prev',
-    'ins^.next = temp',
-    'ins^.prev^.next = ins',
-    'temp^.prev = ins',
-  ],
-  java: [
-    '// insert node ins before node temp',
-    'ins.prev = temp.prev;',
-    'ins.next = temp;',
-    'ins.prev.next = ins;',
-    'temp.prev = ins;',
+    'type stud_record = record',       // 1
+    '    name : string',               // 2
+    '    grade : int',                 // 3
+    'end',                             // 4
+    '',                                // 5
+    'var s1_pt, s2_pt : ^stud_record', // 6
+    '',                                // 7
+    'main()',                          // 8
+    '    new(s1_pt)',                  // 9
+    "    s1_pt^.name = 'John'",        // 10
+    '    s1_pt^.grade = 90',           // 11
+    '    new(s2_pt)',                  // 12
+    "    s2_pt^.name = 'Mary'",        // 13
+    '    s2_pt^.grade = 95',           // 14
+    '    s1_pt^ = s2_pt^',             // 15
+    '    s1_pt = s2_pt',               // 16
+    "    s1_pt^.name = 'Bill'",        // 17
+    '    print s2_pt^.name',           // 18
   ],
   cpp: [
-    '// insert node ins before node temp',
-    'ins->prev = temp->prev;',
-    'ins->next = temp;',
-    'ins->prev->next = ins;',
-    'temp->prev = ins;',
+    'struct stud_record {',            // 1
+    '    string name;',                // 2
+    '    int grade;',                  // 3
+    '};',                              // 4
+    '',                                // 5
+    'stud_record *s1_pt, *s2_pt;',     // 6
+    '',                                // 7
+    'int main() {',                    // 8
+    '    s1_pt = new stud_record;',    // 9
+    '    s1_pt->name = "John";',       // 10
+    '    s1_pt->grade = 90;',          // 11
+    '    s2_pt = new stud_record;',    // 12
+    '    s2_pt->name = "Mary";',       // 13
+    '    s2_pt->grade = 95;',          // 14
+    '    *s1_pt = *s2_pt;',            // 15
+    '    s1_pt = s2_pt;',              // 16
+    '    s1_pt->name = "Bill";',       // 17
+    '    cout << s2_pt->name; }',      // 18
+  ],
+  java: [
+    'class StudRecord {',                                   // 1
+    '    String name;',                                     // 2
+    '    int grade;',                                       // 3
+    '}',                                                    // 4
+    '',                                                     // 5
+    'StudRecord s1, s2;',                                   // 6
+    '',                                                     // 7
+    'void main() {',                                        // 8
+    '    s1 = new StudRecord();',                           // 9
+    '    s1.name = "John";',                                // 10
+    '    s1.grade = 90;',                                   // 11
+    '    s2 = new StudRecord();',                           // 12
+    '    s2.name = "Mary";',                                // 13
+    '    s2.grade = 95;',                                   // 14
+    '    s1.name = s2.name; s1.grade = s2.grade; // no *p = *q', // 15
+    '    s1 = s2;',                                         // 16
+    '    s1.name = "Bill";',                                // 17
+    '    System.out.println(s2.name); }',                  // 18
   ],
 };
 
-/* The four assignments, as data. Both orderings reuse them. */
-const OPS = {
-  A: { line: 2, name: 'ins^.prev = temp^.prev',
-       apply: m => { m[m.ins].prev = m[m.temp].prev; return m.ins; },
-       say:   m => `ins^.prev now points where temp^.prev points — to ${label(m, m[m.temp].prev)}.` },
-  B: { line: 3, name: 'ins^.next = temp',
-       apply: m => { m[m.ins].next = m.temp; return m.ins; },
-       say:   () => `ins^.next points forward at temp. The new node is now linked in from its own side.` },
-  C: { line: 4, name: 'ins^.prev^.next = ins',
-       apply: m => { const p = m[m.ins].prev; if (p == null) return null; m[p].next = m.ins; return p; },
-       say:   m => `Follow ins^.prev to ${label(m, m[m.ins].prev)}, then set its next to ins. This line depends on line 2 having run.` },
-  D: { line: 5, name: 'temp^.prev = ins',
-       apply: m => { m[m.temp].prev = m.ins; return m.temp; },
-       say:   () => `temp^.prev now points to ins. 25 ↔ 37 is now linked in both directions.` },
-};
-
-const ORDER = ['A', 'B', 'C', 'D'];
-
-const label = (m, id) => (id == null ? 'null' : m[id].value);
-
-/** A node is fully linked into the list only when the insertion is COMPLETE:
- *  it has both a prev and a next, AND both neighbours point back at it. Until
- *  then the inserted node is 'unlinked' (see AUTHORING.md "Node membership
- *  state"). This is stricter than mere forward reachability -- after
- *  ins^.prev^.next = ins the node is reachable, but temp^.prev still points past
- *  it, so it is not yet a full member. */
-function linkedIn(m, id) {
-  const n = m[id];
-  return n.prev != null && n.next != null &&
-         m[n.prev].next === id && m[n.next].prev === id;
+/* ---------------------------------------------------------------------------
+ * Memory model. `s1`/`s2` are the values IN cells [0]/[1] — null (unreserved),
+ * '?' (reserved but garbage), or a numeric address. `rec` holds the record
+ * fields at [4][5][6][7]. Everything is read into concrete arrays at snap time,
+ * so mutating the model after a yield never disturbs an already-captured step
+ * (snapshots, not deltas).
+ * ------------------------------------------------------------------------- */
+function fresh() {
+  return { s1: null, s2: null, rec: { ...REC } };
 }
 
-function fresh() {
+/** Value stored in a memory cell (null ⇒ nothing / free). */
+function cellValue(st, i) {
+  if (i === S1) return st.s1;
+  if (i === S2) return st.s2;
+  if (i in st.rec) return st.rec[i];
+  return null;
+}
+
+/* The memory row: 11 cells, [0]..[10] beneath, rowLabel "memory". `markers: []`
+ * turns on the bracketed index band under each cell (the marked-CELLS renderer)
+ * without drawing any index-pointer marker — memory has none; the pointers'
+ * arrows come from the `vars` strip instead. Every cell publishes an anchor
+ * (memory.c<i>) so an arrow can LAND on it; the pointer variables are the arrow
+ * SOURCES, never memory itself (memory holds no arrows).
+ *
+ * Roles: stale ⇒ leaked (greyed, value kept); active ⇒ written this step (blue);
+ * compared ⇒ read this step; a real stored value ⇒ member; null ⇒ empty (the X
+ * placeholder). A reserved-but-garbage pointer byte is '?', a REAL value, never
+ * `empty` — the bytes are reserved and they do hold something. */
+function memoryPanel(st, active, stale, compared) {
   return {
-    ins: 'n25', temp: 'n37', head: HEAD,
-    n12: { value: 12, prev: null,  next: 'n37', slot: 0,   row: 0 },
-    n37: { value: 37, prev: 'n12', next: 'n99', slot: 1,   row: 0 },
-    n99: { value: 99, prev: 'n37', next: null,  slot: 2,   row: 0 },
-    n25: { value: 25, prev: null,  next: null,  slot: 0.55, row: 1 },
+    render: 'box',
+    rowLabel: 'memory',
+    markers: [],
+    cells: CELLS.map(i => {
+      const v = cellValue(st, i);
+      let role;
+      if (stale.has(i))         role = 'stale';
+      else if (active.has(i))   role = 'active';
+      else if (compared.has(i)) role = 'compared';
+      else if (v == null)       role = 'empty';
+      return { value: v == null ? '' : v, role, anchor: `c${i}` };
+    }),
   };
 }
 
-const NODE_IDS = ['n12', 'n37', 'n99', 'n25'];
-
-/** Walk forward from head. Bounded, because a corrupted list contains a cycle. */
-function walk(m) {
-  const seen = [];
-  let cur = m.head, guard = 0;
-  while (cur != null && guard++ < 8) {
-    if (seen.includes(m[cur].value)) { seen.push('\u21bb'); break; }
-    seen.push(m[cur].value);
-    cur = m[cur].next;
-  }
-  return seen;
+/* The pointer variables, compact strip: [s1_pt] [s2_pt], names + current values,
+ * each anchored so its arrow starts from the value itself. This is the animation's
+ * quiet point made visible — the same address that sits anonymously in memory
+ * cell 0 is here given its name. A null value is indeterminate storage (the X);
+ * a '?' or an address is a real value shown as itself. */
+function varsPanel(st, activeVars) {
+  const cell = (name, val, anchor) => (val == null)
+    ? { label: name, value: '', anchor, role: 'empty' }
+    : { label: name, value: String(val), anchor, role: activeVars.has(name) ? 'active' : undefined };
+  return {
+    render: 'row',
+    cells: [cell('s1_pt', st.s1, 's1'), cell('s2_pt', st.s2, 's2')],
+  };
 }
 
-function arrows(m) {
+/* Arrows are DATA, resolved against live boxes. One per pointer that currently
+ * holds a real ADDRESS (a number): from its `vars` cell to the memory cell at
+ * that address. A '?' (garbage) or null draws nothing — you cannot follow a
+ * pointer that points nowhere meaningful. After the pointer copy both arrows hold
+ * 6 and land on [6]; NOTHING points at the leaked record at [4] (AUTHORING.md
+ * "An arrow to a leaked record is never drawn"). */
+function pointerArrows(st) {
   const out = [];
-  for (const id of NODE_IDS) {
-    const n = m[id];
-    if (n.next != null)
-      out.push({ from: `list.${id}.next`, to: `list.${n.next}`, bend: 'up',
-                 style: n.next === id ? 'stale' : 'pointer' });
-    if (n.prev != null)
-      out.push({ from: `list.${id}.prev`, to: `list.${n.prev}`, bend: 'down',
-                 style: n.prev === id ? 'stale' : 'pointer' });
-  }
-  out.push({ from: 'vars.head', to: `list.${m.head}` });
-  out.push({ from: 'vars.ins',  to: `list.${m.ins}` });
-  out.push({ from: 'vars.temp', to: `list.${m.temp}` });
+  if (typeof st.s1 === 'number') out.push({ from: 'vars.s1', to: `memory.c${st.s1}`, style: 'pointer' });
+  if (typeof st.s2 === 'number') out.push({ from: 'vars.s2', to: `memory.c${st.s2}`, style: 'pointer' });
   return out;
 }
 
-function snap(m, { line, tag, narrate, note, touched }) {
-  const reach = walk(m);
+function snap(st, { line = null, tag, narrate, note,
+                    active = [], stale = [], compared = [], activeVars = [] }) {
   return {
-    tag, narrate, line, note,
-    arrows: arrows(m),
+    tag, line, narrate, note,
+    arrows: pointerArrows(st),
     panels: {
-      list: {
-        layout: 'linear', template: 'record',
-        nodes: NODE_IDS.map(id => ({
-          id, label: String(m[id].value),
-          prev: m[id].prev, next: m[id].next,
-          slot: m[id].slot, row: m[id].row,
-          // Two INDEPENDENT color channels (AUTHORING.md "Node color channels").
-          //
-          // OUTLINE = membership. The node being inserted (m.ins) is 'unlinked'
-          // (amber) until the insertion is COMPLETE -- all four links set AND
-          // both neighbours pointing back (see linkedIn) -- at which point, on
-          // the final step, it becomes a 'member' (green). Every already-settled
-          // list node is a 'member' throughout. Partial linking and activity
-          // never flip the outline green early; node 25 is HEALTHY the whole
-          // time, never danger (AUTHORING.md "Memory-danger marker").
-          //
-          // FILL = activity. `active` flags the node modified on THIS step (the
-          // one op.apply touched), painting a blue interior orthogonal to the
-          // outline. So node 25 is amber-outline + blue-fill while its own links
-          // are being set, and a settled green member shows a blue fill on the
-          // step it is rewired.
-          state:  (id === m.ins && !linkedIn(m, id)) ? 'unlinked' : 'member',
-          active: id === touched,
-        })),
-        edges: [],
-      },
-      vars: {
-        render: 'row',
-        cells: [
-          { label: 'head', value: '\u25cf', anchor: 'head' },
-          { label: 'ins',  value: '\u25cf', anchor: 'ins', role: 'active' },
-          { label: 'temp', value: '\u25cf', anchor: 'temp' },
-        ],
-      },
-      walk: {
-        render: 'box',
-        cells: reach.map(v => ({ value: v, role: v === 25 ? 'ok' : undefined })),
-      },
+      memory: memoryPanel(st, new Set(active), new Set(stale), new Set(compared)),
+      vars:   varsPanel(st, new Set(activeVars)),
     },
   };
 }
 
-/* Three teaching notes, kept out of the step flow (AUTHORING.md "Steps vs.
- * notes"): a setup note on the initial-state step, the ordering-pitfall warning
- * on the assignment it concerns, and the post-watch challenge on the last step. */
-const SETUP =
-  'A doubly linked list, 12 \u2194 37 \u2194 99, fully linked. A new node holding 25 has been ' +
-  'allocated and ins points to it \u2014 and its own prev and next are still null, so it is ' +
-  'not yet part of the list. We want it before 37 (temp); the four assignments below ' +
-  'link it in.';
+/* ---------------------------------------------------------------------------
+ * Teaching notes — the lecture's own framing, kept out of the step flow.
+ * ------------------------------------------------------------------------- */
+const NOTE_INTRO =
+  'A pointer is an unsigned integer — it cannot be negative, because a memory address cannot be. ' +
+  'What makes it a pointer is not its type but what you DO with it: you use its value as an index ' +
+  'into memory. One simplification here: the lecture allots two bytes to a name and one to a grade. ' +
+  'We show one cell per field so the addresses stay readable. Nothing about the addressing changes.';
 
-const PITFALL =
-  'A common mistake is to run temp^.prev = ins first: then ins^.prev = temp^.prev copies a ' +
-  'pointer that already points back at ins, so ins^.prev points to ins itself.';
+const NOTE_DECLARE =
+  'Only the POINTERS are reserved at compile time, not the records. Compare that with declaring the ' +
+  'records directly, which would reserve every byte of both, used or not, for the whole run. ' +
+  'And notice what is in them: nobody knows. A generous compiler zeroes them; that is not guaranteed. ' +
+  'Writing s1_pt^.name right now would put a string at whatever address happened to be sitting there ' +
+  '— possibly on top of your own program.';
 
-const CHALLENGE =
-  'What if line 4 (ins^.prev^.next = ins) had run before line 2 (ins^.prev = temp^.prev)? Trace it ' +
-  'yourself: which node would ins^.prev still point at, and what would line 4 then write through?';
+const NOTE_NEW =
+  'This happens at RUN TIME, on demand. Until this line ran, no record existed anywhere. The arrow is ' +
+  'ours, drawn so you can follow it; memory holds no arrows, only the number 4 in cell 0.';
 
-/* A note per assignment, keyed by op letter. Only the ordering-critical first
- * assignment and the final one carry commentary. */
-const NOTES = { A: PITFALL, D: CHALLENGE };
+const NOTE_TWO_RECORDS =
+  'Two records, two pointers, each pointing at its own. Read the memory row and you can see everything ' +
+  'the program has: two addresses in cells 0 and 1, two records at 4 and 6.';
 
-function makeTrace() {
-  return function* () {
-    const m = fresh();
+const NOTE_CONTENT_COPY =
+  'This is the version most people mean. Nothing moved except data: two records still exist, at 4 and ' +
+  'at 6, and each pointer still points at its own. They just happen to hold the same values now. ' +
+  'Keep that picture. The next line does what looks like the same thing.';
 
-    // Step 0 (required): the initial state, before anything executes -- no line
-    // highlighted. The list is already linked 12 <-> 37 <-> 99; node 25 is
-    // allocated and pointed to by ins (one arrow, ins -> 25) with its own prev
-    // and next still null, so NO linking arrows join it to the list yet -- those
-    // are exactly what the four assignments draw. The setup note lives here.
-    yield snap(m, {
-      line: null, tag: 'init', touched: null,
-      narrate: 'The list before insertion. Node 25 is allocated and ins points to it, with its own prev and next still null.',
-      note: SETUP,
-    });
+const NOTE_POINTER_COPY =
+  'Two failures at once, from one missing caret. The record at 4 still occupies memory and always will: ' +
+  'the program has no way to reach it, so it cannot free it either. Imagine this inside a loop running a ' +
+  'few thousand times — that is a memory leak, and it is why you issue dispose the moment you no longer ' +
+  'need what new gave you. And the two variables are now aliases. Writing through one changes what the ' +
+  'other sees, which is almost never what anyone intended.';
 
-    // Every remaining step is a real execution: the four assignment lines, each
-    // highlighted. The pitfall warning and the post-watch challenge are notes.
-    for (const key of ORDER) {
-      const op = OPS[key];
-      const say = op.say(m);
-      const touched = op.apply(m);
-      yield snap(m, {
-        line: op.line, tag: 'assign',
-        narrate: `${op.name} \u2014 ${say}`,
-        note: NOTES[key],
-        touched,
-      });
-    }
-  };
+const NOTE_PAYOFF =
+  "You would expect Mary. You wrote 'Bill' through s1_pt and read through s2_pt, and they are the same " +
+  'record. Look back at line 15 and line 16. One character apart, and the difference is not visible in ' +
+  'the code — you have to know what the caret means. Line 15 copied a record and left two records. ' +
+  'Line 16 copied an address and left one record plus one that nothing can reach. ' +
+  'Java takes the caret away by removing the choice: every assignment is a reference copy, and a garbage ' +
+  'collector cleans up what nothing points at. That solves the leak and keeps the aliasing — Java ' +
+  'programmers hit exactly this surprise, just without the leak underneath it. ' +
+  'One more thing worth knowing, since it is the case where copying pointers is the RIGHT move: to swap ' +
+  'two records you can copy three records around, or you can swap the two pointers and touch no record ' +
+  'at all. The second is far cheaper, and it is what sorting does. Try writing both.';
+
+/* ---------------------------------------------------------------------------
+ * The trace. Step 0 (required) is the initial state — nothing executed, no line
+ * highlighted. Every step after is one executing line of main, highlighted; the
+ * pointer-copy on line 16 is the one memory-danger moment.
+ * ------------------------------------------------------------------------- */
+function* trace() {
+  const st = fresh();
+
+  // STEP 0 — the empty window. All 11 bytes empty; both pointers placeholders.
+  yield snap(st, {
+    line: null, tag: 'init',
+    narrate: 'Memory is one long array of numbered bytes. These are the first eleven.',
+    note: NOTE_INTRO,
+  });
+
+  // LINE 6 — the declaration reserves two bytes, holding GARBAGE. They are shown
+  // as a real value '?', not `empty`: the bytes ARE reserved and they DO hold
+  // something (just nothing anyone chose).
+  st.s1 = '?'; st.s2 = '?';
+  yield snap(st, {
+    line: 6, tag: 'declare',
+    narrate: 'Two pointer variables are declared. That reserves two bytes — at addresses 0 and 1 — and nothing else.',
+    note: NOTE_DECLARE,
+    active: [S1, S2], activeVars: ['s1_pt', 's2_pt'],
+  });
+
+  // LINE 9 — new(s1_pt): address 4 goes INTO s1_pt (cell 0), and the record at
+  // [4][5] is allocated but not yet written. The first arrow appears.
+  st.s1 = 4;
+  yield snap(st, {
+    line: 9, tag: 'alloc',
+    narrate: 'new asks the operating system for space. It finds room at address 4 and puts that number — 4 — into s1_pt.',
+    note: NOTE_NEW,
+    active: [S1], activeVars: ['s1_pt'],
+  });
+
+  // LINE 10 — dereference read as MOTION: follow s1_pt to 4, write into the name.
+  st.rec[A_NAME] = 'John';
+  yield snap(st, {
+    line: 10, tag: 'write',
+    narrate: "Follow s1_pt to address 4, and write 'John' into the name field there.",
+    active: [A_NAME],
+  });
+
+  // LINE 11 — the grade field, the next cell.
+  st.rec[A_GRADE] = 90;
+  yield snap(st, {
+    line: 11, tag: 'write',
+    narrate: 'Follow s1_pt to address 4 again — the grade field is the next cell, 5 — and write 90.',
+    active: [A_GRADE],
+  });
+
+  // LINE 12 — new(s2_pt): the same for the second record. Address 6 into s2_pt,
+  // record allocated at [6][7], the second arrow appears.
+  st.s2 = 6;
+  yield snap(st, {
+    line: 12, tag: 'alloc',
+    narrate: 'new again: the operating system hands back address 6, and 6 goes into s2_pt.',
+    active: [S2], activeVars: ['s2_pt'],
+  });
+
+  // LINE 13 — 'Mary' into s2_pt's name field.
+  st.rec[B_NAME] = 'Mary';
+  yield snap(st, {
+    line: 13, tag: 'write',
+    narrate: "Follow s2_pt to 6 and write 'Mary' into its name field.",
+    active: [B_NAME],
+  });
+
+  // LINE 14 — 95 into the grade field. The picture is now symmetric.
+  st.rec[B_GRADE] = 95;
+  yield snap(st, {
+    line: 14, tag: 'write',
+    narrate: 'Follow s2_pt to the grade field at 7 and write 95.',
+    note: NOTE_TWO_RECORDS,
+    active: [B_GRADE],
+  });
+
+  // LINE 15 — s1_pt^ = s2_pt^ — the CONTENT copy. Cells 4 and 5 are overwritten
+  // with Mary and 95. BOTH pointers are unchanged, both arrows stay, both records
+  // still exist. This is the healthy version.
+  st.rec[A_NAME] = 'Mary'; st.rec[A_GRADE] = 95;
+  yield snap(st, {
+    line: 15, tag: 'copy',
+    narrate: 'The carets say: take the record s2_pt points at, and copy it into the record s1_pt points at. Cells 4 and 5 are overwritten.',
+    note: NOTE_CONTENT_COPY,
+    active: [A_NAME, A_GRADE],
+  });
+
+  // LINE 16 — s1_pt = s2_pt — the POINTER copy, the payoff. Cell 0 changes from 4
+  // to 6; s1_pt's arrow SWINGS from [4] to [6]; both arrows now land on [6]. The
+  // record at [4][5] becomes stale AND unreachable — the memory-danger marker's
+  // first real leak, named as the diagnosis it is.
+  st.s1 = 6;
+  yield snap(st, {
+    line: 16, tag: 'ptr-copy',
+    narrate: [
+      'No carets. This copies the pointer itself: s1_pt now holds 6, the same address s2_pt holds. Both variables point at the same record.',
+      { danger: true, text: 'The record at address 4 is leaked and unreachable — no pointer holds 4 any more, so it can never be read, written, or given back.' },
+    ],
+    note: NOTE_POINTER_COPY,
+    active: [S1], activeVars: ['s1_pt'],
+    stale: [A_NAME, A_GRADE],
+  });
+
+  // LINE 17 — s1_pt^.name = 'Bill'. s1_pt now leads to 6, so 'Bill' lands in the
+  // record at [6]. The leaked cells keep their greyed values, no arrow.
+  st.rec[B_NAME] = 'Bill';
+  yield snap(st, {
+    line: 17, tag: 'write',
+    narrate: "Follow s1_pt — which now leads to 6 — and write 'Bill'.",
+    active: [B_NAME],
+    stale: [A_NAME, A_GRADE],
+  });
+
+  // LINE 18 — print s2_pt^.name. s2_pt was never touched; it still holds 6, the
+  // same record 'Bill' was just written into. So it prints Bill, not Mary.
+  yield snap(st, {
+    line: 18, tag: 'print',
+    narrate: 's2_pt was never touched. It still holds 6. So this prints Bill.',
+    note: NOTE_PAYOFF,
+    compared: [B_NAME],
+    stale: [A_NAME, A_GRADE],
+  });
 }
 
 const SPEC = {
-  title: 'Doubly linked insertion: why the order of four lines matters',
-  subtitle: 'Inserting a node into a doubly linked list.',
+  title: 'What a pointer actually holds',
+  subtitle: 'Memory is one long array of numbered bytes.',
   profile: 'standard',
   columns: 2,
-  languages: ['pseudo', 'java', 'cpp'],
+  languages: ['pseudo', 'cpp', 'java'],   // order = tab order; pseudo is the default
 
   panels: [
-    { type: 'code',   id: 'code', title: 'insert ins before temp',
-      listings: LISTINGS, labels: { pseudo: 'pseudocode', java: 'Java', cpp: 'C++' } },
-    { type: 'nodes',  id: 'list', title: 'The list' },
-    { type: 'cells',  id: 'vars', title: 'Pointer variables' },
-    { type: 'cells',  id: 'walk', title: 'Walk forward from head' },
+    { type: 'code',  id: 'code',   title: 'main: build two records, then copy two ways',
+      listings: LISTINGS, labels: { pseudo: 'pseudocode', cpp: 'C++', java: 'Java' } },
+    // The memory row IS the structure being watched (structure: true), so it sits
+    // at its natural 11-cell width and never scrolls horizontally.
+    { type: 'cells', id: 'memory', title: 'Memory', structure: true },
+    // The pointer variables: a compact bookkeeping strip, and the SOURCE of the
+    // arrows into memory.
+    { type: 'cells', id: 'vars',   title: 'Pointer variables', compact: true },
   ],
 
-  initialTrace: 'correct',
+  initialTrace: 'run',
   traces: {
-    correct: makeTrace(),
+    run: trace,
   },
 };
 

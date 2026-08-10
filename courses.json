@@ -36,6 +36,10 @@
         "animations": [
           { "file": "heap-is-this-valid", "backs": null, "built": true }
         ] },
+      { "topic": "Pointers — The Address Model",
+        "animations": [
+          { "file": "pointers-address-model",     "backs": null,  "built": true }
+        ] },
       { "topic": "4.1 Singly Linked Lists — Inserting in Order",
         "animations": [
           { "file": "lists-insert-alpha",         "backs": "A9",  "built": true }

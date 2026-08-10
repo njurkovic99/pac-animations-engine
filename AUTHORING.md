@@ -535,8 +535,36 @@ rather than importing pointer vocabulary into Java.
 The author writes a canonical token (e.g. `⟨points-to⟩`, `⟨pointer⟩`); the engine
 substitutes per selected listing. Keep the map **minimal** — these one or two terms,
 not a translation layer. **This is the ONLY thing that varies in narration by
-language.** Node names, concepts, values, and structure are identical; syntax like
-`->` vs `.` lives in the code panel, never in prose.
+language.** Node names, concepts, values, and structure are identical; the *per-tab*
+syntax difference (`->` vs `.`) lives in the code panel, never in prose — but prose
+still quotes an operation in ONE notation, the pseudocode's (see below).
+
+## Dereference notation — one operation, three notations, per language
+
+**Dereferencing a pointer is written differently in each ds listing, and never mixed
+within one:**
+
+| language | dereference | example |
+|---|---|---|
+| pseudocode | postfix caret `^` | `p^`, `p^.field`, `p^.field^.field` |
+| C++ | `->` and `*` | `p->field`, `*p` |
+| Java | plain `.` | `p.field` (Java has references, not pointers — see the vocabulary rule above) |
+
+In **pseudocode the caret is mandatory** wherever a pointer is dereferenced. Without
+it, `p^ = q^` (copy the pointed-at record) and `p = q` (copy the pointer) are the SAME
+TEXT — and `pointers-address-model`, whose entire subject is that one caret, has no
+lesson left. In `lists-doubly-insert-order` the caret puts the dereference in the CODE
+(`ins^.prev^.next = ins`) instead of leaving the narration to assert it. No other
+notation distinguishes "the thing pointed at" from "the pointer," so the caret is
+information, not decoration.
+
+**Narration and notes quote the PSEUDOCODE form** (carets included), because the
+pseudo listing is the canonical default tab and the naming rule requires quoted lines
+to match the code exactly. A note reading `ins.prev = temp.prev` beside a line reading
+`ins^.prev = temp^.prev` is a rule violation, not a typo. Narration does not switch
+notation per tab — it never writes `->`; it uses the caret, the same as pseudocode.
+(Java's listing keeps the dot, which is correct there; that divergence is the
+pointer-vs-reference rule, and it stays in the code panel.)
 
 ## Naming — one identifier per thing
 
