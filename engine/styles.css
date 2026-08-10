@@ -720,6 +720,21 @@ body {
  * green `member` therefore also shows a blue activity fill in the same step
  * (amber-outline + blue-fill, or green-outline + blue-fill). */
 .pac-node[data-active="true"]    .pac-node-box { fill: var(--accent-soft); }
+
+/* Per-FIELD states on a record node (see panels/nodes.js recordNode). These are
+ * declared AFTER the node-level membership strokes above so they override them
+ * for a single field, at equal specificity.
+ *  - `.pac-field-empty`: INDETERMINATE storage -- a freshly allocated record cell
+ *    not yet written (backing value `undefined`, distinct from a nil pointer's
+ *    `null`). The dashed dimmed box + a thin X, the SVG analogue of a CELLS
+ *    `empty` cell; overrides the node's amber/green membership stroke so an unset
+ *    field never reads as a settled member.
+ *  - `.pac-field-active`: the blue activity fill on ONE field (a value copied into
+ *    a single cell), the field-granular analogue of the node-level activity fill.
+ *    Fill only, so the field keeps the node's outline -- both channels at once. */
+.pac-node .pac-node-box.pac-field-empty  { stroke: var(--border); stroke-dasharray: 3 2; fill: var(--bg); }
+.pac-node .pac-field-x                   { stroke: var(--text-dim); stroke-width: 1; stroke-opacity: .4; fill: none; }
+.pac-node .pac-node-box.pac-field-active { fill: var(--accent-soft); }
 .pac-node-label { fill: var(--text); font-family: var(--mono); font-size: 12px; text-anchor: middle; }
 .pac-node-meta  { fill: var(--text-dim); font-family: var(--mono); font-size: 9.5px; text-anchor: middle; }
 .pac-node[data-state="pending"] .pac-node-label { fill: var(--text-dim); }

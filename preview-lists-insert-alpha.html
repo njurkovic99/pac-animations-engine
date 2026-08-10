@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>stacks-postfix-eval — preview</title>
+<title>lists-insert-alpha — preview</title>
 <style>/* pac-animations — design system
    15 tokens replacing the 188 distinct color values found across the
    original 25 animation files. */
@@ -3268,365 +3268,442 @@ function mountAnimation(spec, el = document.getElementById('pac')) {
   return eng;
 }
 
-/* ds — A4 "Evaluating a postfix expression" (the lecture's "Stack application 2")
+/* ds — A9 "Inserting in order into a singly linked list"
  *
- * One continuous trace over eval("12+34-*"): push values; on an operator, pop two,
- * compute, push the result; one value remains at the end. The whole animation is
- * built around a single spine — POP RETURNS THE OPERANDS IN REVERSE. The first pop
- * gives the SECOND operand.
+ * The PREQUEL to lists-doubly-insert-order (A10). A10 assumes the spot is already
+ * found and asks only about the ORDER of four assignments; this one asks the prior
+ * question -- how do you FIND the spot in a sorted list, and what must you be
+ * holding when you get there?
  *
- *   at '+':  1 + 2 and 2 + 1 are both 3, so getting the order backwards is invisible.
- *   at '-':  3 - 4 = -1, but 4 - 3 = 1 — the same mistake now gives the wrong sign
- *            and no error message anywhere. The first operator conceals the bug; the
- *            second reveals it. Confusion-first, WATCH-only: no second trace, no
- *            buggy branch — the correct execution is narrated so the mistake cannot
- *            hide.
+ * The lecture's own example: a sorted list 12 -> 37 -> 99, inserting 39. The trap,
+ * in Neven's words: you walk with one pointer, stop at the first node LARGER than
+ * the value (99), and discover you have gone one node too far -- the node whose
+ * link must change is 37, one step BACK, and a singly linked list has no way back.
+ * That is what trail_pt is for, and it is the whole lesson. The closing note links
+ * forward to A10, whose doubly linked list is the lecture's answer to this clumsiness.
  *
- * THIS ANIMATION ADDS NO NEW ENGINE CAPABILITY. It inherits the vertical stack
- * `column`, the marked expression `box`, the compact Variables strip, the code
- * panel, and the stream — all shipped for A3 (stacks-paren-scanner). The only
- * differences are content: the stack holds NUMBERS (one of them negative, -1 and
- * -3, from the '-' onward), and push/pop are NEVER STEPPED INTO — A3 taught those
- * bodies, A4 uses them. Lines 1-8 (push and pop) never highlight; a call line is
- * ONE atomic step and the stack updates on it. Lines 16 and 17 are b-then-a on
- * purpose: that reversed order IS the lesson, so the listing must read that way.
- *
- * No CALLSTACK panel — nothing is stepped into, so there is nothing to show a frame
- * for. Five panels: expr, stack, vars, code, out. No memory-danger marker anywhere;
- * every value on screen is a healthy stored number or a healthy stale cell.
- * Infix-to-postfix CONVERSION is not animated (the lecture makes it extra credit);
- * it appears only in the post-watch challenge. */
+ * Shares A10's NODES record template, its pointer-variable strip, and its arrow
+ * overlay -- minus the backward prev links (this list points forward only). Adds
+ * the Function calls (CALLSTACK) panel so the parameter binding is visible: 39
+ * enters as insertAlpha(value = 39), and line 3 copies it out of the frame into the
+ * node. The new node is ALLOCATED on line 2 with INDETERMINATE fields (the dashed X
+ * box), which line 3 (number) and line 4 (link_pt = nil) then write -- an unset
+ * pointer and a nil pointer are different things, the point pointers-address-model
+ * makes. Every arrow is data resolved against a live DOM box; nothing is hand-placed. */
 
-const MAX = 4;
+const HEAD = 'n12';
 
-/* The expression, one character per cell, indices 0..6. Shown in full from step 0;
- * only the ix marker moves. */
-const EXPR = ['1', '2', '+', '3', '4', '-', '*'];
-
-/* One listing, three ds languages, line-aligned to a single 26-line grid, so `line`
- * is a plain number that resolves the same in every language. push and pop are shown
- * (so the student can see pop reads THEN decrements) but never stepped into. */
+/* One listing, ds language tabs: pseudocode (default), Java, C++. Kept line-aligned
+ * so a single `line` number addresses all three; pseudocode uses the CARET for
+ * dereference (AUTHORING.md item 82). main() is shown so the call insertAlpha(39)
+ * -- where 39 comes from -- has a highlightable origin, and the CALLSTACK stays in
+ * sync. Line 13 as written crashes when the new value sorts first (trail_pt still
+ * nil) -- the lecture's bug, deliberately NOT hidden; it is the closing challenge.
+ * Referenced lines: 2,3,4,6,7,8,9,10,12,13,16. Blank lines 5/11/14 and the headers
+ * 1/15 are never highlighted. */
 const LISTINGS = {
   pseudo: [
-    'push(v)',                                //  1
-    '    stack_ix = stack_ix + 1',            //  2
-    '    stack[stack_ix] = v',                //  3
-    '',                                       //  4
-    'pop()',                                  //  5
-    '    popped = stack[stack_ix]',           //  6
-    '    stack_ix = stack_ix - 1',            //  7
-    '    return popped',                      //  8
-    '',                                       //  9
-    'eval(expr)',                             // 10
-    '    ix = 0,  stack_ix = -1',             // 11
-    '    while ix < length(expr)',            // 12
-    '        if expr[ix] is a digit',         // 13
-    "            push(expr[ix] - '0')",       // 14
-    '        else',                           // 15
-    '            b = pop()',                  // 16
-    '            a = pop()',                  // 17
-    '            switch expr[ix]',            // 18
-    "                case '+':  push(a + b)",  // 19
-    "                case '-':  push(a - b)",  // 20
-    "                case '*':  push(a * b)",  // 21
-    '        ix = ix + 1',                     // 22
-    '    print pop()',                         // 23
-    '',                                        // 24
-    'main()',                                  // 25
-    '    eval("12+34-*")',                     // 26
+    'insertAlpha(value)',                                    // 1
+    '   new(ins_pt)',                                        // 2
+    '   ins_pt^.number = value',                            // 3
+    '   ins_pt^.link_pt = nil',                             // 4
+    '',                                                      // 5
+    '   temp_pt = head_pt',                                  // 6
+    '   trail_pt = nil',                                     // 7
+    '   while temp_pt <> nil and temp_pt^.number < value',  // 8
+    '      trail_pt = temp_pt',                              // 9
+    '      temp_pt = temp_pt^.link_pt',                     // 10
+    '',                                                      // 11
+    '   ins_pt^.link_pt = temp_pt',                         // 12
+    '   trail_pt^.link_pt = ins_pt',                        // 13
+    '',                                                      // 14
+    'main()',                                                // 15
+    '   insertAlpha(39)',                                    // 16
   ],
   java: [
-    'void push(int v) {',                                  //  1
-    '    stack_ix = stack_ix + 1;',                        //  2
-    '    stack[stack_ix] = v; }',                          //  3
-    '',                                                    //  4
-    'int pop() {',                                         //  5
-    '    popped = stack[stack_ix];',                       //  6
-    '    stack_ix = stack_ix - 1;',                        //  7
-    '    return popped; }',                                //  8
-    '',                                                    //  9
-    'void eval(String expr) {',                            // 10
-    '    ix = 0;  stack_ix = -1;',                         // 11
-    '    while (ix < expr.length()) {',                    // 12
-    '        if (Character.isDigit(expr.charAt(ix)))',     // 13
-    "            push(expr.charAt(ix) - '0');",            // 14
-    '        else {',                                      // 15
-    '            b = pop();',                              // 16
-    '            a = pop();',                              // 17
-    '            switch (expr.charAt(ix)) {',              // 18
-    "                case '+':  push(a + b);  break;",     // 19
-    "                case '-':  push(a - b);  break;",     // 20
-    "                case '*':  push(a * b);  break; } }", // 21
-    '        ix = ix + 1; }',                              // 22
-    '    print(pop()); }',                                 // 23
-    '',                                                    // 24
-    'void main() {',                                       // 25
-    '    eval("12+34-*"); }',                              // 26
+    'void insertAlpha(int value) {',                         // 1
+    '    Node ins_pt = new Node();',                         // 2
+    '    ins_pt.number = value;',                            // 3
+    '    ins_pt.link_pt = null;',                            // 4
+    '',                                                      // 5
+    '    temp_pt = head_pt;',                                // 6
+    '    trail_pt = null;',                                  // 7
+    '    while (temp_pt != null && temp_pt.number < value) {', // 8
+    '        trail_pt = temp_pt;',                           // 9
+    '        temp_pt = temp_pt.link_pt;',                    // 10
+    '    }',                                                 // 11
+    '    ins_pt.link_pt = temp_pt;',                         // 12
+    '    trail_pt.link_pt = ins_pt;',                        // 13
+    '}',                                                     // 14
+    'void main() {',                                         // 15
+    '    insertAlpha(39);',                                  // 16
   ],
   cpp: [
-    'void push(int v) {',                                  //  1
-    '    stack_ix = stack_ix + 1;',                        //  2
-    '    stack[stack_ix] = v; }',                          //  3
-    '',                                                    //  4
-    'int pop() {',                                         //  5
-    '    popped = stack[stack_ix];',                       //  6
-    '    stack_ix = stack_ix - 1;',                        //  7
-    '    return popped; }',                                //  8
-    '',                                                    //  9
-    'void eval(string expr) {',                            // 10
-    '    ix = 0;  stack_ix = -1;',                         // 11
-    '    while (ix < expr.length()) {',                    // 12
-    '        if (isdigit(expr[ix]))',                      // 13
-    "            push(expr[ix] - '0');",                   // 14
-    '        else {',                                      // 15
-    '            b = pop();',                              // 16
-    '            a = pop();',                              // 17
-    '            switch (expr[ix]) {',                     // 18
-    "                case '+':  push(a + b);  break;",     // 19
-    "                case '-':  push(a - b);  break;",     // 20
-    "                case '*':  push(a * b);  break; } }", // 21
-    '        ix = ix + 1; }',                              // 22
-    '    cout << pop(); }',                                // 23
-    '',                                                    // 24
-    'int main() {',                                        // 25
-    '    eval("12+34-*"); }',                              // 26
+    'void insertAlpha(int value) {',                         // 1
+    '    ins_pt = new Node;',                                // 2
+    '    ins_pt->number = value;',                           // 3
+    '    ins_pt->link_pt = nullptr;',                        // 4
+    '',                                                      // 5
+    '    temp_pt = head_pt;',                                // 6
+    '    trail_pt = nullptr;',                               // 7
+    '    while (temp_pt != nullptr && temp_pt->number < value) {', // 8
+    '        trail_pt = temp_pt;',                           // 9
+    '        temp_pt = temp_pt->link_pt;',                   // 10
+    '    }',                                                 // 11
+    '    ins_pt->link_pt = temp_pt;',                        // 12
+    '    trail_pt->link_pt = ins_pt;',                       // 13
+    '}',                                                     // 14
+    'int main() {',                                          // 15
+    '    insertAlpha(39);',                                  // 16
   ],
 };
 
-/* ---- teaching notes ---- */
-const SETUP_NOTE =
-  'In postfix notation the operation is written after the values it applies to: a+b becomes ab+. It needs ' +
-  'no parentheses — the position of each operator says what it applies to. This one is (1+2)*(3-4) written ' +
-  'without them.';
+/* The list nodes, plus the new node held by ins_pt. A field is INDETERMINATE when
+ * its backing value is `undefined` (renders as the dashed X box): the new node's
+ * number until line 3, its link_pt until line 4. `null` is a real nil (the crossed
+ * box ∅); a string is a node id (a filled dot + an arrow). ins/temp/trail start
+ * `undefined` (not yet assigned). The list nodes sit on the main row (row 0); the
+ * new node 39, once allocated, sits BELOW it (row 1), between the 37 and 99 slots --
+ * exactly as A10 places its node 25. */
+function fresh() {
+  return {
+    head: HEAD,
+    ins: undefined,           // set to 'n39' when new(ins_pt) runs (line 2)
+    temp: undefined,          // placeholder until line 6
+    trail: undefined,         // placeholder until line 7
+    alloc: false,             // node 39 exists only after new(ins_pt)
+    numberWritten: false,     // ins_pt^.number = value (line 3)
+    n12: { value: 12, link: 'n37',      slot: 0,    row: 0 },
+    n37: { value: 37, link: 'n99',      slot: 1,    row: 0 },
+    n99: { value: 99, link: null,       slot: 2,    row: 0 },
+    n39: { value: 39, link: undefined,  slot: 1.55, row: 1 },  // link_pt indeterminate until line 4
+  };
+}
 
-const FIRST_DIGIT_NOTE =
-  "You are reading characters, not numbers. '1' + '2' does not give you 3 — it is either undefined or it " +
-  'glues the characters together. Convert to the numeric value first, then do arithmetic. Watch the offsets.';
+const LIST_IDS = ['n12', 'n37', 'n99'];
+function nodeIds(m) { return m.alloc ? [...LIST_IDS, 'n39'] : LIST_IDS; }
 
-const PLUS_NOTE =
-  'Look closely at which value went into which variable. 2 came off first, but 2 is the second operand — 1 ' +
-  'was pushed first, so it is deeper in the stack. Right now it does not matter: 1 + 2 and 2 + 1 are both ' +
-  '3. Addition cannot tell you whether you got the order right. Keep watching.';
+/** The inserted node is a full MEMBER only when the insertion is COMPLETE: its own
+ *  link_pt points at a real node AND some list node's link_pt points back at it.
+ *  After line 12 it points at 99 but 37 still points past it, so it is reachable-
+ *  forward yet not a member (stays amber); line 13 makes 37 point at it -> green. */
+function memberIns(m) {
+  if (typeof m.n39.link !== 'string') return false;
+  return LIST_IDS.some(id => m[id].link === 'n39');
+}
 
-const MINUS_NOTE =
-  'This is where the order bites. The expression is 34-, meaning 3 - 4 = -1. But the stack handed back 4 ' +
-  'first. Compute in the order the values arrive and you get 4 - 3 = 1 — the right magnitude, the wrong ' +
-  'sign, and no error message anywhere. The first pop is always the SECOND operand. Addition and ' +
-  'multiplication will never catch this mistake for you; subtraction and division will, every time.';
+/* Follow head_pt forward, for the "check the order" narration. Bounded. */
+function walk(m) {
+  const out = [];
+  let cur = m.head, guard = 0;
+  while (cur != null && guard++ < 8) { out.push(m[cur].value); cur = m[cur].link; }
+  return out;
+}
 
-const STAR_NOTE =
-  'The values being combined here are not characters from the expression — they are results of earlier ' +
-  'operations. That is what makes the stack the right structure: each result is waiting exactly where the ' +
-  'next operator needs it.';
+function arrows(m) {
+  const out = [];
+  // Each node's link_pt -> the node it points at, but ONLY when it holds a real id.
+  // An indeterminate (undefined) or nil (null) link_pt points at nothing: no arrow.
+  for (const id of nodeIds(m)) {
+    if (typeof m[id].link === 'string')
+      out.push({ from: `list.${id}.link_pt`, to: `list.${m[id].link}`, bend: 'up' });
+  }
+  // Each pointer variable's cell -> the node it points at, when it holds an id.
+  out.push({ from: 'vars.head_pt', to: `list.${m.head}` });
+  if (typeof m.ins   === 'string') out.push({ from: 'vars.ins_pt',   to: `list.${m.ins}` });
+  if (typeof m.temp  === 'string') out.push({ from: 'vars.temp_pt',  to: `list.${m.temp}` });
+  if (typeof m.trail === 'string') out.push({ from: 'vars.trail_pt', to: `list.${m.trail}` });
+  return out;
+}
 
-const CHALLENGE_NOTE =
-  'Check it against the infix form: (1+2)*(3-4) = 3 * -1 = -3. Two things this version cannot do. It ' +
-  'assumes every number is a single digit — what would you need to add to evaluate 12+7*, where 12 is one ' +
-  'number? And it evaluates postfix but does not produce it: converting a+(b-c) into abc-+ is a separate ' +
-  'algorithm, and also uses a stack.';
+/* A pointer-variable cell. `val` is a node id (points -> dot + arrow), null (nil ->
+ * ∅ at normal weight, no arrow), or undefined (declared but unassigned -> the empty
+ * placeholder X). `active` paints the blue activity fill the step it is written. */
+function varCell(label, val, active) {
+  if (val === undefined) return { label, value: '', anchor: label, role: 'empty' };
+  return { label, value: val === null ? '∅' : '●', anchor: label, role: active ? 'active' : undefined };
+}
+
+/* One record node for the list panel. The new node's number field is indeterminate
+ * (label undefined) until line 3, and its link_pt indeterminate until line 4 --
+ * both drawn as the dashed X box. `fill` names the field being written THIS step,
+ * which takes the blue activity fill. */
+function nodeObj(m, id, fill) {
+  const n = m[id];
+  const label = id === 'n39'
+    ? (m.numberWritten ? '39' : undefined)   // undefined -> indeterminate number field
+    : String(n.value);
+  return {
+    id,
+    label,
+    fields: ['value', 'link_pt'],            // [ number | link_pt ] -- singly linked
+    link_pt: n.link,                         // undefined -> dashed X, null -> ∅, id -> ●
+    slot: n.slot, row: n.row,
+    // OUTLINE = membership: node 39 is 'unlinked' (amber) until the insertion is
+    // complete, then 'member' (green) on line 13. FILL = activity, at FIELD level.
+    state: (id === 'n39' && !memberIns(m)) ? 'unlinked' : 'member',
+    activeFields: fill && fill.node === id ? fill.fields : undefined,
+  };
+}
+
+/* Call-frame builders (immutable). `call` on a caller frame is the call-site line
+ * the code panel dims while a callee runs (the parked caller line). */
+const mainF = (call) => ({ fn: 'main', vars: [], call });
+const insAF = (valueActive) => ({
+  fn: 'insertAlpha',
+  vars: [{ name: 'value', value: '39', role: valueActive ? 'active' : undefined }],
+});
+
+function snap(m, { line, tag, narrate, note, frames, fill = null, activeVar = null }) {
+  const parked = frames.slice(0, -1).map(f => f.call).filter(Boolean);
+  return {
+    tag, narrate, line, note, parked,
+    arrows: arrows(m),
+    panels: {
+      list: {
+        layout: 'linear', template: 'record',
+        nodes: nodeIds(m).map(id => nodeObj(m, id, fill)),
+        edges: [],
+      },
+      calls: {
+        frames: frames.map((f, idx) => ({ fn: f.fn, vars: f.vars, active: idx === frames.length - 1 })),
+      },
+      vars: {
+        render: 'row',
+        cells: [
+          varCell('head_pt',  m.head,  activeVar === 'head_pt'),
+          varCell('ins_pt',   m.ins,   activeVar === 'ins_pt'),
+          varCell('temp_pt',  m.temp,  activeVar === 'temp_pt'),
+          varCell('trail_pt', m.trail, activeVar === 'trail_pt'),
+        ],
+      },
+    },
+  };
+}
+
+/* --- Notes (AUTHORING.md "Steps vs. notes"): setup, the allocation, the parameter
+ * copy, nil-vs-unset, the walk's why, the order pitfall, THE TRAP, the two golden
+ * rules, the read-back, and the closing challenge with the link forward to A10. --- */
+
+const SETUP =
+  'A sorted singly linked list — 12, 37, 99 — and the value 39 to insert so it stays ' +
+  'in order. The value comes in as insertAlpha’s parameter; the node to hold it does ' +
+  'not exist yet. The work is finding WHERE 39 goes, and being able to change the ' +
+  'right link once you are there.';
+
+const ALLOC =
+  'A freshly allocated record holds nothing meaningful. Its number and link_pt fields ' +
+  'are indeterminate — the dashed boxes — until the next two lines write them. ins_pt ' +
+  'points at this node, but nothing in the list does, so it is not part of the list yet.';
+
+const COPY =
+  '39 is not conjured here — it is the parameter value, bound when main called ' +
+  'insertAlpha(39), copied out of the frame into the node. Watch value in the frame ' +
+  'and the number field light together: one value, one movement.';
+
+const NIL_VS_UNSET =
+  'An unset pointer and a nil pointer are different things. A moment ago link_pt was ' +
+  'indeterminate — allocated, never written. Now it holds nil: a real, definite value ' +
+  'meaning “points at nothing.” The crossed box is that nil, not an absence.';
+
+const WHY_TRAIL =
+  'temp_pt walks the list. trail_pt follows exactly one node behind, and the reason ' +
+  'will be obvious in about six steps.';
+
+const ORDER_PITFALL =
+  'The order of these two lines is the whole trick. trail_pt copies temp_pt before ' +
+  'temp_pt moves — that is the second golden rule at work: if you want to point at ' +
+  'some node and are not sure how, find a pointer already pointing at it and copy it. ' +
+  'Swap these two lines and trail_pt would follow temp_pt to the same node instead of ' +
+  'trailing it.';
+
+const TRAP =
+  'Look where temp_pt is: on 99, the first node bigger than 39. That is the node 39 ' +
+  'must come BEFORE — so the node whose link_pt has to change is 37, one step back. ' +
+  'And a singly linked list has no way back. Every node points forward and only forward; ' +
+  'from 99 there is no route to 37. If temp_pt were your only pointer you would be stuck ' +
+  'here, one node past everything you need. Now look at trail_pt: it is sitting on 37. ' +
+  'That is what it has been for.';
+
+const GOLDEN_NIL =
+  'First golden rule: overwrite pointers where you could do the least damage — nil ' +
+  'pointers. ins_pt^.link_pt is nil right now, so writing to it can destroy nothing. ' +
+  'Being honest about this one: here you could do the two lines in either order and get ' +
+  'away with it, because temp_pt is still holding 99. The rule earns itself when you have ' +
+  'NOT kept a pointer to what comes next — write trail_pt^.link_pt first without it, ' +
+  'and 99, and everything after it, is unreachable the instant you do.';
+
+const READ_BACK =
+  'Follow it from head_pt and check: 12, then 37, then 39, then 99, then nil. In order, ' +
+  'and nothing was moved — only two pointers changed.';
+
+const CLOSING = [
+  'Notice what the walk cost. Nothing was copied and nothing shifted — compare that ' +
+  'with an array, where inserting in the middle means moving every element after it. ' +
+  'That is what the list buys, and the price is the walk and the extra pointer in every ' +
+  'node. Two things worth working out for yourself. What happens if the new value ' +
+  'belongs FIRST — say you insert 5 into this list? The walk stops immediately, ' +
+  'trail_pt is still nil, and line 13 dereferences it. Trace what your program does. ' +
+  'That case needs its own branch, and it is the one people forget. And the trailing ' +
+  'pointer is clumsy — carrying a second pointer only so you can see one node ' +
+  'backwards. It would be much nicer to have direct access to the previous node. ',
+  { href: 'preview-lists-doubly-insert-order.html',
+    text: 'The next lecture’s answer: a list that points both ways' },
+];
 
 function* trace() {
-  const stack = [null, null, null, null];   // the stack storage; starts empty
-  let stackIx = -1;                          // top of stack; -1 means empty
-  let ix = -1;                               // eval's cursor; -1 = not started (parked)
-  let a = null, b = null;                    // the two operands pop() hands back
-  const stream = [];
+  const m = fresh();
 
-  /* The expression as a marked CELLS row: one character per cell, [0]..[6] labels
-   * beneath, the ix marker (parked left of [0] before the loop starts). Every
-   * character is present from step 0 — only the marker moves. The character under
-   * examination this step is `compared`. */
-  const exprPanel = compared => ({
-    render: 'box',
-    cells: EXPR.map((v, i) => (i === compared ? { value: v, role: 'compared' } : { value: v })),
-    markers: [{ label: 'ix', index: ix }],
+  // Step 0 (required): initial state, nothing executed. The sorted list 12 -> 37 ->
+  // 99; no ins node yet (new(ins_pt) allocates it on line 2); temp_pt/trail_pt/
+  // ins_pt are placeholders. Only main is on the call stack.
+  yield snap(m, {
+    line: null, tag: 'init', frames: [mainF()],
+    narrate: 'A sorted list, and a value — 39 — to insert so it stays in order.',
+    note: SETUP,
   });
 
-  /* The stack as the vertical column: cell [0] at the bottom, growing up. A cell
-   * written THIS step is `active` (blue); a cell above stack_ix that still holds a
-   * value is `stale` (greyed — popped, but never blanked). The stack_ix marker sits
-   * on the left and parks below cell [0] at the -1 sentinel. */
-  const stackPanel = active => ({
-    render: 'column',
-    cells: stack.map((v, i) => {
-      if (v == null)    return { value: '', role: 'empty' };
-      if (i === active) return { value: v, role: 'active' };
-      if (i > stackIx)  return { value: v, role: 'stale' };
-      return { value: v };                                  // member
-    }),
-    markers: [{ label: 'stack_ix', index: stackIx }],
+  // Line 16 -- main calls insertAlpha(39). main is the running frame; the callee is
+  // pushed on the next step, when control enters its body (the A1 call convention).
+  yield snap(m, {
+    line: 16, tag: 'call', frames: [mainF()],
+    narrate: 'main calls insertAlpha(39). Control enters insertAlpha next.',
   });
 
-  /* The compact Variables strip: ix, stack_ix, a, b. `hot` gives the changing box
-   * the blue fill. stack_ix always shows its real value (the -1 sentinel included);
-   * ix, a, and b show the placeholder before they hold a meaningful value. */
-  const varsPanel = hot => ({
-    render: 'box',
-    cells: [
-      { label: 'ix',       value: ix < 0 ? '' : ix,      role: ix < 0 ? 'empty' : (hot === 'ix' ? 'active' : undefined) },
-      { label: 'stack_ix', value: stackIx,               role: hot === 'stack_ix' ? 'active' : undefined },
-      { label: 'a',        value: a == null ? '' : a,    role: a == null ? 'empty' : (hot === 'a' ? 'active' : undefined) },
-      { label: 'b',        value: b == null ? '' : b,    role: b == null ? 'empty' : (hot === 'b' ? 'active' : undefined) },
-    ],
+  // Line 2 -- new(ins_pt). The node is allocated and appears (amber), its number and
+  // link_pt fields INDETERMINATE (dashed X). insertAlpha's frame is pushed, already
+  // binding value = 39; main's call line 16 is now parked (dimmed).
+  m.alloc = true; m.ins = 'n39';
+  yield snap(m, {
+    line: 2, tag: 'alloc', frames: [mainF(16), insAF()], activeVar: 'ins_pt',
+    narrate: 'new(ins_pt) allocates a node and ins_pt points at it. Its number and link_pt fields hold nothing meaningful yet.',
+    note: ALLOC,
   });
 
-  const snap = ({ line, tag, narrate, note, compared = null, active = null, hot = null, streamNew = false }) => ({
-    line, tag, narrate, note,
-    panels: {
-      expr:  exprPanel(compared),
-      stack: stackPanel(active),
-      vars:  varsPanel(hot),
-      out:   { lines: stream.map((t, i) => ({ text: t, dir: 'out', isNew: streamNew && i === stream.length - 1 })) },
-    },
+  // Line 3 -- ins_pt^.number = value. Copy the bound parameter (39) into the number
+  // field: value in the frame and the number cell take the blue fill together.
+  m.numberWritten = true;
+  yield snap(m, {
+    line: 3, tag: 'assign', frames: [mainF(16), insAF(true)], fill: { node: 'n39', fields: ['value'] },
+    narrate: 'ins_pt^.number = value copies the bound parameter — 39 — into the new node’s number field.',
+    note: COPY,
   });
 
-  /* ---- character patterns. push and pop are ATOMIC: the call line is one step and
-   * the stack updates on it; lines 1-8 never highlight. ---- */
-
-  // Digit: 12 / 13(true) / 14 (push) / 22.
-  function* doDigit(p, ch, n) {
-    yield snap({ line: 12, tag: 'test', narrate: n.loop });
-    yield snap({ line: 13, tag: 'test', narrate: n.isDigit, compared: p });
-    stackIx += 1; stack[stackIx] = +ch;                     // push(expr[ix] - '0')
-    yield snap({ line: 14, tag: 'push', narrate: n.push, note: n.pushNote, compared: p, active: stackIx, hot: 'stack_ix' });
-    ix = p + 1;
-    yield snap({ line: 22, tag: 'inc', narrate: n.inc, hot: 'ix' });
-  }
-
-  // Operator: 12 / 13(false) / 16 (b=pop) / 17 (a=pop) / 18 (switch) / 19|20|21 (push) / 22.
-  function* doOp(p, ch, opLine, compute, n) {
-    yield snap({ line: 12, tag: 'test', narrate: n.loop });
-    yield snap({ line: 13, tag: 'test', narrate: n.notDigit, compared: p });
-    b = stack[stackIx]; stackIx -= 1;                       // b = pop() — the top
-    yield snap({ line: 16, tag: 'pop', narrate: n.popB, compared: p, hot: 'b' });
-    a = stack[stackIx]; stackIx -= 1;                       // a = pop() — the next one down
-    yield snap({ line: 17, tag: 'pop', narrate: n.popA, compared: p, hot: 'a' });
-    yield snap({ line: 18, tag: 'test', narrate: n.sw, compared: p });
-    stackIx += 1; stack[stackIx] = compute(a, b);           // push(a OP b)
-    yield snap({ line: opLine, tag: 'push', narrate: n.push, note: n.pushNote, compared: p, active: stackIx, hot: 'stack_ix' });
-    ix = p + 1;
-    yield snap({ line: 22, tag: 'inc', narrate: n.inc, hot: 'ix' });
-  }
-
-  /* ================= STEP 0 — the empty stack, nothing executed ========= */
-  yield snap({
-    line: null, tag: 'init',
-    narrate: 'A postfix expression. The operators come after their operands.',
-    note: SETUP_NOTE,
+  // Line 4 -- ins_pt^.link_pt = nil. The link goes from indeterminate to nil (∅).
+  m.n39.link = null;
+  yield snap(m, {
+    line: 4, tag: 'assign', frames: [mainF(16), insAF()], fill: { node: 'n39', fields: ['link_pt'] },
+    narrate: 'ins_pt^.link_pt = nil — the link goes from indeterminate to nil, pointing at nothing.',
+    note: NIL_VS_UNSET,
   });
 
-  /* ================= INIT (line 11) ==================================== */
-  ix = 0; stackIx = -1;
-  yield snap({ line: 11, tag: 'init',
-    narrate: 'ix starts at the first character and stack_ix is -1 — the stack is empty.',
-    hot: 'ix' });
-
-  /* ================= '1' — first digit, conversion narrated ============= */
-  yield* doDigit(0, '1', {
-    loop:     'ix is 0, which is less than 7, so there is another character to read.',
-    isDigit:  "expr[0] is '1', which is a digit.",
-    push:     "The character '1' is not the number 1. Subtracting the character '0' converts it: '1' - '0' is 1. That value goes on the stack.",
-    pushNote: FIRST_DIGIT_NOTE,
-    inc:      'ix advances to 1, the next character.',
+  // Lines 6-7 -- start the walk.
+  m.temp = m.head;
+  yield snap(m, {
+    line: 6, tag: 'assign', frames: [mainF(16), insAF()], activeVar: 'temp_pt',
+    narrate: 'temp_pt now points where head_pt points — to 12, the first node.',
+  });
+  m.trail = null;
+  yield snap(m, {
+    line: 7, tag: 'assign', frames: [mainF(16), insAF()], activeVar: 'trail_pt',
+    narrate: 'trail_pt starts as nil, because at the first node there is nothing behind it.',
+    note: WHY_TRAIL,
   });
 
-  /* ================= '2' — second digit ================================ */
-  yield* doDigit(1, '2', {
-    loop:    'ix is 1, still less than 7, so there is another character.',
-    isDigit: "expr[1] is '2', a digit.",
-    push:    "'2' - '0' is 2. It goes on the stack, on top of the 1.",
-    inc:     'ix advances to 2.',
+  // The walk: test, then trail_pt = temp_pt, then temp_pt = temp_pt^.link_pt, until
+  // temp_pt lands on the first node NOT less than 39.
+  // Iteration 1 -- temp_pt on 12.
+  yield snap(m, {
+    line: 8, tag: 'test', frames: [mainF(16), insAF()],
+    narrate: '12 is less than 39, so 39 goes somewhere after it. Keep walking.',
+  });
+  m.trail = m.temp;
+  yield snap(m, {
+    line: 9, tag: 'assign', frames: [mainF(16), insAF()], activeVar: 'trail_pt',
+    narrate: 'trail_pt takes temp_pt’s place FIRST, while temp_pt is still here.',
+    note: ORDER_PITFALL,
+  });
+  m.temp = m[m.temp].link;   // -> 37
+  yield snap(m, {
+    line: 10, tag: 'assign', frames: [mainF(16), insAF()], activeVar: 'temp_pt',
+    narrate: 'temp_pt now points where temp_pt^.link_pt points — to 37. trail_pt stays on 12.',
   });
 
-  /* ================= '+' — the order is introduced, and does not matter yet */
-  yield* doOp(2, '+', 19, (x, y) => x + y, {
-    loop:     'ix is 2, less than 7.',
-    notDigit: "expr[2] is '+', which is not a digit.",
-    popB:     'b takes the top of the stack: 2.',
-    popA:     'a takes the next one down: 1. The FIRST pop gave the SECOND operand — the stack hands them back in reverse.',
-    sw:       "The operator is '+', so the '+' case runs.",
-    push:     'a + b is 1 + 2, which is 3. The result goes back on the stack.',
-    pushNote: PLUS_NOTE,
-    inc:      'ix advances to 3.',
+  // Iteration 2 -- temp_pt on 37.
+  yield snap(m, {
+    line: 8, tag: 'test', frames: [mainF(16), insAF()],
+    narrate: '37 is less than 39, so 39 goes somewhere after it. Keep walking.',
+  });
+  m.trail = m.temp;
+  yield snap(m, {
+    line: 9, tag: 'assign', frames: [mainF(16), insAF()], activeVar: 'trail_pt',
+    narrate: 'trail_pt takes temp_pt’s place again, moving up to 37.',
+  });
+  m.temp = m[m.temp].link;   // -> 99
+  yield snap(m, {
+    line: 10, tag: 'assign', frames: [mainF(16), insAF()], activeVar: 'temp_pt',
+    narrate: 'temp_pt follows its link_pt to 99. trail_pt stays on 37.',
   });
 
-  /* ================= '3' — digit ======================================= */
-  yield* doDigit(3, '3', {
-    loop:    'ix is 3, less than 7.',
-    isDigit: "expr[3] is '3', a digit.",
-    push:    "'3' - '0' is 3. It goes on the stack, above the 3 the last result left there.",
-    inc:     'ix advances to 4.',
+  // Iteration 3 -- temp_pt on 99: the test fails, the walk stops one node too far.
+  yield snap(m, {
+    line: 8, tag: 'test', frames: [mainF(16), insAF()],
+    narrate: '99 is NOT less than 39. The walk stops here.',
+    note: TRAP,
   });
 
-  /* ================= '4' — digit ======================================= */
-  yield* doDigit(4, '4', {
-    loop:    'ix is 4, less than 7.',
-    isDigit: "expr[4] is '4', a digit.",
-    push:    "'4' - '0' is 4. It goes on the stack. The stack now holds 3, 3, 4.",
-    inc:     'ix advances to 5.',
+  // Line 12 -- ins_pt^.link_pt = temp_pt. 39's link swings to 99. Reachable forward
+  // but NOT yet a member (37 still points past it), so it stays amber.
+  m.n39.link = m.temp;
+  yield snap(m, {
+    line: 12, tag: 'assign', frames: [mainF(16), insAF()], fill: { node: 'n39', fields: ['link_pt'] },
+    narrate: 'ins_pt^.link_pt takes temp_pt’s value, so 39 now points at 99.',
+    note: GOLDEN_NIL,
   });
 
-  /* ================= '-' — the order NOW matters. The payoff. ========== */
-  yield* doOp(5, '-', 20, (x, y) => x - y, {
-    loop:     'ix is 5, less than 7.',
-    notDigit: "expr[5] is '-', not a digit.",
-    popB:     'b takes the top: 4.',
-    popA:     'a takes the next one down: 3.',
-    sw:       "The operator is '-', so the '-' case runs.",
-    push:     'a - b is 3 - 4, which is -1.',
-    pushNote: MINUS_NOTE,
-    inc:      'ix advances to 6.',
+  // Line 13 -- trail_pt^.link_pt = ins_pt. 37's link swings from 99 to 39; both of
+  // 39's membership conditions now hold, so it turns from amber to a green member.
+  m[m.trail].link = m.ins;
+  yield snap(m, {
+    line: 13, tag: 'assign', frames: [mainF(16), insAF()], fill: { node: 'n37', fields: ['link_pt'] },
+    narrate: 'trail_pt^.link_pt now points at 39. The list is 12, 37, 39, 99.',
+    note: READ_BACK,
   });
 
-  /* ================= '*' — combining earlier results =================== */
-  yield* doOp(6, '*', 21, (x, y) => x * y, {
-    loop:     'ix is 6, less than 7.',
-    notDigit: "expr[6] is '*', not a digit.",
-    popB:     'b takes the top: -1.',
-    popA:     'a takes the next one down: 3.',
-    sw:       "The operator is '*', so the '*' case runs.",
-    push:     'a * b is 3 * -1, which is -3.',
-    pushNote: STAR_NOTE,
-    inc:      'ix advances to 7.',
+  // Final step -- control returns to main; insertAlpha's frame pops. The call site
+  // (line 16) is the active line again; nothing else executes. The closing challenge
+  // and the link to A10 live here.
+  void walk(m);
+  yield snap(m, {
+    line: 16, tag: 'return', frames: [mainF()],
+    narrate: 'Back in main: insertAlpha(39) has returned. One insertion, two pointer ' +
+             'assignments, and a walk to find where.',
+    note: CLOSING,
   });
-
-  /* ================= END — loop test fails, then print ================= */
-  yield snap({ line: 12, tag: 'test',
-    narrate: 'Every character has been read. One value is left on the stack.' });
-
-  const result = stack[stackIx];                            // print pop()
-  stream.push(String(result));
-  stackIx -= 1;                                             // the stack empties; stack_ix parks at -1
-  yield snap({ line: 23, tag: 'print',
-    narrate: 'That last value is the answer: -3.',
-    note: CHALLENGE_NOTE, hot: 'stack_ix', streamNew: true });
 }
 
 const SPEC = {
-  title: 'Evaluating a postfix expression',
-  subtitle: 'Push the values, apply the operators',
+  title: 'Inserting in order',
+  subtitle: 'Finding the spot is the hard part',
   profile: 'standard',
   columns: 2,
   languages: ['pseudo', 'java', 'cpp'],
 
-  // Declared in reading order; the engine places them (AUTHORING.md "Panels flow
-  // across both columns"). The two structure panels — the expression and the stack
-  // — sit side by side in the capped region at the top of the right column; the code
-  // listing anchors the left column; the Variables strip and the output flow down
-  // and balance across the columns. Everything resolves once on load and holds, so
-  // nothing moves as steps advance. No CALLSTACK panel — nothing is stepped into.
+  // Declaration = reading order. The list and the Pointer variables strip are the
+  // two ends of the pointer arrows, so they are declared ADJACENT (the engine keeps
+  // arrow endpoints contiguous, AUTHORING.md "Arrows keep their endpoints
+  // adjacent"); Function calls, which no arrow touches, comes after them.
   panels: [
-    { type: 'cells',  id: 'expr',  title: 'the expression', structure: true },
-    { type: 'cells',  id: 'stack', title: 'the stack',      structure: true },
-    { type: 'cells',  id: 'vars',  title: 'Variables', compact: true },
-    { type: 'code',   id: 'code',  title: 'evaluating postfix',
+    { type: 'code',      id: 'code',  title: 'insertAlpha(value)',
       listings: LISTINGS, labels: { pseudo: 'pseudocode', java: 'Java', cpp: 'C++' } },
-    { type: 'stream', id: 'out',   title: 'output', compact: true },
+    { type: 'nodes',     id: 'list',  title: 'The list', structure: true },
+    { type: 'cells',     id: 'vars',  title: 'Pointer variables', compact: true },
+    { type: 'callstack', id: 'calls', title: 'Function calls' },
   ],
 
-  initialTrace: 'run',
+  initialTrace: 'correct',
   traces: {
-    run: trace,
+    correct: trace,
   },
 };
 
