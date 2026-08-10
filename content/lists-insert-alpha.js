@@ -13,20 +13,24 @@
  * forward to A10, whose doubly linked list is the lecture's answer to this clumsiness.
  *
  * Shares A10's NODES record template, its pointer-variable strip, and its arrow
- * overlay -- minus the backward prev links (this list points forward only). Every
- * arrow on screen is data resolved against a live DOM box; nothing is hand-placed.
- * A nil link_pt renders as the crossed box (the record renderer's ∅). */
+ * overlay -- minus the backward prev links (this list points forward only). Adds
+ * the Function calls (CALLSTACK) panel so the parameter binding is visible: 39
+ * enters as insertAlpha(value = 39), and line 3 copies it out of the frame into the
+ * node. The new node is ALLOCATED on line 2 with INDETERMINATE fields (the dashed X
+ * box), which line 3 (number) and line 4 (link_pt = nil) then write -- an unset
+ * pointer and a nil pointer are different things, the point pointers-address-model
+ * makes. Every arrow is data resolved against a live DOM box; nothing is hand-placed. */
 
-const VALUE = 39;
-const HEAD  = 'n12';
+const HEAD = 'n12';
 
-/* One listing, ds language tabs: pseudocode (default), Java, C++. The three are
- * kept line-aligned so a single `line` number addresses all of them; pseudocode
- * uses the CARET for dereference (AUTHORING.md item 82 / notation rule). Line 13
- * as written crashes when the new value sorts first (trail_pt is still nil) -- that
- * bug is the lecture's, deliberately NOT hidden; it is the challenge in the closing
- * note. Referenced lines: 2,3,4,6,7,8,9,10,12,13,16. Blank lines 5/11/14 and the
- * headers 1/15 are never highlighted. */
+/* One listing, ds language tabs: pseudocode (default), Java, C++. Kept line-aligned
+ * so a single `line` number addresses all three; pseudocode uses the CARET for
+ * dereference (AUTHORING.md item 82). main() is shown so the call insertAlpha(39)
+ * -- where 39 comes from -- has a highlightable origin, and the CALLSTACK stays in
+ * sync. Line 13 as written crashes when the new value sorts first (trail_pt still
+ * nil) -- the lecture's bug, deliberately NOT hidden; it is the closing challenge.
+ * Referenced lines: 2,3,4,6,7,8,9,10,12,13,16. Blank lines 5/11/14 and the headers
+ * 1/15 are never highlighted. */
 const LISTINGS = {
   pseudo: [
     'insertAlpha(value)',                                    // 1
@@ -84,32 +88,38 @@ const LISTINGS = {
   ],
 };
 
-/* The list nodes, plus the new node held by ins_pt. link_pt is an id or null; a
- * null link renders as the crossed box. The three list nodes sit on the main row
- * (row 0); the new node 39 sits BELOW it (row 1), off the list line, between the
- * 37 and 99 slots -- exactly as A10 places its node 25 off the main row. */
+/* The list nodes, plus the new node held by ins_pt. A field is INDETERMINATE when
+ * its backing value is `undefined` (renders as the dashed X box): the new node's
+ * number until line 3, its link_pt until line 4. `null` is a real nil (the crossed
+ * box ∅); a string is a node id (a filled dot + an arrow). ins/temp/trail start
+ * `undefined` (not yet assigned). The list nodes sit on the main row (row 0); the
+ * new node 39, once allocated, sits BELOW it (row 1), between the 37 and 99 slots --
+ * exactly as A10 places its node 25. */
 function fresh() {
   return {
-    head: HEAD, ins: 'n39',
-    temp: undefined,          // declared, unassigned -> placeholder (line 6 sets it)
-    trail: undefined,         // declared, unassigned -> placeholder (line 7 sets it)
-    n12: { value: 12, link: 'n37', slot: 0,    row: 0 },
-    n37: { value: 37, link: 'n99', slot: 1,    row: 0 },
-    n99: { value: 99, link: null,  slot: 2,    row: 0 },
-    n39: { value: 39, link: null,  slot: 1.55, row: 1 },
+    head: HEAD,
+    ins: undefined,           // set to 'n39' when new(ins_pt) runs (line 2)
+    temp: undefined,          // placeholder until line 6
+    trail: undefined,         // placeholder until line 7
+    alloc: false,             // node 39 exists only after new(ins_pt)
+    numberWritten: false,     // ins_pt^.number = value (line 3)
+    n12: { value: 12, link: 'n37',      slot: 0,    row: 0 },
+    n37: { value: 37, link: 'n99',      slot: 1,    row: 0 },
+    n99: { value: 99, link: null,       slot: 2,    row: 0 },
+    n39: { value: 39, link: undefined,  slot: 1.55, row: 1 },  // link_pt indeterminate until line 4
   };
 }
 
-const NODE_IDS = ['n12', 'n37', 'n99', 'n39'];
+const LIST_IDS = ['n12', 'n37', 'n99'];
+function nodeIds(m) { return m.alloc ? [...LIST_IDS, 'n39'] : LIST_IDS; }
 
 /** The inserted node is a full MEMBER only when the insertion is COMPLETE: its own
- *  link_pt is set AND some list node's link_pt points back at it. Until then it is
- *  'unlinked' (amber outline). After line 12 (ins_pt^.link_pt = temp_pt) it points
- *  at 99 but 37 still points past it, so it is reachable-forward yet not a member;
- *  line 13 (trail_pt^.link_pt = ins_pt) makes 37 point at it and it turns green. */
+ *  link_pt points at a real node AND some list node's link_pt points back at it.
+ *  After line 12 it points at 99 but 37 still points past it, so it is reachable-
+ *  forward yet not a member (stays amber); line 13 makes 37 point at it -> green. */
 function memberIns(m) {
-  if (m[m.ins].link == null) return false;
-  return NODE_IDS.some(id => id !== m.ins && m[id].link === m.ins);
+  if (typeof m.n39.link !== 'string') return false;
+  return LIST_IDS.some(id => m[id].link === 'n39');
 }
 
 /* Follow head_pt forward, for the "check the order" narration. Bounded. */
@@ -122,52 +132,71 @@ function walk(m) {
 
 function arrows(m) {
   const out = [];
-  // Each node's link_pt -> the node it points at. All forward, so all bow ABOVE
-  // the row (bend 'up'); the cross-row links to/from node 39 curve naturally.
-  for (const id of NODE_IDS) {
-    const link = m[id].link;
-    if (link != null) out.push({ from: `list.${id}.link_pt`, to: `list.${link}`, bend: 'up' });
+  // Each node's link_pt -> the node it points at, but ONLY when it holds a real id.
+  // An indeterminate (undefined) or nil (null) link_pt points at nothing: no arrow.
+  for (const id of nodeIds(m)) {
+    if (typeof m[id].link === 'string')
+      out.push({ from: `list.${id}.link_pt`, to: `list.${m[id].link}`, bend: 'up' });
   }
-  // Each pointer variable's cell -> the node it points at. A placeholder (undefined)
-  // or a nil (null) pointer draws no arrow -- it points at nothing.
+  // Each pointer variable's cell -> the node it points at, when it holds an id.
   out.push({ from: 'vars.head_pt', to: `list.${m.head}` });
-  out.push({ from: 'vars.ins_pt',  to: `list.${m.ins}` });
-  if (typeof m.temp === 'string')  out.push({ from: 'vars.temp_pt',  to: `list.${m.temp}` });
+  if (typeof m.ins   === 'string') out.push({ from: 'vars.ins_pt',   to: `list.${m.ins}` });
+  if (typeof m.temp  === 'string') out.push({ from: 'vars.temp_pt',  to: `list.${m.temp}` });
   if (typeof m.trail === 'string') out.push({ from: 'vars.trail_pt', to: `list.${m.trail}` });
   return out;
 }
 
 /* A pointer-variable cell. `val` is a node id (points -> dot + arrow), null (nil ->
- * ∅ at normal weight, a real stored value, no arrow), or undefined (declared but
- * unassigned -> the empty placeholder X). `active` paints the blue activity fill on
- * the step the variable is written. Anchored on the dot so its arrow starts there. */
+ * ∅ at normal weight, no arrow), or undefined (declared but unassigned -> the empty
+ * placeholder X). `active` paints the blue activity fill the step it is written. */
 function varCell(label, val, active) {
-  if (val === undefined)
-    return { label, value: '', anchor: label, role: 'empty' };
-  const value = val === null ? '∅' : '●';
-  return { label, value, anchor: label, role: active ? 'active' : undefined };
+  if (val === undefined) return { label, value: '', anchor: label, role: 'empty' };
+  return { label, value: val === null ? '∅' : '●', anchor: label, role: active ? 'active' : undefined };
 }
 
-function snap(m, { line, tag, narrate, note, touchedNode, activeVar }) {
+/* One record node for the list panel. The new node's number field is indeterminate
+ * (label undefined) until line 3, and its link_pt indeterminate until line 4 --
+ * both drawn as the dashed X box. `fill` names the field being written THIS step,
+ * which takes the blue activity fill. */
+function nodeObj(m, id, fill) {
+  const n = m[id];
+  const label = id === 'n39'
+    ? (m.numberWritten ? '39' : undefined)   // undefined -> indeterminate number field
+    : String(n.value);
   return {
-    tag, narrate, line, note,
+    id,
+    label,
+    fields: ['value', 'link_pt'],            // [ number | link_pt ] -- singly linked
+    link_pt: n.link,                         // undefined -> dashed X, null -> ∅, id -> ●
+    slot: n.slot, row: n.row,
+    // OUTLINE = membership: node 39 is 'unlinked' (amber) until the insertion is
+    // complete, then 'member' (green) on line 13. FILL = activity, at FIELD level.
+    state: (id === 'n39' && !memberIns(m)) ? 'unlinked' : 'member',
+    activeFields: fill && fill.node === id ? fill.fields : undefined,
+  };
+}
+
+/* Call-frame builders (immutable). `call` on a caller frame is the call-site line
+ * the code panel dims while a callee runs (the parked caller line). */
+const mainF = (call) => ({ fn: 'main', vars: [], call });
+const insAF = (valueActive) => ({
+  fn: 'insertAlpha',
+  vars: [{ name: 'value', value: '39', role: valueActive ? 'active' : undefined }],
+});
+
+function snap(m, { line, tag, narrate, note, frames, fill = null, activeVar = null }) {
+  const parked = frames.slice(0, -1).map(f => f.call).filter(Boolean);
+  return {
+    tag, narrate, line, note, parked,
     arrows: arrows(m),
     panels: {
       list: {
         layout: 'linear', template: 'record',
-        nodes: NODE_IDS.map(id => ({
-          id,
-          label: String(m[id].value),
-          fields: ['value', 'link_pt'],   // [ number | link_pt ] -- singly linked
-          link_pt: m[id].link,            // null -> the crossed box ∅
-          slot: m[id].slot, row: m[id].row,
-          // OUTLINE = membership: node 39 is 'unlinked' (amber) until the insertion
-          // is complete, then 'member' (green) on line 13. The list nodes are always
-          // members. FILL = activity: the node whose contents change THIS step.
-          state:  (id === m.ins && !memberIns(m)) ? 'unlinked' : 'member',
-          active: id === touchedNode,
-        })),
+        nodes: nodeIds(m).map(id => nodeObj(m, id, fill)),
         edges: [],
+      },
+      calls: {
+        frames: frames.map((f, idx) => ({ fn: f.fn, vars: f.vars, active: idx === frames.length - 1 })),
       },
       vars: {
         render: 'row',
@@ -182,15 +211,30 @@ function snap(m, { line, tag, narrate, note, touchedNode, activeVar }) {
   };
 }
 
-/* --- Notes: setup, the walk's why, the order pitfall, THE TRAP, the two golden
- * rules, the read-back, and the closing challenge with the link forward to A10.
- * Kept out of the step flow (AUTHORING.md "Steps vs. notes"). --- */
+/* --- Notes (AUTHORING.md "Steps vs. notes"): setup, the allocation, the parameter
+ * copy, nil-vs-unset, the walk's why, the order pitfall, THE TRAP, the two golden
+ * rules, the read-back, and the closing challenge with the link forward to A10. --- */
 
 const SETUP =
-  'The node is allocated and ins_pt points at it, but its link_pt is nil and nothing ' +
-  'in the list points at it — it is not part of the list yet. 39 belongs between 37 ' +
-  'and 99. The work is finding that out, and being able to do something about it once ' +
-  'you have.';
+  'A sorted singly linked list — 12, 37, 99 — and the value 39 to insert so it stays ' +
+  'in order. The value comes in as insertAlpha’s parameter; the node to hold it does ' +
+  'not exist yet. The work is finding WHERE 39 goes, and being able to change the ' +
+  'right link once you are there.';
+
+const ALLOC =
+  'A freshly allocated record holds nothing meaningful. Its number and link_pt fields ' +
+  'are indeterminate — the dashed boxes — until the next two lines write them. ins_pt ' +
+  'points at this node, but nothing in the list does, so it is not part of the list yet.';
+
+const COPY =
+  '39 is not conjured here — it is the parameter value, bound when main called ' +
+  'insertAlpha(39), copied out of the frame into the node. Watch value in the frame ' +
+  'and the number field light together: one value, one movement.';
+
+const NIL_VS_UNSET =
+  'An unset pointer and a nil pointer are different things. A moment ago link_pt was ' +
+  'indeterminate — allocated, never written. Now it holds nil: a real, definite value ' +
+  'meaning “points at nothing.” The crossed box is that nil, not an absence.';
 
 const WHY_TRAIL =
   'temp_pt walks the list. trail_pt follows exactly one node behind, and the reason ' +
@@ -240,111 +284,128 @@ const CLOSING = [
 function* trace() {
   const m = fresh();
 
-  // Step 0 (required): the initial state, before anything executes. The sorted list
-  // 12 -> 37 -> 99, node 39 allocated and held by ins_pt (amber, link_pt nil, off the
-  // main row); temp_pt and trail_pt are placeholders. Only head_pt -> 12, the list's
-  // own forward links, and ins_pt -> 39 are drawn -- no linking arrows join 39 in yet.
+  // Step 0 (required): initial state, nothing executed. The sorted list 12 -> 37 ->
+  // 99; no ins node yet (new(ins_pt) allocates it on line 2); temp_pt/trail_pt/
+  // ins_pt are placeholders. Only main is on the call stack.
   yield snap(m, {
-    line: null, tag: 'init',
-    narrate: 'A sorted list, and a new node holding 39 to put into it.',
+    line: null, tag: 'init', frames: [mainF()],
+    narrate: 'A sorted list, and a value — 39 — to insert so it stays in order.',
     note: SETUP,
   });
 
-  // Lines 2-4 -- the allocation, brisk (A-model / pointers-address-model material).
-  // The node is already shown from step 0 (the required "before" picture holds the
-  // allocated node); these steps light it blue as each field is formally set.
+  // Line 16 -- main calls insertAlpha(39). main is the running frame; the callee is
+  // pushed on the next step, when control enters its body (the A1 call convention).
   yield snap(m, {
-    line: 2, tag: 'alloc', touchedNode: 'n39',
-    narrate: 'new(ins_pt) allocates a node, and ins_pt points at it.',
+    line: 16, tag: 'call', frames: [mainF()],
+    narrate: 'main calls insertAlpha(39). Control enters insertAlpha next.',
   });
+
+  // Line 2 -- new(ins_pt). The node is allocated and appears (amber), its number and
+  // link_pt fields INDETERMINATE (dashed X). insertAlpha's frame is pushed, already
+  // binding value = 39; main's call line 16 is now parked (dimmed).
+  m.alloc = true; m.ins = 'n39';
   yield snap(m, {
-    line: 3, tag: 'alloc', touchedNode: 'n39',
-    narrate: 'ins_pt^.number is set to 39, the value being inserted.',
+    line: 2, tag: 'alloc', frames: [mainF(16), insAF()], activeVar: 'ins_pt',
+    narrate: 'new(ins_pt) allocates a node and ins_pt points at it. Its number and link_pt fields hold nothing meaningful yet.',
+    note: ALLOC,
   });
+
+  // Line 3 -- ins_pt^.number = value. Copy the bound parameter (39) into the number
+  // field: value in the frame and the number cell take the blue fill together.
+  m.numberWritten = true;
   yield snap(m, {
-    line: 4, tag: 'alloc', touchedNode: 'n39',
-    narrate: 'ins_pt^.link_pt is set to nil — the new node points at nothing yet.',
+    line: 3, tag: 'assign', frames: [mainF(16), insAF(true)], fill: { node: 'n39', fields: ['value'] },
+    narrate: 'ins_pt^.number = value copies the bound parameter — 39 — into the new node’s number field.',
+    note: COPY,
+  });
+
+  // Line 4 -- ins_pt^.link_pt = nil. The link goes from indeterminate to nil (∅).
+  m.n39.link = null;
+  yield snap(m, {
+    line: 4, tag: 'assign', frames: [mainF(16), insAF()], fill: { node: 'n39', fields: ['link_pt'] },
+    narrate: 'ins_pt^.link_pt = nil — the link goes from indeterminate to nil, pointing at nothing.',
+    note: NIL_VS_UNSET,
   });
 
   // Lines 6-7 -- start the walk.
   m.temp = m.head;
   yield snap(m, {
-    line: 6, tag: 'assign', activeVar: 'temp_pt',
+    line: 6, tag: 'assign', frames: [mainF(16), insAF()], activeVar: 'temp_pt',
     narrate: 'temp_pt now points where head_pt points — to 12, the first node.',
   });
   m.trail = null;
   yield snap(m, {
-    line: 7, tag: 'assign', activeVar: 'trail_pt',
+    line: 7, tag: 'assign', frames: [mainF(16), insAF()], activeVar: 'trail_pt',
     narrate: 'trail_pt starts as nil, because at the first node there is nothing behind it.',
     note: WHY_TRAIL,
   });
 
-  // The walk: test, then trail_pt = temp_pt, then temp_pt = temp_pt^.link_pt, repeated
-  // until temp_pt lands on the first node NOT less than 39.
+  // The walk: test, then trail_pt = temp_pt, then temp_pt = temp_pt^.link_pt, until
+  // temp_pt lands on the first node NOT less than 39.
   // Iteration 1 -- temp_pt on 12.
   yield snap(m, {
-    line: 8, tag: 'test',
+    line: 8, tag: 'test', frames: [mainF(16), insAF()],
     narrate: '12 is less than 39, so 39 goes somewhere after it. Keep walking.',
   });
-  m.trail = m.temp;   // trail_pt = temp_pt (copy BEFORE temp_pt moves)
+  m.trail = m.temp;
   yield snap(m, {
-    line: 9, tag: 'assign', activeVar: 'trail_pt',
+    line: 9, tag: 'assign', frames: [mainF(16), insAF()], activeVar: 'trail_pt',
     narrate: 'trail_pt takes temp_pt’s place FIRST, while temp_pt is still here.',
     note: ORDER_PITFALL,
   });
-  m.temp = m[m.temp].link;   // temp_pt = temp_pt^.link_pt -> 37
+  m.temp = m[m.temp].link;   // -> 37
   yield snap(m, {
-    line: 10, tag: 'assign', activeVar: 'temp_pt',
+    line: 10, tag: 'assign', frames: [mainF(16), insAF()], activeVar: 'temp_pt',
     narrate: 'temp_pt now points where temp_pt^.link_pt points — to 37. trail_pt stays on 12.',
   });
 
-  // Iteration 2 -- temp_pt on 37. Same pattern, one sentence each.
+  // Iteration 2 -- temp_pt on 37.
   yield snap(m, {
-    line: 8, tag: 'test',
+    line: 8, tag: 'test', frames: [mainF(16), insAF()],
     narrate: '37 is less than 39, so 39 goes somewhere after it. Keep walking.',
   });
   m.trail = m.temp;
   yield snap(m, {
-    line: 9, tag: 'assign', activeVar: 'trail_pt',
+    line: 9, tag: 'assign', frames: [mainF(16), insAF()], activeVar: 'trail_pt',
     narrate: 'trail_pt takes temp_pt’s place again, moving up to 37.',
   });
   m.temp = m[m.temp].link;   // -> 99
   yield snap(m, {
-    line: 10, tag: 'assign', activeVar: 'temp_pt',
+    line: 10, tag: 'assign', frames: [mainF(16), insAF()], activeVar: 'temp_pt',
     narrate: 'temp_pt follows its link_pt to 99. trail_pt stays on 37.',
   });
 
-  // Iteration 3 -- temp_pt on 99: the test fails and the walk stops one node too far.
+  // Iteration 3 -- temp_pt on 99: the test fails, the walk stops one node too far.
   yield snap(m, {
-    line: 8, tag: 'test',
+    line: 8, tag: 'test', frames: [mainF(16), insAF()],
     narrate: '99 is NOT less than 39. The walk stops here.',
     note: TRAP,
   });
 
-  // Line 12 -- ins_pt^.link_pt = temp_pt. 39's link swings to 99. It is now reachable
-  // forward but NOT yet a member (37 still points past it), so it stays amber.
-  m[m.ins].link = m.temp;
+  // Line 12 -- ins_pt^.link_pt = temp_pt. 39's link swings to 99. Reachable forward
+  // but NOT yet a member (37 still points past it), so it stays amber.
+  m.n39.link = m.temp;
   yield snap(m, {
-    line: 12, tag: 'assign', touchedNode: 'n39',
+    line: 12, tag: 'assign', frames: [mainF(16), insAF()], fill: { node: 'n39', fields: ['link_pt'] },
     narrate: 'ins_pt^.link_pt takes temp_pt’s value, so 39 now points at 99.',
     note: GOLDEN_NIL,
   });
 
-  // Line 13 -- trail_pt^.link_pt = ins_pt. 37's link swings from 99 to 39. Both of 39's
-  // membership conditions now hold, so it turns from amber to a green member.
+  // Line 13 -- trail_pt^.link_pt = ins_pt. 37's link swings from 99 to 39; both of
+  // 39's membership conditions now hold, so it turns from amber to a green member.
   m[m.trail].link = m.ins;
   yield snap(m, {
-    line: 13, tag: 'assign', touchedNode: 'n37',
+    line: 13, tag: 'assign', frames: [mainF(16), insAF()], fill: { node: 'n37', fields: ['link_pt'] },
     narrate: 'trail_pt^.link_pt now points at 39. The list is 12, 37, 39, 99.',
     note: READ_BACK,
   });
 
-  // Final step -- control returns to main; the call completed. Nothing more executes,
-  // so this lands on the call site (line 16) rather than a lineless step (which is
-  // legitimate only at step 0). The closing challenge and the link to A10 live here.
-  void walk(m);   // final order is 12, 37, 39, 99
+  // Final step -- control returns to main; insertAlpha's frame pops. The call site
+  // (line 16) is the active line again; nothing else executes. The closing challenge
+  // and the link to A10 live here.
+  void walk(m);
   yield snap(m, {
-    line: 16, tag: 'return',
+    line: 16, tag: 'return', frames: [mainF()],
     narrate: 'Back in main: insertAlpha(39) has returned. One insertion, two pointer ' +
              'assignments, and a walk to find where.',
     note: CLOSING,
@@ -359,10 +420,11 @@ export default {
   languages: ['pseudo', 'java', 'cpp'],
 
   panels: [
-    { type: 'code',  id: 'code', title: 'insertAlpha(value)',
+    { type: 'code',      id: 'code',  title: 'insertAlpha(value)',
       listings: LISTINGS, labels: { pseudo: 'pseudocode', java: 'Java', cpp: 'C++' } },
-    { type: 'nodes', id: 'list', title: 'The list', structure: true },
-    { type: 'cells', id: 'vars', title: 'Pointer variables', compact: true },
+    { type: 'nodes',     id: 'list',  title: 'The list', structure: true },
+    { type: 'callstack', id: 'calls', title: 'Function calls' },
+    { type: 'cells',     id: 'vars',  title: 'Pointer variables', compact: true },
   ],
 
   initialTrace: 'correct',
