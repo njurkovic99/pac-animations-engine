@@ -166,11 +166,16 @@ function snap(m, { line, tag, narrate, note, touched }) {
 /* Three teaching notes, kept out of the step flow (AUTHORING.md "Steps vs.
  * notes"): a setup note on the initial-state step, the ordering-pitfall warning
  * on the assignment it concerns, and the post-watch challenge on the last step. */
-const SETUP =
+const SETUP = [
   'A doubly linked list, 12 \u2194 37 \u2194 99, fully linked. A new node holding 25 has been ' +
   'allocated and ins points to it \u2014 and its own prev and next are still null, so it is ' +
   'not yet part of the list. We want it before 37 (temp); the four assignments below ' +
-  'link it in.';
+  'link it in. ',
+  // Back-link to the prequel (A9), which finds the insertion spot this animation
+  // takes as given -- the return leg of A9's forward link, so a student landing on
+  // either meets the other (AUTHORING.md "Links between animations").
+  { href: 'lists-insert-alpha.html', text: 'See how the position was found' },
+];
 
 const PITFALL =
   'A common mistake is to run temp^.prev = ins first: then ins^.prev = temp^.prev copies a ' +

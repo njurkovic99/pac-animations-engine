@@ -334,6 +334,18 @@ only for the instructor. Animations read no URL parameters at all.
   null and no linking arrows drawn yet. The owning pointer is part of the initial
   state (the node is allocated, not floating in the void); the links the algorithm
   will create are not. This is the "before" picture. Never open mid-execution.
+- **A field must not show a value before the line that writes it.** The same
+  principle as step 0, carried one step further in: a freshly allocated record's
+  fields are **indeterminate — the dashed X** (see Part 5 "Node membership" /
+  `unlinked`, and the CELLS `empty` role) until an assignment fills them. A record
+  that displays its value the instant it is allocated silently teaches that
+  allocation *initialises*, which it does not. Render each field as `empty`
+  (indeterminate) from the allocation step until the line that assigns it runs, then
+  fill it on that line — and distinguish an **unset** pointer (indeterminate, dashed
+  X) from a **nil** one (a real, written value; the crossed box). Caught twice:
+  `pointers-address-model`'s records and `lists-insert-alpha`'s new node, whose
+  `number` is `empty` until `ins_pt^.number = value` and whose `link_pt` is `empty`
+  until `ins_pt^.link_pt = nil`.
 - **A step is an execution.** After step 0, every Next-click advances one real
   executing line, with that line highlighted.
 - **No mid-sequence phantom steps.** A step *between* executions whose only job is
