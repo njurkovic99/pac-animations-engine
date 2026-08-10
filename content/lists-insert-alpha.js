@@ -419,12 +419,16 @@ export default {
   columns: 2,
   languages: ['pseudo', 'java', 'cpp'],
 
+  // Declaration = reading order. The list and the Pointer variables strip are the
+  // two ends of the pointer arrows, so they are declared ADJACENT (the engine keeps
+  // arrow endpoints contiguous, AUTHORING.md "Arrows keep their endpoints
+  // adjacent"); Function calls, which no arrow touches, comes after them.
   panels: [
     { type: 'code',      id: 'code',  title: 'insertAlpha(value)',
       listings: LISTINGS, labels: { pseudo: 'pseudocode', java: 'Java', cpp: 'C++' } },
     { type: 'nodes',     id: 'list',  title: 'The list', structure: true },
-    { type: 'callstack', id: 'calls', title: 'Function calls' },
     { type: 'cells',     id: 'vars',  title: 'Pointer variables', compact: true },
+    { type: 'callstack', id: 'calls', title: 'Function calls' },
   ],
 
   initialTrace: 'correct',

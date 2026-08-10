@@ -286,6 +286,24 @@ the wrong order.
 `cpoint1.html` faked this with four hand-tuned Bézier curves and colliding
 `arrowhead2` marker ids. Change a font size and the arrows pointed at nothing.
 
+**Arrows are cross-panel by design — so the layout keeps their endpoints ADJACENT.**
+An arrow runs from a box in one panel to a box in another, and the overlay draws it
+against live DOM; but the overlay has no say in *where* the panels sit. If two panels
+wired together end up with a third between them, the arrow has to cross that third
+panel — which reads as a mistake, because it is one. **A panel that is not an arrow
+endpoint never sits between two that are.** The rule is enforced in the placement
+pass, not left to declaration order: the arrow set is known from the trace before
+layout resolves, so the panels it references form a group kept contiguous — the
+arrow-endpoint book panels are ordered directly under the structure region (itself
+usually an endpoint), non-endpoints after, and the column-split search is floored so
+no non-endpoint book panel can fall between the region and an endpoint. Where the
+height balancer would otherwise separate them, it takes the next-best split; a
+slightly taller stage is a fair price for arrows that never cross unrelated content.
+Still **declare arrow-connected panels adjacent** in reading order (the list, then its
+pointer strip, *then* an unrelated panel) so the content reads the way it lays out.
+This surfaced on `lists-insert-alpha`, whose Function calls panel sat between the list
+and its pointer strip until the rule moved it after them.
+
 ---
 ---
 

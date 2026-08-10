@@ -2175,7 +2175,38 @@ class Engine {
     const items     = [...this.panels.values()];
     const code      = items.find(p => p.kind === 'code');
     const structure = items.filter(p => p.kind === 'structure');
-    const book      = items.filter(p => p.kind === 'book');
+    let   book      = items.filter(p => p.kind === 'book');
+
+    // ARROW-ENDPOINT ADJACENCY (AUTHORING.md "Arrows keep their endpoints
+    // adjacent"). A cross-panel arrow is DATA -- the overlay draws it against live
+    // boxes but has no say in WHERE panels sit, so two panels wired together can end
+    // up with a third BETWEEN them, and the arrow then has to cross it. The arrow
+    // set is known from the trace before layout resolves, so the panels it
+    // references form a GROUP kept contiguous: the arrow-endpoint BOOK panels are
+    // ordered FIRST (directly under the structure region, itself usually an
+    // endpoint), non-endpoints after, and the column split below is floored (kMin)
+    // so no non-endpoint book panel lands between the region and an endpoint book
+    // panel. A panel that is not an arrow endpoint never sits between two that are.
+    const arrowPanels = new Set();
+    for (const s of this.steps) for (const a of (s.arrows ?? [])) {
+      const fp = String(a.from).split('.')[0], tp = String(a.to).split('.')[0];
+      if (fp && tp && fp !== tp) { arrowPanels.add(fp); arrowPanels.add(tp); }
+    }
+    const isEndpoint = p => arrowPanels.has(p.spec.id ?? p.spec.type);
+    const structIsEndpoint = structure.some(isEndpoint);
+    const groupBook = book.filter(isEndpoint);
+    // Reorder only when arrows tie a book panel to the structure region -- the case
+    // that can trap a non-endpoint between them. Endpoint book panels move to the
+    // front (each subset keeps its declared order), so they sit adjacent to the
+    // region; the split floor then keeps them there.
+    if (structIsEndpoint && groupBook.length && groupBook.length < book.length) {
+      book = [...groupBook, ...book.filter(p => !isEndpoint(p))];
+    }
+    // Every endpoint book panel must stay in the RIGHT column, contiguous with the
+    // structure region (which holds the other endpoint): k below this floor would
+    // drop one to the left column, splitting the group across the divide so its
+    // arrow crosses the code panel to reach it.
+    const kMin = structIsEndpoint ? groupBook.length : 0;
 
     const H = this._availableStageHeight();
     const stageW = this.stage.clientWidth;
@@ -2391,8 +2422,11 @@ class Engine {
       const n = (hasBase ? 1 : 0) + arr.length;
       return base + sum(arr) + gap * Math.max(0, n - 1);
     };
-    let bestK = 0, bestStage = Infinity, bestGap = Infinity;
-    for (let k = 0; k <= book.length; k++) {
+    // k starts at kMin so arrow-endpoint book panels never fall to the left column
+    // (see ARROW-ENDPOINT ADJACENCY above); the balancer then picks the shortest
+    // taller column among the splits that keep the group contiguous.
+    let bestK = kMin, bestStage = Infinity, bestGap = Infinity;
+    for (let k = kMin; k <= book.length; k++) {
       const right = colH(regionH, bh.slice(0, k), regionH > 0);
       const left  = colH(codeFloor, bh.slice(k), !!code);
       const stage = Math.max(right, left);
