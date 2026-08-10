@@ -244,7 +244,9 @@ Pseudocode canonical; Java and C++ as toggles.
 | 15 | Pointers — 8-bit address model | `pointers-address-model` | **M** | — |
 | 16 | Linked list — insert, trailing pointer | `lists-insert-alpha` | **M** | **A9** |
 | 17 | Doubly linked — four-line insertion | `lists-doubly-insert-order` | **P** | **A10** |
-| 18 | BST — insert, traverse, delete | `trees-bst-operations` | S | **A11** |
+| 18 | BST — insert (find the first nil pointer) (part 1 of 3) | `trees-bst-insert` | S | A11 (part 1) |
+| 18a | BST — traversals (pre/in/post; in-order prints sorted) (part 2 of 3) | `trees-bst-traversals` | S | A11 (part 2) |
+| 18b | BST — **delete** (replacement by another node, both sides) (part 3 of 3) | `trees-bst-delete` | S | **A11 (part 3)** |
 | 19 | Tree height | `trees-recursive-height` | T | **A12** |
 | 20 | Graphs — matrix ↔ list | `graphs-representations` | S | **A13** |
 | 21 | Graph traversal | `graphs-bfs-dfs` | S | — |
@@ -286,6 +288,18 @@ ends — the heap array `[9,6,8,4,1,2]` — and does the repeated extract-and-si
 where the `sorted` green region grows from the right. Part 1 uses **no green
 fill**: heapify settles nothing into its final sorted position (the root only
 holds the largest value). Both share the tree ↔ array dual view.
+
+**BST split (A11).** `trees-bst-operations` (old row 18) was three separate ideas
+in one animation — insert, traverse, delete — and is split three ways, for the same
+reason heapsort and Hanoi were: `trees-bst-insert` (find the first nil pointer, put
+the node there), `trees-bst-traversals` (pre/in/post order; in-order prints sorted),
+and `trees-bst-delete` (the hard one). All three back A11 and share the NODES tree
+with a fixed all-positions layout. **`trees-bst-delete` is built** (rows 18b);
+insert and traversals are planned. Delete is framed as the instructor frames it —
+"you cannot remove a node, you can only replace it": the naive cut runs first and
+breaks the tree (memory-danger marker on the orphaned subtree), then both legal
+replacements are traced — the rightmost of the left subtree (18) and the leftmost of
+the right (21) — because the symmetry is the point.
 
 ---
 
