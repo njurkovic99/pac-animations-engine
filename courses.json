@@ -36,6 +36,12 @@
         "animations": [
           { "file": "heap-is-this-valid", "backs": null, "built": true }
         ] },
+      { "topic": "Sorting — Heapsort",
+        "animations": [
+          { "file": "sorting-heapify",       "backs": null, "built": true },
+          { "file": "sorting-heapsort-dual", "backs": "A7",  "built": true },
+          { "file": "sorting-timing-chart",  "backs": "A7",  "built": true }
+        ] },
       { "topic": "Pointers — The Address Model",
         "animations": [
           { "file": "pointers-address-model",     "backs": null,  "built": true }
