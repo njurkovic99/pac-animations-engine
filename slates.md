@@ -294,8 +294,13 @@ in one animation — insert, traverse, delete — and is split three ways, for t
 reason heapsort and Hanoi were: `trees-bst-insert` (find the first nil pointer, put
 the node there), `trees-bst-traversals` (pre/in/post order; in-order prints sorted),
 and `trees-bst-delete` (the hard one). All three back A11 and share the NODES tree
-with a fixed all-positions layout. **`trees-bst-delete` is built** (rows 18b);
-insert and traversals are planned. Delete is framed as the instructor frames it —
+with a fixed all-positions layout. **`trees-bst-insert` (row 18) and
+`trees-bst-delete` (row 18b) are built**; traversals is planned. Insert is framed as
+the instructor frames it — insertion is a search that fails: it runs search(R)
+(hit), search(T) (miss, ending on a nil pointer), then insert(T) down the identical
+route, dropping T onto exactly that nil. search recurses, so a Function calls panel
+shows the descent, and each comparison dims the subtree it rules out. Delete is
+framed as the instructor frames it —
 "you cannot remove a node, you can only replace it": the naive cut runs first and
 breaks the tree (memory-danger marker on the orphaned subtree), then both legal
 replacements are traced — the rightmost of the left subtree (18) and the leftmost of
