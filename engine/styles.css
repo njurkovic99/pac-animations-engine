@@ -591,6 +591,17 @@ body {
   gap: 8px; white-space: nowrap;
 }
 .pac-col-row .pac-cell { min-width: 46px; padding: 2px 10px; }
+/* Column-mode cells are a FIXED height, resolved once from the VALUED line-box and
+ * never from cell content: an `empty` (dashed X) or `stale` cell is exactly as tall
+ * as one holding a value. Otherwise the value slot of a text-bearing cell is one
+ * line-height tall (1.5em) while an empty one is only its 1.25em floor -- so a slot
+ * FILLING grows its row and shoves every cell below it (a master-invariant
+ * violation, visible in stacks-paren-scanner as the stack shifts while it grows),
+ * and two column panels placed side by side drift row-for-row. Lifting the empty
+ * slot's floor to the full line-box (1.5em) makes every row a constant height; a
+ * valued cell, already at 1.5em, is unchanged. Scoped to column mode, so horizontal
+ * box/bar/row arrays are untouched. */
+.pac-cells[data-render="column"] .pac-cell-value { min-height: 1.5em; }
 /* RIGHT index band: fixed width, bracketed [0].. labels mark position as an
  * INDEX, not a value -- the vertical analogue of the fixed-height index band. */
 .pac-col-index {
