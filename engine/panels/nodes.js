@@ -37,7 +37,7 @@ const RW = 112, RH = 38, RGAP = 46, RROW = 84;   // record geometry
  * comfortable size; every dimension is a constant times a fixed datum, so the
  * SVG's W/H are the same on every step and nothing moves as edges appear. */
 const GR = 19, GX = 92, GY = 78, GPAD = 26;      // node radius, grid step x/y, margin
-const GARROW = 8;                                 // arrowhead run + gap before the target border
+const GHEADGAP = 1.5;                              // tiny gap so a directed head's tip doesn't overlap the target stroke
 const GOFF = 7;                                    // perpendicular offset for antiparallel edges
 
 /* Plain-node vertical metrics. The box height is DERIVED from how many `meta`
@@ -136,24 +136,34 @@ function renderGraph(svg, data, ctx) {
     const a = pos.get(e.from), b = pos.get(e.to);
     if (!a || !b) return '';
     const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
-    const ux = dx / len, uy = dy / len;                  // unit along the edge
+    const ux = dx / len, uy = dy / len;                  // unit along the edge (a -> b)
+    const nx = -uy, ny = ux;                             // unit perpendicular (right of travel)
     // Antiparallel pair -> shift right of travel by GOFF so both arrows show.
     const off = present.has(`${e.to}>${e.from}`) ? GOFF : 0;
-    const px = -uy * off, py = ux * off;                 // perpendicular (right of travel)
-    const ax = a.x + ux * GR + px, ay = a.y + uy * GR + py;
-    // A directed edge stops short of the border so its arrowhead lands ON the
-    // border; an undirected line runs right to the border.
-    const back = GR + (e.directed ? GARROW : 0);
-    const bx = b.x - ux * back + px, by = b.y - uy * back + py;
+    // The edge runs circle-EDGE to circle-EDGE, like the arrow overlay's port
+    // logic but for circles instead of boxes. When the line is offset (an
+    // antiparallel pair), it meets each circle short of the on-axis point: at
+    // perpendicular distance `off` the along-track half-chord is sqrt(GR^2 -
+    // off^2), which is exactly GR for a centred line. This is angle-independent,
+    // so a diagonal edge lands as squarely as a vertical one.
+    const d = Math.sqrt(Math.max(0, GR * GR - off * off));
+    const ax = a.x + nx * off + ux * d, ay = a.y + ny * off + uy * d;   // on the source circle
+    // A directed edge stops GHEADGAP short of the target circle so the arrowhead's
+    // TIP (the marker's refX sits at the tip) lands just off the stroke; an
+    // undirected line runs right onto the circle.
+    const endBack = d + (e.directed ? GHEADGAP : 0);
+    const bx = b.x + nx * off - ux * endBack, by = b.y + ny * off - uy * endBack;
     const head = e.directed ? ' marker-end="url(#pac-graph-arrow)"' : '';
     return `<path class="pac-edge pac-graph-edge" data-state="${e.state ?? ''}"${head} d="M ${r2(ax)} ${r2(ay)} L ${r2(bx)} ${r2(by)}"/>`;
   }).join('');
 
   // The arrowhead marker lives in THIS svg (the overlay's marker is a different
   // svg). `context-stroke` makes the head take the edge's own colour, so an
-  // active edge's blue arrowhead comes for free.
-  const defs = `<defs><marker id="pac-graph-arrow" viewBox="0 0 8 8" refX="7" refY="4"
-      markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+  // active edge's blue arrowhead comes for free. refX is the TIP (x = 8, the apex
+  // of the 0..8 viewBox), so the tip -- not the tail of the head -- lands on the
+  // path's end point, which sits GHEADGAP off the target circle.
+  const defs = `<defs><marker id="pac-graph-arrow" viewBox="0 0 8 8" refX="8" refY="4"
+      markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M 0 0 L 8 4 L 0 8 z" fill="context-stroke"/></marker></defs>`;
 
   const nodes = data.nodes.map(n => {
