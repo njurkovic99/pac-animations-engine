@@ -18,7 +18,8 @@
  * Reuses trees-bst-delete's NODES tree with a FIXED all-positions layout, so nodes
  * never move. T's position is present from step 0 as an unremarkable empty ghost, so
  * nothing moves when T arrives. NO NEW ENGINE CAPABILITY. No memory-danger marker --
- * nothing here leaks or corrupts. The final note links forward to the delete. */
+ * nothing here leaks or corrupts. The final note links forward to the traversals
+ * (insert -> traversals -> delete is the reading chain). */
 
 /* One listing, three ds languages, line-aligned to a single 28-line grid so `line`
  * is a plain number resolving the same in every language. Pseudocode uses the CARET
@@ -168,7 +169,7 @@ const CLOSING = [
   'tree — trace inserting R, and decide what your program should do about it. And build the ' +
   'whole tree yourself from an empty one: insert S, E, X, A, R, C, H, M in that order and see ' +
   'if you get this tree back. Then try inserting them in alphabetical order and see what you get. ',
-  { href: 'trees-bst-delete.html', text: 'See how a node is removed' },
+  { href: 'trees-bst-traversals.html', text: 'See three ways to walk the tree you just built' },
 ];
 
 function* trace() {

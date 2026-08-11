@@ -3479,11 +3479,13 @@ const POST2_NOTE =
   'gone. In-order cannot tell you that b / c binds tighter than the subtraction; the tree knows, the flat ' +
   'string does not. That is precisely why infix needs parentheses and postfix does not.';
 
-const FINAL_NOTE =
+const FINAL_NOTE = [
   'One thing worth doing: take the algebraic tree and walk it PRE-order. You will get + - a / b c * d e, ' +
   'which is prefix — the same expression written a third way, and equally unambiguous without ' +
   'parentheses. And a harder one: given only the in-order and post-order sequences of a tree, can you ' +
-  'reconstruct the tree? Given only the in-order, can you?';
+  'reconstruct the tree? Given only the in-order, can you? ',
+  { href: 'preview-trees-bst-delete.html', text: 'See what it takes to remove a node' },
+];
 
 function* trace() {
   let tree = TREE1;

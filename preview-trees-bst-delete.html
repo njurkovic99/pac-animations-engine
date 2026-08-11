@@ -3439,10 +3439,12 @@ const RIGHT = { p10: 'p20', p5: 'p8', p20: 'p25', p25: 'p30', p23: 'p24' };
 const SUBTREE_20 = ['p20', 'p18', 'p25', 'p23', 'p30', 'p21', 'p24'];
 
 /* ---- teaching notes (AUTHORING.md "Steps vs. notes"), the instructor's framing ---- */
-const OPEN =
+const OPEN = [
   'We are going to delete 20. It has two children — 18 on the left, 25 on the right — ' +
   'and that is what makes this hard. Before the algorithm, watch what happens if you do ' +
-  'the obvious thing.';
+  'the obvious thing. ',
+  { href: 'preview-trees-bst-insert.html', text: 'See how this tree was built' },
+];
 
 const BREAK =
   'This is the lecture’s point, made concrete: what are you left with if you truly delete ' +
