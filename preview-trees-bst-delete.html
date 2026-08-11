@@ -2054,7 +2054,7 @@ const AUTOPLAY_MS = 900;
  * content" rule drifted and regressed one panel at a time). Each row:
  *   floorRows : minimum body height, in content rows (× the panel's line height)
  *   ceiling   : height maximum -- null (none), 'listing' (never more rows than the
- *               code has), 'halfStage' (≤ half the stage), or a COUNT {frames:N}/{rows:N}
+ *               code has), 'twoThirdsStage' (≤ two-thirds of the stage), or a COUNT {frames:N}/{rows:N}
  *   scroll    : true if content past the HEIGHT ceiling scrolls rather than being cut
  *   width     : how the panel claims WIDTH, in resolution priority --
  *                 'natural' : its content's full width, NEVER compressed or
@@ -2076,7 +2076,7 @@ const SIZE_POLICY = {
   code:      { floorRows: 15, ceiling: 'listing',     width: 'content', minCh: 60 }, // ≥15 rows; width = longest line (≥60 chars floor, capped there ceiling), leftover empty
   callstack: { floorRows: 2,  ceiling: { frames: 6 }, scroll: true, width: 'natural' }, // ≤ min(deepest stack the trace reaches, 6 frames); natural width. The panel already sizes to min(content, ceiling) via the max-across-steps pass, so this cap only bites past 6: a 2-deep trace still gets a 2-frame panel, factorial(4) (main→4 calls) gets 5, and recursion deeper than 6 scrolls with the active frame in view — where the repetitive middle frames are the right thing to hide
   stream:    { floorRows: 2,  ceiling: { rows: 8 },   scroll: true, width: 'column' },  // ≤8 rows; matches its column
-  structure: { floorRows: 2,  ceiling: 'halfStage',   scroll: true, width: 'natural' }, // ≤half stage (v-scroll ok); natural width, never h-scrolls
+  structure: { floorRows: 2,  ceiling: 'twoThirdsStage', scroll: true, width: 'natural' }, // ≤ two-thirds of the stage (v-scroll ok); natural width, never h-scrolls. Raised from ½: the ½ cap was set speculatively before any animation had a real tree; trees-bst-delete (12 nodes, 5 levels) is the first, and panning a structure the student is reading is worse than a slightly taller stage.
   strip:     { floorRows: 2,  ceiling: null,          width: 'natural' },  // exact content; natural width
 };
 
@@ -2152,7 +2152,7 @@ class Engine {
    *   1. Bookkeeping panels (callstack, stream, compact strips) size to content
    *      with a 2-row FLOOR so none collapses to a sliver.
    *   2. The structure region (the CELLS/NODES panels showing the data structure)
-   *      takes what it needs up to a CEILING of half the stage height, its panes
+   *      takes what it needs up to a CEILING of two-thirds the stage height, its panes
    *      side by side; a pane that overflows scrolls and follows its active cell.
    *   3. The code panel takes a 15-line FLOOR in the left column.
    *   4. Any leftover slack goes to the CODE panel -- the only panel that always
@@ -2384,8 +2384,10 @@ class Engine {
     const regionStacked = stacked || (singleCol && structure.length > 1);
 
     // (2) structure region -- each pane floored (2 rows) then capped at its ceiling
-    // (SIZE_POLICY.structure = 'halfStage'), scrolling beyond. Values from the table.
-    const ceiling = SIZE_POLICY.structure.ceiling === 'halfStage'
+    // (SIZE_POLICY.structure = 'twoThirdsStage'), scrolling beyond. Values from the table.
+    const ceiling = SIZE_POLICY.structure.ceiling === 'twoThirdsStage'
+      ? Math.max(140, Math.floor(H * 2 / 3))
+      : SIZE_POLICY.structure.ceiling === 'halfStage'
       ? Math.max(140, Math.floor(H / 2)) : Infinity;
     const paneH   = p => Math.min(Math.max(outer(p, p.contentH), outer(p, floorPx('structure'))), ceiling);
     let regionH = 0;
@@ -2773,7 +2775,7 @@ class Engine {
    *  path for the CALLSTACK (frames) and the STREAM (output rows) alike -- adding
    *  a count ceiling to a panel type is a table row, not a branch. Without such a
    *  ceiling the body is its full rendered height (scrollHeight): a strip's cells,
-   *  a structure's SVG/boxes (whose halfStage ceiling is applied later in paneH),
+   *  a structure's SVG/boxes (whose twoThirdsStage ceiling is applied later in paneH),
    *  or a stream shorter than its ceiling. flex:none keeps that from stretching.
    *  (The code panel resolves its own height in the fill block, from its line
    *  count and the column slack it alone absorbs -- the reference implementation.) */
@@ -3309,7 +3311,7 @@ const LISTINGS = {
   pseudo: [
     'deleteNaive(target)',                                //  1
     '   find node_pt = target, parent_pt = its parent',   //  2
-    '   parent_pt^.right_pt = nil        // just cut it out', // 3
+    '   parent_pt^.right_pt = nil',                        //  3
     '',                                                   //  4
     'rightmostOfLeft(node_pt)',                           //  5
     '   r_pt = node_pt^.left_pt',                         //  6
@@ -3342,8 +3344,8 @@ const LISTINGS = {
   ],
   cpp: [
     'Node* deleteNaive(int target) {',                    //  1
-    '   // find node_pt = target, parent_pt = its parent',//  2
-    '   parent_pt->right_pt = nullptr;   // just cut it out', // 3
+    '   // find node_pt and its parent',                  //  2
+    '   parent_pt->right_pt = nullptr;',                  //  3
     '',                                                   //  4
     'Node* rightmostOfLeft(Node* node_pt) {',             //  5
     '   r_pt = node_pt->left_pt;',                        //  6
@@ -3376,8 +3378,8 @@ const LISTINGS = {
   ],
   java: [
     'Node deleteNaive(int target) {',                     //  1
-    '   // find node_pt = target, parent_pt = its parent',//  2
-    '   parent_pt.right_pt = null;       // just cut it out', // 3
+    '   // find node_pt and its parent',                  //  2
+    '   parent_pt.right_pt = null;',                      //  3
     '',                                                   //  4
     'Node rightmostOfLeft(Node node_pt) {',               //  5
     '   r_pt = node_pt.left_pt;',                         //  6
