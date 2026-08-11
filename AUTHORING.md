@@ -681,7 +681,7 @@ important structural rule in this document, and it was learned the expensive way
 | CODE | 15 rows; ~60 chars wide | listing length; longest line | scroll |
 | CALLSTACK | 2 rows | min(deepest stack, 6 frames) | scroll, active frame in view |
 | STREAM | 2 rows | 8 rows | scroll, newest line in view |
-| structure (CELLS/NODES) | content | half the stage (height only) | scroll vertically; **never horizontally** |
+| structure (CELLS/NODES) | content | two-thirds of the stage (height only) | scroll vertically; **never horizontally** |
 | strips | 2 rows | exact content | — |
 
 **Adding a panel type means adding a row to this table, never a branch at a call

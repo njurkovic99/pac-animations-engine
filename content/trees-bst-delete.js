@@ -39,7 +39,7 @@ const LISTINGS = {
   pseudo: [
     'deleteNaive(target)',                                //  1
     '   find node_pt = target, parent_pt = its parent',   //  2
-    '   parent_pt^.right_pt = nil        // just cut it out', // 3
+    '   parent_pt^.right_pt = nil',                        //  3
     '',                                                   //  4
     'rightmostOfLeft(node_pt)',                           //  5
     '   r_pt = node_pt^.left_pt',                         //  6
@@ -72,8 +72,8 @@ const LISTINGS = {
   ],
   cpp: [
     'Node* deleteNaive(int target) {',                    //  1
-    '   // find node_pt = target, parent_pt = its parent',//  2
-    '   parent_pt->right_pt = nullptr;   // just cut it out', // 3
+    '   // find node_pt and its parent',                  //  2
+    '   parent_pt->right_pt = nullptr;',                  //  3
     '',                                                   //  4
     'Node* rightmostOfLeft(Node* node_pt) {',             //  5
     '   r_pt = node_pt->left_pt;',                        //  6
@@ -106,8 +106,8 @@ const LISTINGS = {
   ],
   java: [
     'Node deleteNaive(int target) {',                     //  1
-    '   // find node_pt = target, parent_pt = its parent',//  2
-    '   parent_pt.right_pt = null;       // just cut it out', // 3
+    '   // find node_pt and its parent',                  //  2
+    '   parent_pt.right_pt = null;',                      //  3
     '',                                                   //  4
     'Node rightmostOfLeft(Node node_pt) {',               //  5
     '   r_pt = node_pt.left_pt;',                         //  6

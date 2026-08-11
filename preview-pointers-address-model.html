@@ -724,6 +724,21 @@ body {
  * green `member` therefore also shows a blue activity fill in the same step
  * (amber-outline + blue-fill, or green-outline + blue-fill). */
 .pac-node[data-active="true"]    .pac-node-box { fill: var(--accent-soft); }
+
+/* Per-FIELD states on a record node (see panels/nodes.js recordNode). These are
+ * declared AFTER the node-level membership strokes above so they override them
+ * for a single field, at equal specificity.
+ *  - `.pac-field-empty`: INDETERMINATE storage -- a freshly allocated record cell
+ *    not yet written (backing value `undefined`, distinct from a nil pointer's
+ *    `null`). The dashed dimmed box + a thin X, the SVG analogue of a CELLS
+ *    `empty` cell; overrides the node's amber/green membership stroke so an unset
+ *    field never reads as a settled member.
+ *  - `.pac-field-active`: the blue activity fill on ONE field (a value copied into
+ *    a single cell), the field-granular analogue of the node-level activity fill.
+ *    Fill only, so the field keeps the node's outline -- both channels at once. */
+.pac-node .pac-node-box.pac-field-empty  { stroke: var(--border); stroke-dasharray: 3 2; fill: var(--bg); }
+.pac-node .pac-field-x                   { stroke: var(--text-dim); stroke-width: 1; stroke-opacity: .4; fill: none; }
+.pac-node .pac-node-box.pac-field-active { fill: var(--accent-soft); }
 .pac-node-label { fill: var(--text); font-family: var(--mono); font-size: 12px; text-anchor: middle; }
 .pac-node-meta  { fill: var(--text-dim); font-family: var(--mono); font-size: 9.5px; text-anchor: middle; }
 .pac-node[data-state="pending"] .pac-node-label { fill: var(--text-dim); }
@@ -1289,17 +1304,39 @@ function plainNode(n, p, h) {
     ${meta}</g>`;
 }
 
-/** [ prev | value | next ] — the shape of lists.9.gif, made addressable. */
+/** [ prev | value | next ] — the shape of lists.9.gif, made addressable.
+ *
+ * A field's backing value drives its glyph: the `value` field shows the node's
+ * label; a pointer field shows a filled dot (points at something) or the nil
+ * glyph. A field whose backing value is `undefined` -- as opposed to `null` -- is
+ * INDETERMINATE STORAGE: a freshly allocated record cell not yet written. An unset
+ * pointer is a different thing from a nil one, so it renders differently: the
+ * dashed dimmed box with a thin X and no glyph, the SVG analogue of a CELLS
+ * `empty` cell (AUTHORING.md "empty = indeterminate storage"). `activeFields`
+ * lists field names that take the blue activity fill THIS step -- the field-
+ * granular analogue of the node-level `active` fill, for a value copied into a
+ * single cell. */
 function recordNode(n, p) {
   const fields = n.fields ?? ['prev', 'value', 'next'];
+  const activeF = new Set(n.activeFields ?? []);
   const x0 = p.x - RW / 2;
   let cx = x0;
   const cells = fields.map(f => {
     const fw = (f === 'value' ? 0.42 : 0.29) * RW;
-    const val = f === 'value' ? n.label : (n[f] == null ? '\u2205' : '\u25cf');
-    const g = `<g data-anchor="${n.id}.${f}">
-        <rect class="pac-node-box" x="${cx}" y="${p.y}" width="${fw}" height="${RH}"/>
-        <text class="pac-node-label" x="${cx + fw / 2}" y="${p.y + 24}">${esc(val)}</text></g>`;
+    const src = f === 'value' ? n.label : n[f];
+    const isEmpty = src === undefined;                  // indeterminate (undefined) vs nil (null)
+    const val = isEmpty ? '' : (f === 'value' ? n.label : (src === null ? '\u2205' : '\u25cf'));
+    const cls = 'pac-node-box' + (isEmpty ? ' pac-field-empty' : '')
+              + (activeF.has(f) ? ' pac-field-active' : '');
+    const x = cx, ix = 7;                               // X inset from the field-box edges
+    const xMark = isEmpty
+      ? `<path class="pac-field-x" d="M ${x + ix} ${p.y + ix} L ${x + fw - ix} ${p.y + RH - ix} `
+        + `M ${x + fw - ix} ${p.y + ix} L ${x + ix} ${p.y + RH - ix}"/>`
+      : '';
+    const g = `<g data-anchor="${n.id}.${f}" data-empty="${isEmpty}">
+        <rect class="${cls}" x="${x}" y="${p.y}" width="${fw}" height="${RH}"/>
+        ${xMark}
+        <text class="pac-node-label" x="${x + fw / 2}" y="${p.y + 24}">${esc(val)}</text></g>`;
     cx += fw;
     return g;
   }).join('');
@@ -2017,7 +2054,7 @@ const AUTOPLAY_MS = 900;
  * content" rule drifted and regressed one panel at a time). Each row:
  *   floorRows : minimum body height, in content rows (× the panel's line height)
  *   ceiling   : height maximum -- null (none), 'listing' (never more rows than the
- *               code has), 'halfStage' (≤ half the stage), or a COUNT {frames:N}/{rows:N}
+ *               code has), 'twoThirdsStage' (≤ two-thirds of the stage), or a COUNT {frames:N}/{rows:N}
  *   scroll    : true if content past the HEIGHT ceiling scrolls rather than being cut
  *   width     : how the panel claims WIDTH, in resolution priority --
  *                 'natural' : its content's full width, NEVER compressed or
@@ -2039,7 +2076,7 @@ const SIZE_POLICY = {
   code:      { floorRows: 15, ceiling: 'listing',     width: 'content', minCh: 60 }, // ≥15 rows; width = longest line (≥60 chars floor, capped there ceiling), leftover empty
   callstack: { floorRows: 2,  ceiling: { frames: 6 }, scroll: true, width: 'natural' }, // ≤ min(deepest stack the trace reaches, 6 frames); natural width. The panel already sizes to min(content, ceiling) via the max-across-steps pass, so this cap only bites past 6: a 2-deep trace still gets a 2-frame panel, factorial(4) (main→4 calls) gets 5, and recursion deeper than 6 scrolls with the active frame in view — where the repetitive middle frames are the right thing to hide
   stream:    { floorRows: 2,  ceiling: { rows: 8 },   scroll: true, width: 'column' },  // ≤8 rows; matches its column
-  structure: { floorRows: 2,  ceiling: 'halfStage',   scroll: true, width: 'natural' }, // ≤half stage (v-scroll ok); natural width, never h-scrolls
+  structure: { floorRows: 2,  ceiling: 'twoThirdsStage', scroll: true, width: 'natural' }, // ≤ two-thirds of the stage (v-scroll ok); natural width, never h-scrolls. Raised from ½: the ½ cap was set speculatively before any animation had a real tree; trees-bst-delete (12 nodes, 5 levels) is the first, and panning a structure the student is reading is worse than a slightly taller stage.
   strip:     { floorRows: 2,  ceiling: null,          width: 'natural' },  // exact content; natural width
 };
 
@@ -2115,7 +2152,7 @@ class Engine {
    *   1. Bookkeeping panels (callstack, stream, compact strips) size to content
    *      with a 2-row FLOOR so none collapses to a sliver.
    *   2. The structure region (the CELLS/NODES panels showing the data structure)
-   *      takes what it needs up to a CEILING of half the stage height, its panes
+   *      takes what it needs up to a CEILING of two-thirds the stage height, its panes
    *      side by side; a pane that overflows scrolls and follows its active cell.
    *   3. The code panel takes a 15-line FLOOR in the left column.
    *   4. Any leftover slack goes to the CODE panel -- the only panel that always
@@ -2138,7 +2175,38 @@ class Engine {
     const items     = [...this.panels.values()];
     const code      = items.find(p => p.kind === 'code');
     const structure = items.filter(p => p.kind === 'structure');
-    const book      = items.filter(p => p.kind === 'book');
+    let   book      = items.filter(p => p.kind === 'book');
+
+    // ARROW-ENDPOINT ADJACENCY (AUTHORING.md "Arrows keep their endpoints
+    // adjacent"). A cross-panel arrow is DATA -- the overlay draws it against live
+    // boxes but has no say in WHERE panels sit, so two panels wired together can end
+    // up with a third BETWEEN them, and the arrow then has to cross it. The arrow
+    // set is known from the trace before layout resolves, so the panels it
+    // references form a GROUP kept contiguous: the arrow-endpoint BOOK panels are
+    // ordered FIRST (directly under the structure region, itself usually an
+    // endpoint), non-endpoints after, and the column split below is floored (kMin)
+    // so no non-endpoint book panel lands between the region and an endpoint book
+    // panel. A panel that is not an arrow endpoint never sits between two that are.
+    const arrowPanels = new Set();
+    for (const s of this.steps) for (const a of (s.arrows ?? [])) {
+      const fp = String(a.from).split('.')[0], tp = String(a.to).split('.')[0];
+      if (fp && tp && fp !== tp) { arrowPanels.add(fp); arrowPanels.add(tp); }
+    }
+    const isEndpoint = p => arrowPanels.has(p.spec.id ?? p.spec.type);
+    const structIsEndpoint = structure.some(isEndpoint);
+    const groupBook = book.filter(isEndpoint);
+    // Reorder only when arrows tie a book panel to the structure region -- the case
+    // that can trap a non-endpoint between them. Endpoint book panels move to the
+    // front (each subset keeps its declared order), so they sit adjacent to the
+    // region; the split floor then keeps them there.
+    if (structIsEndpoint && groupBook.length && groupBook.length < book.length) {
+      book = [...groupBook, ...book.filter(p => !isEndpoint(p))];
+    }
+    // Every endpoint book panel must stay in the RIGHT column, contiguous with the
+    // structure region (which holds the other endpoint): k below this floor would
+    // drop one to the left column, splitting the group across the divide so its
+    // arrow crosses the code panel to reach it.
+    const kMin = structIsEndpoint ? groupBook.length : 0;
 
     const H = this._availableStageHeight();
     const stageW = this.stage.clientWidth;
@@ -2316,8 +2384,10 @@ class Engine {
     const regionStacked = stacked || (singleCol && structure.length > 1);
 
     // (2) structure region -- each pane floored (2 rows) then capped at its ceiling
-    // (SIZE_POLICY.structure = 'halfStage'), scrolling beyond. Values from the table.
-    const ceiling = SIZE_POLICY.structure.ceiling === 'halfStage'
+    // (SIZE_POLICY.structure = 'twoThirdsStage'), scrolling beyond. Values from the table.
+    const ceiling = SIZE_POLICY.structure.ceiling === 'twoThirdsStage'
+      ? Math.max(140, Math.floor(H * 2 / 3))
+      : SIZE_POLICY.structure.ceiling === 'halfStage'
       ? Math.max(140, Math.floor(H / 2)) : Infinity;
     const paneH   = p => Math.min(Math.max(outer(p, p.contentH), outer(p, floorPx('structure'))), ceiling);
     let regionH = 0;
@@ -2354,8 +2424,11 @@ class Engine {
       const n = (hasBase ? 1 : 0) + arr.length;
       return base + sum(arr) + gap * Math.max(0, n - 1);
     };
-    let bestK = 0, bestStage = Infinity, bestGap = Infinity;
-    for (let k = 0; k <= book.length; k++) {
+    // k starts at kMin so arrow-endpoint book panels never fall to the left column
+    // (see ARROW-ENDPOINT ADJACENCY above); the balancer then picks the shortest
+    // taller column among the splits that keep the group contiguous.
+    let bestK = kMin, bestStage = Infinity, bestGap = Infinity;
+    for (let k = kMin; k <= book.length; k++) {
       const right = colH(regionH, bh.slice(0, k), regionH > 0);
       const left  = colH(codeFloor, bh.slice(k), !!code);
       const stage = Math.max(right, left);
@@ -2702,7 +2775,7 @@ class Engine {
    *  path for the CALLSTACK (frames) and the STREAM (output rows) alike -- adding
    *  a count ceiling to a panel type is a table row, not a branch. Without such a
    *  ceiling the body is its full rendered height (scrollHeight): a strip's cells,
-   *  a structure's SVG/boxes (whose halfStage ceiling is applied later in paneH),
+   *  a structure's SVG/boxes (whose twoThirdsStage ceiling is applied later in paneH),
    *  or a stream shorter than its ceiling. flex:none keeps that from stretching.
    *  (The code panel resolves its own height in the fill block, from its line
    *  count and the column slack it alone absorbs -- the reference implementation.) */
