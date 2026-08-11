@@ -139,7 +139,7 @@ with per-field anchors), STREAM (console I/O), CHART (series over n), **CALLSTAC
 
 ---
 
-## WHAT'S DONE (15 animations, all merged to main + live)
+## WHAT'S DONE (21 animations, all merged to main + live)
 
 1. **recursion-fib-levels** (ds A5) — recursion trace, `level`/`depth` node meta.
 2. **lists-doubly-insert-order** (ds A10) — 4-line doubly-linked insertion; the
@@ -149,6 +149,13 @@ with per-field anchors), STREAM (console I/O), CHART (series over n), **CALLSTAC
    **CELLS rendering contract** and the **master layout invariant**. Renamed the
    CALLSTACK panel to **"Function calls"** (student-visible only) so it can't be
    confused with the actual stack in A3/A4.
+21. **trees-recursive-height** (ds A12) — bottom-up heights; two returns compared.
+20. **trees-bst-traversals** (ds) — pre/in/post; in-order sorts, post-order = postfix.
+19. **trees-bst-insert** (ds) — a failed search finds the insertion point.
+18. **trees-bst-delete** (ds) — the naive break, then both legal replacements.
+17. **lists-insert-alpha** (ds A9) — the trailing pointer, and why it is needed.
+16. **pointers-address-model** (ds) — one caret; the memory-danger leak marker's
+    first real firing. Settled the CARET NOTATION rule project-wide.
 15. **recursion-hanoi** (ds) — three disks, seven moves, every call stepped into.
 14. **recursion-hanoi-leap** (ds) — the n−1 bundle: the induction hypothesis drawn.
     Added the **PEGS renderer**.
@@ -198,45 +205,96 @@ deferred): append `?a=ds-a1` to the src.
 
 ---
 
-## WHERE WE STOPPED — 15 ANIMATIONS. NEXT: `pointers-address-model` (or your pick)
+## WHERE WE STOPPED — 21 ANIMATIONS. NEXT: the graph pair
 
-Fifteen built, reviewed, merged, live. The **recursion block** is the newest: factorial
-(the call stack), the Hanoi leap (the induction hypothesis as an object on screen), and
-Hanoi proper (three disks, seven moves), the last two cross-linked.
+Twenty-one built, reviewed, merged, live. **The ds slate is down to two animations**,
+and they are the last two carrying an unbuilt capability:
 
-**Six ds animations remain.** Three are cheap, pure inherit:
-`pointers-address-model` (CELLS + arrows), `lists-insert-alpha` (A9, arrows),
-`trees-recursive-height` (A12 — leans directly on the recursion work just finished).
-Two are moderate: `trees-bst-operations` (A11), `hashing-collision-strategies` (A8).
-Two carry the **last unbuilt capability, graph layout in NODES**:
-`graphs-representations` (A13) and `graphs-bfs-dfs`.
+  `graphs-representations` (A13) — adjacency matrix vs adjacency list
+  `graphs-bfs-dfs`                — the two traversals
+
+Both need **graph layout in NODES**, which panel-inventory designs and nothing has
+ever exercised. They need a BRANCH (engine work); everything else on the slate went
+straight to main. Sources needed: `ds13.html` and any graphs lecture.
+
+The representation animation is a count-vs-rear-shaped lesson — two ways to store the
+same thing, with the trade-off as the subject — so `queues-count-vs-rear` is the
+model, including its warning that a side-by-side comparison must leave room for a
+driver panel.
 
 ---
 
 ## PROCESS RULES EARNED THE HARD WAY — read before the next build
 
-A long stretch of confusion in this session traced to four causes, none of them about
-the animations. All four are now fixed, and the fixes only hold if they are kept:
+Seven rules, each of which cost real time before it existed.
 
-**1. Exactly ONE branch exists at a time.** Sixteen merged branches had accumulated on
-the remote, and Claude Code kept reusing whichever it touched last — which put work on
-branches cut from stale bases. **Branch deletion is part of the merge ritual, not a
-someday task:** merge → `git checkout main` → `git pull` → `git push origin --delete
-BRANCH` → `git fetch --prune`. With one branch, "which branch" is never a question.
+**1. Exactly ONE branch exists at a time.** Sixteen merged branches once accumulated
+on the remote and Claude Code kept reusing whichever it touched last, putting work on
+branches cut from stale bases. Deletion is part of the merge ritual, not a someday
+task.
 
-**2. Branch from the animation you are extending**, not from `main`, when it is not yet
-merged. `recursion-hanoi` was cut from main while part 1 sat unmerged, so the
-instruction "reuse part 1's pegs panel" was impossible to follow — the branch did not
-contain it — and a second PEGS renderer was written, which then conflicted.
+**2. Branch from the animation you are extending**, not from `main`, when it is not
+yet merged. `recursion-hanoi` was cut from main while part 1 sat unmerged, so "reuse
+part 1's pegs panel" was impossible to follow and a duplicate renderer was written.
 
-**3. A fix verified against an uncommitted working copy tells us nothing.** Three
+**3. A fix verified against an uncommitted working copy tells us nothing.** Several
 times a fix was reported as verified while nothing had been pushed. The only state
-either side can see is what is on the remote. Verification must follow the push.
+either side can see is the remote. "Done" means pushed, with the SHA in the same
+sentence.
 
-**4. Say WHERE to look.** Four rounds were spent on a note-link that worked the whole
-time: it lived in the FINAL note, and the review instruction was "open it and look" —
-every previous link had been on step 0. When a link or a payoff is on the last step,
-the instruction must say *step to the end*.
+**4. WORKFLOW: animation content goes STRAIGHT TO MAIN.** No branch, no PR, no merge.
+Review happens on the rendered preview and produces follow-up commits, also to main.
+Branches are for ENGINE changes only — engine/, styles.css, build-preview.mjs, the
+sizing or placement logic — because those affect every animation at once and that is
+exactly what a before/after diff is for. This removed the single largest source of
+friction in the project: branch confusion cost more time than any animation did.
+
+**5. `courses.json` is NEVER touched in the same commit as an animation.** Every
+animation appends to the same ds list, so any two pieces of work collide there. It
+gets its own isolated pass every few animations.
+
+**6. A DESTRUCTIVE COMMAND NEVER RIDES IN THE SAME BLOCK AS THE ACTION IT DEPENDS
+ON.** A merge block once ended with `git push origin --delete` on the line after the
+merge link — so skipping one browser click silently deleted unmerged work. Deletion
+is now a separate step, after the merge is confirmed on main. If a step cannot be
+undone, it gets its own paste and a check in front of it.
+
+**7. Say WHERE to look.** Four rounds were once spent on a note-link that worked the
+whole time: it lived in the FINAL note, and the review instruction was "open it and
+look" — every previous link had been on step 0. When a link or a payoff sits on the
+last step, the instruction must say *step to the end*.
+
+---
+
+## THE TREE BLOCK — four animations, one chain
+
+A11 was slated as ONE animation, "BST — insert, traverse, delete". That was three
+ideas in one, and it was split three ways for the same reason heapsort and Hanoi were
+split. The chain now runs:
+
+    trees-bst-insert      — a failed search IS the insertion point
+       -> trees-bst-traversals  — three orders; in-order prints SORTED, post-order
+                                  gives POSTFIX (closing the loop stacks-postfix-eval
+                                  left open)
+       -> trees-bst-delete      — the hard one: you cannot remove a node, only
+                                  replace it. Both legal replacements traced.
+       -> back to insert
+
+    trees-recursive-height (A12) — the tree fills in bottom-up; completes the arc
+       recursion-factorial-stack started (work happens on the way back, now with TWO
+       returns to compare rather than one to multiply).
+
+All four trace the lecture's own tree (S/E/X/A/R/C/H/M, plus T inserted), so a
+student sees one structure across four animations.
+
+**`trees-bst-delete` is the animation this project was hardest on and should be
+proudest of.** It shows the naive delete BREAKING the tree first — six nodes
+orphaned, the memory-danger leak marker firing — before deriving what is allowed to
+stand in the deleted node's place. The instructor's own sentence carries it: "what
+are you left with if you truly 'delete' a node — bunch of hanging pointers and a
+broken tree!"
+
+---
 
 ---
 ---

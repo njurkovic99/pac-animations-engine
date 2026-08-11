@@ -684,6 +684,14 @@ important structural rule in this document, and it was learned the expensive way
 | structure (CELLS/NODES) | content | two-thirds of the stage (height only) | scroll vertically; **never horizontally** |
 | strips | 2 rows | exact content | — |
 
+**A COMMENT MUST NEVER BE A LISTING'S LONGEST LINE.** The code panel's width ceiling
+is its longest line, so every character of an over-long comment is taken from the
+structure panel beside it. In `trees-bst-delete` a comment reading `// just cut it
+out` was setting the panel width and squeezing the tree into a horizontal scroll —
+which the structure rules forbid outright. Explanation belongs in the narration,
+which costs no width at all. If a comment is the longest line anywhere, shorten it or
+delete it.
+
 **Adding a panel type means adding a row to this table, never a branch at a call
 site.** The reason is the whole story of `stacks-paren-scanner`: the same rule
 ("size to content") was implemented independently in four places — stage, structure
@@ -1117,6 +1125,18 @@ view fit reasonably for the majority; the link covers everyone else.
 ---
 
 # PART 6 — PEDAGOGICAL PATTERNS
+
+## Line-align listings when the difference IS the lesson
+
+Where an animation shows several procedures that differ in one place, align them so
+that place is the only thing that moves. `trees-bst-traversals` puts pre-, in- and
+post-order one above the other with `visit` on lines 3, 10 and 17 — a student can see
+the entire lesson in the code panel before a single step runs. `queues-count-vs-rear`
+aligned its two representations so the differences read as horizontal gaps.
+
+This is worth breaking the usual rule for. Listings normally need no alignment at all
+(each trace addresses its own line numbers), so alignment is a deliberate signal:
+when it is there, the reader should look at what does NOT line up.
 
 ## Name the student's confusion first
 
