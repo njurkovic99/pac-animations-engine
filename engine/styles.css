@@ -469,6 +469,39 @@ body {
 }
 .pac-cells[data-render="row"] .pac-cell-label { display: inline; }
 
+/* ---- 2D GRID / adjacency matrix (render: 'grid', see panels/cells.js
+ * renderGrid) ----
+ * A rows x cols grid with a header band on the top edge (column indices) and the
+ * left edge (row indices), so a cell reads as "row j, column k" -- exactly the
+ * ordered-pair a boolean adjacency matrix stores. Every cell is present from step
+ * 0 (the master invariant: the grid never grows), each a fixed size for every
+ * state, so nothing shifts as cells fill. It is a STRUCTURE panel and never
+ * scrolls: the whole n x n grid is sized once and sits at natural size.
+ *
+ * F vs T is carried by the LETTER, dim vs bright -- a matrix that is mostly F
+ * should read as mostly quiet, with each T standing out. Blue (the `active` role)
+ * is reserved for the ONE channel it means everywhere: the cell written THIS
+ * step. The DIAGONAL (row == col) carries a faint wash -- not a colour with
+ * meaning, just enough that the mirror line the lecture draws is visible when the
+ * symmetry appears; it never competes with the blue activity fill (a written cell
+ * keeps its role's styling; the wash only tints an un-roled diagonal cell). */
+.pac-cells[data-render="grid"] { display: block; }
+.pac-matrix { display: grid; gap: 4px; width: max-content; }
+.pac-matrix-head {
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 11px; color: var(--text-dim);
+  min-width: 30px; min-height: 30px;
+}
+.pac-matrix-corner { min-width: 30px; min-height: 30px; }
+.pac-matrix-cell {
+  min-width: 30px; min-height: 30px; padding: 4px;
+  display: flex; align-items: center; justify-content: center;
+}
+.pac-matrix-cell .pac-cell-value { min-height: auto; }
+.pac-matrix-cell[data-val="F"] .pac-cell-value { color: var(--text-dim); }
+.pac-matrix-cell[data-val="T"] .pac-cell-value { color: var(--text); font-weight: 600; }
+.pac-matrix-cell[data-diagonal]:not([data-role]) { background: rgba(139, 147, 167, 0.09); }
+
 /* ---- index-pointer markers (AUTHORING.md "Planned primitive — the index
  * pointer") ----
  * A labeled caret that points at an array cell and moves as its index changes --
@@ -740,6 +773,22 @@ body {
 .pac-node[data-state="pending"] .pac-node-label { fill: var(--text-dim); }
 .pac-edge { stroke: var(--border); stroke-width: 1.2; fill: none; }
 .pac-edge[data-state="taken"] { stroke: var(--accent); }
+
+/* ---- GRAPH edges (NODES layout 'graph', see panels/nodes.js renderGraph) ----
+ * A straight line between two fixed-position nodes. A normal edge is a neutral
+ * member line (--text-dim so it reads clearly on the dark ground, unlike the very
+ * faint tree --border); an edge created THIS step takes the blue activity stroke
+ * (state 'active') -- the same "being modified now" channel cells and nodes use.
+ * A DIRECTED edge carries an arrowhead marker whose fill is context-stroke, so it
+ * turns blue with the line on the active step and is neutral otherwise; an
+ * UNDIRECTED edge has no marker (the lecture's own distinction). Lines stay
+ * straight and may cross -- a graph is not planar in general. */
+.pac-graph-edge { stroke: var(--text-dim); stroke-width: 1.6; }
+.pac-edge[data-state="active"] { stroke: var(--accent); stroke-width: 2.4; }
+/* A graph node at rest: a clearly outlined circle. Scoped to the neutral `idle`
+ * state so a future graph that uses the membership channel (green member / amber
+ * unlinked) keeps those outlines -- only the default gets the stronger stroke. */
+.pac-graph-node[data-state="idle"] .pac-node-box { stroke: var(--text-dim); stroke-width: 1.4; }
 
 /* ---- PEGS panel (see panels/pegs.js, AUTHORING.md "pegs and disks") ----
  * Three pegs with disks/bundles stacked on them. A STRUCTURE panel rendered at a

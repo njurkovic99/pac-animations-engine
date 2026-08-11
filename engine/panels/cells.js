@@ -54,6 +54,9 @@ export function render(body, data, ctx) {
   // Vertical stack column — a distinct layout from the horizontal box/bar/row
   // modes, so it is rendered by its own path (see renderColumn below).
   if (mode === 'column') { renderColumn(wrap, data, ctx); return; }
+  // 2D grid / adjacency matrix — a rows x cols grid with index headers on the top
+  // and left edges. Its own path (see renderGrid below).
+  if (mode === 'grid') { renderGrid(wrap, data, ctx); return; }
   const cells = data?.cells ?? [];
   const max = Math.max(1, ...cells.map(c => +c.value || 0));
 
@@ -269,6 +272,64 @@ function renderColumn(wrap, data, ctx) {
   // is a negative sentinel; empty otherwise.
   const parked = markers.filter(m => m.index == null || m.index < 0);
   wrap.appendChild(row(0, { value: '', role: 'empty' }, parked, true));
+}
+
+/* 2D GRID / adjacency matrix (render: 'grid'). A rows x cols grid laid out with
+ * CSS grid, with a header band of indices on the TOP edge (columns) and the LEFT
+ * edge (rows), plus a blank corner. A data cell reads as "row j, column k".
+ *
+ * Step data:
+ *   { render: 'grid', rows, cols,
+ *     rowHeader?: [...], colHeader?: [...],   // default 0..rows-1 / 0..cols-1
+ *     cells: [ {value, role?, anchor?}, ... ] }   // ROW-MAJOR, rows*cols entries
+ *
+ * Every cell is present from step 0 and fixed-size for every state, so the grid
+ * never grows or shifts (the master invariant). `role` drives the shared cell
+ * styling -- in particular `active` gives the blue "written this step" fill. The
+ * DIAGONAL (row index == col index) is tagged `data-diagonal` for the faint mirror-
+ * line wash (CSS); the tag is derived here from position, never authored per cell. */
+function renderGrid(wrap, data, ctx) {
+  const rows = data.rows ?? 0, cols = data.cols ?? 0;
+  const cells = data.cells ?? [];
+  const colHead = data.colHeader ?? [...Array(cols).keys()];
+  const rowHead = data.rowHeader ?? [...Array(rows).keys()];
+
+  const grid = document.createElement('div');
+  grid.className = 'pac-matrix';
+  // A leading auto column for the row-header band, then one fixed column per grid
+  // column. Fixed tracks so every cell is the same width for every state.
+  grid.style.gridTemplateColumns = `auto repeat(${cols}, 30px)`;
+
+  // Header row: blank corner, then the column indices.
+  const corner = document.createElement('div');
+  corner.className = 'pac-matrix-corner';
+  grid.appendChild(corner);
+  for (const h of colHead) {
+    const el = document.createElement('div');
+    el.className = 'pac-matrix-head pac-matrix-colhead';
+    el.textContent = h;
+    grid.appendChild(el);
+  }
+
+  // One grid row per matrix row: the row index, then its cells.
+  for (let r = 0; r < rows; r++) {
+    const rh = document.createElement('div');
+    rh.className = 'pac-matrix-head pac-matrix-rowhead';
+    rh.textContent = rowHead[r];
+    grid.appendChild(rh);
+    for (let c = 0; c < cols; c++) {
+      const cd = cells[r * cols + c] ?? {};
+      const cell = document.createElement('div');
+      cell.className = 'pac-cell pac-matrix-cell';
+      if (cd.role) cell.dataset.role = cd.role;
+      if (cd.value != null) cell.dataset.val = cd.value;   // F/T -> dim vs bright letter
+      if (r === c) cell.dataset.diagonal = '';             // the mirror line
+      cell.innerHTML = `<span class="pac-cell-value">${esc(cd.value ?? '')}</span>`;
+      if (cd.anchor) ctx.anchor(`${ctx.spec.id}.${cd.anchor}`, cell.querySelector('.pac-cell-value'));
+      grid.appendChild(cell);
+    }
+  }
+  wrap.appendChild(grid);
 }
 
 /* One column marker: the variable name to the LEFT of a right-pointing caret

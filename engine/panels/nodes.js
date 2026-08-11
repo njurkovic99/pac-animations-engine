@@ -30,6 +30,16 @@
 const NW = 74, HGAP = 16, VGAP = 62, PAD = 20;
 const RW = 112, RH = 38, RGAP = 46, RROW = 84;   // record geometry
 
+/* Graph geometry (layout 'graph'). Node positions are DATA -- the content file
+ * supplies each node's `x`/`y` in abstract grid units, NOT a force layout or a
+ * circle (AUTHORING.md graphs-representations §3: "positions are data"). Grid
+ * units are scaled by GX/GY so a clean 2-column, 3-row lecture layout reads at a
+ * comfortable size; every dimension is a constant times a fixed datum, so the
+ * SVG's W/H are the same on every step and nothing moves as edges appear. */
+const GR = 19, GX = 92, GY = 78, GPAD = 26;      // node radius, grid step x/y, margin
+const GARROW = 8;                                 // arrowhead run + gap before the target border
+const GOFF = 7;                                    // perpendicular offset for antiparallel edges
+
 /* Plain-node vertical metrics. The box height is DERIVED from how many `meta`
  * lines a node carries so the label + every meta line (e.g. "level 3" /
  * "depth 2") sit inside the box and are never clipped -- see AUTHORING.md
@@ -45,6 +55,11 @@ export function mount(body) {
 export function render(body, data, ctx) {
   const svg = body.querySelector('svg');
   if (!data?.nodes?.length) { svg.innerHTML = ''; return; }
+
+  // A GRAPH is a different shape from a tree/list: nodes at FIXED author-supplied
+  // positions, edges as data with an explicit direction. It renders through its
+  // own path so the tree/record logic below stays untouched.
+  if (data.layout === 'graph') { renderGraph(svg, data, ctx); return; }
 
   const record = data.template === 'record';
   // Box height fits the tallest node's meta stack, so meta text never clips.
@@ -79,6 +94,84 @@ export function render(body, data, ctx) {
   const id = ctx.spec.id;
   svg.querySelectorAll('[data-anchor]').forEach(el => ctx.anchor(`${id}.${el.dataset.anchor}`, el));
 }
+
+/* ---- GRAPH: fixed-position nodes with directed/undirected edges ----
+ *
+ * The general graph renderer (AUTHORING.md graphs-representations §3): serves an
+ * adjacency-matrix animation now, and any later state diagram, flow graph, or
+ * traversal (graphs-bfs-dfs). Three things it does that a tree does not:
+ *
+ *   - POSITIONS ARE DATA. Each node carries `x`/`y` (abstract grid units); the
+ *     renderer never computes a layout. Two graphs drawn on the same node set
+ *     therefore sit in identical positions, which is what makes an honest
+ *     directed-vs-undirected comparison possible.
+ *   - EDGES CARRY A DIRECTION. `{from, to, directed}`. A directed edge draws an
+ *     arrowhead at its target; an undirected edge is a plain line with no head --
+ *     the lecture's own distinction, visible at a glance.
+ *   - EDGES MAY CROSS, and are kept straight (a graph is not planar in general).
+ *     The one exception to "straight between centres" is an ANTIPARALLEL pair
+ *     (both u->v and v->u present, as in the lecture's directed graph): each is
+ *     shifted a few px to the right of its own travel direction so the two
+ *     arrowheads are both visible instead of colliding on one line.
+ *
+ * An edge with `state: 'active'` takes the blue activity stroke on the step
+ * setEdge creates it -- the same "being modified now" channel cells and nodes
+ * use. All nodes are present from step 0; only the edge list grows, so the SVG's
+ * fixed W/H never change and nothing moves (the master invariant). */
+function renderGraph(svg, data, ctx) {
+  const pos = new Map();
+  for (const n of data.nodes) pos.set(n.id, { x: GPAD + GR + n.x * GX, y: GPAD + GR + n.y * GY });
+  const xs = [...pos.values()].map(p => p.x), ys = [...pos.values()].map(p => p.y);
+  const W = Math.max(...xs) + GR + GPAD, H = Math.max(...ys) + GR + GPAD;
+
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('width', W);
+  svg.setAttribute('height', H);
+
+  // Which (from,to) pairs exist, so an antiparallel partner can be detected and
+  // both members of the pair offset to opposite sides.
+  const present = new Set((data.edges ?? []).map(e => `${e.from}>${e.to}`));
+
+  const edges = (data.edges ?? []).map(e => {
+    const a = pos.get(e.from), b = pos.get(e.to);
+    if (!a || !b) return '';
+    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len;                  // unit along the edge
+    // Antiparallel pair -> shift right of travel by GOFF so both arrows show.
+    const off = present.has(`${e.to}>${e.from}`) ? GOFF : 0;
+    const px = -uy * off, py = ux * off;                 // perpendicular (right of travel)
+    const ax = a.x + ux * GR + px, ay = a.y + uy * GR + py;
+    // A directed edge stops short of the border so its arrowhead lands ON the
+    // border; an undirected line runs right to the border.
+    const back = GR + (e.directed ? GARROW : 0);
+    const bx = b.x - ux * back + px, by = b.y - uy * back + py;
+    const head = e.directed ? ' marker-end="url(#pac-graph-arrow)"' : '';
+    return `<path class="pac-edge pac-graph-edge" data-state="${e.state ?? ''}"${head} d="M ${r2(ax)} ${r2(ay)} L ${r2(bx)} ${r2(by)}"/>`;
+  }).join('');
+
+  // The arrowhead marker lives in THIS svg (the overlay's marker is a different
+  // svg). `context-stroke` makes the head take the edge's own colour, so an
+  // active edge's blue arrowhead comes for free.
+  const defs = `<defs><marker id="pac-graph-arrow" viewBox="0 0 8 8" refX="7" refY="4"
+      markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 8 4 L 0 8 z" fill="context-stroke"/></marker></defs>`;
+
+  const nodes = data.nodes.map(n => {
+    const p = pos.get(n.id);
+    return `<g class="pac-node pac-graph-node" data-state="${n.state ?? 'idle'}" data-active="${!!n.active}" data-anchor="${n.id}">
+      <circle class="pac-node-box" cx="${p.x}" cy="${p.y}" r="${GR}"/>
+      <text class="pac-node-label" x="${p.x}" y="${p.y + 4}">${esc(n.label)}</text></g>`;
+  }).join('');
+
+  // Edges first so nodes paint over the line ends; the arrowhead already stops at
+  // the border, but layering keeps a stray pixel from showing through a node.
+  svg.innerHTML = defs + edges + nodes;
+
+  const id = ctx.spec.id;
+  svg.querySelectorAll('[data-anchor]').forEach(el => ctx.anchor(`${id}.${el.dataset.anchor}`, el));
+}
+
+const r2 = v => Math.round(v * 10) / 10;
 
 function plainNode(n, p, h) {
   const meta = (n.meta ?? []).map((m, k) =>
@@ -146,14 +239,8 @@ function layout(data, record) {
     return pos;
   }
 
-  if (mode === 'graph') {
-    const R = 30 + data.nodes.length * 13;
-    data.nodes.forEach((n, k) => {
-      const t = (k / data.nodes.length) * 2 * Math.PI - Math.PI / 2;
-      pos.set(n.id, { x: R + PAD + R * Math.cos(t), y: R + PAD + R * Math.sin(t) });
-    });
-    return pos;
-  }
+  // 'graph' is handled entirely by renderGraph (fixed author positions); it never
+  // reaches this layout() helper.
 
   const kids = new Map();
   for (const n of data.nodes) {

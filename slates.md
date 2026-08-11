@@ -248,7 +248,7 @@ Pseudocode canonical; Java and C++ as toggles.
 | 18a | BST — traversals (pre/in/post; in-order prints sorted) (part 2 of 3) | `trees-bst-traversals` | S | A11 (part 2) |
 | 18b | BST — **delete** (replacement by another node, both sides) (part 3 of 3) | `trees-bst-delete` | S | **A11 (part 3)** |
 | 19 | Tree height | `trees-recursive-height` | T | **A12** |
-| 20 | Graphs — matrix ↔ list | `graphs-representations` | S | **A13** |
+| 20 | Graphs — adjacency matrix (directed vs undirected) | `graphs-representations` | S | **A13** |
 | 21 | Graph traversal | `graphs-bfs-dfs` | S | — |
 
 **Quicksort worst case (row 9a).** A companion to row 9, running the *same
@@ -305,6 +305,21 @@ framed as the instructor frames it —
 breaks the tree (memory-danger marker on the orphaned subtree), then both legal
 replacements are traced — the rightmost of the left subtree (18) and the leftmost of
 the right (21) — because the symmetry is the point.
+
+**Graphs — adjacency matrix ONLY (row 20).** An earlier slate framed
+`graphs-representations` as "matrix ↔ list", but the lecture (graphs.html) never
+covers adjacency lists — it ends at the matrix, noting only that a weighted graph
+replaces T/F with costs — and A13 is explicitly about the matrix ("read a graph
+description from a file … setEdge function to build the graph"). So the animation is
+the matrix alone: it builds the *same* five-node shape twice — once directed, once
+undirected — and watches the matrix fill differently, because that is where the
+lecture's one sentence lives ("if the graph is undirected the matrix is symmetric,
+because the edge between j and k conceptually runs in both directions"). `setEdge` is
+what makes symmetry visible: a directed edge writes one cell, an undirected edge writes
+two. **`graphs-representations` (row 20) is built** and introduces the NODES `graph`
+layout — fixed author-supplied node positions, edges as data with a direction (directed
+= arrowhead, undirected = plain line) — built general so `graphs-bfs-dfs` reuses it.
+Adjacency **lists** are not built and not planned unless a future lecture adds them.
 
 ---
 
