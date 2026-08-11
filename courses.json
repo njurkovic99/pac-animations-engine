@@ -56,12 +56,22 @@
         ] },
       { "topic": "Trees — Binary Search Trees",
         "animations": [
+          { "file": "trees-bst-insert",           "backs": "A11", "built": true },
+          { "file": "trees-bst-traversals",       "backs": "A11", "built": true },
           { "file": "trees-bst-delete",           "backs": "A11", "built": true }
+        ] },
+      { "topic": "Trees — Recursive Height",
+        "animations": [
+          { "file": "trees-recursive-height",     "backs": "A12", "built": true }
+        ] },
+      { "topic": "Graphs — The Adjacency Matrix",
+        "animations": [
+          { "file": "graphs-representations",     "backs": "A13", "built": true }
         ] }
     ]
   },
   "redirects": {
-    "_comment": "Old filename -> new. Emitted as meta-refresh stubs so existing Canvas iframes keep working.",
+    "_comment": "Old filename -> new. Emitted as meta-refresh stubs so existing Canvas iframes keep working. Emit a stub ONLY when its target page exists — a stub pointing at an unbuilt page turns a working old animation into a 404.",
     "file1.html": "files-basic-operations.html",
     "file3.html": "files-random-access-seek.html",
     "struct-ptr.html": "structs-and-pointers.html",
