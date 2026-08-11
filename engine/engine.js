@@ -72,7 +72,15 @@ export class Engine {
   constructor(root, spec) {
     this.root = root;
     this.spec = spec;
-    this.lang = spec.languages?.[0] ?? null;
+    // Per-course language selection via `?lang=` (PLANNED.md "Per-course language
+    // selection"). `this.langs` is the set of listings shown as tabs; `this.lang`
+    // is the active one. For every existing ds page (no `?lang=`, a declared
+    // `languages` array, all listings present) this resolves to exactly today's
+    // behavior -- all tabs, first declared language -- so the feature is a strict
+    // no-op there.
+    const resolved = this._resolveLanguages();
+    this.langs = resolved.langs;
+    this.lang  = resolved.active;
     this.timer = null;                 // the ONLY timer handle
     this.panels = new Map();
     this.overlay = null;
@@ -87,6 +95,52 @@ export class Engine {
     this.sliderN   = this.sliderCfg ? (this.sliderCfg.default ?? this.sliderCfg.min ?? 0) : 0;
     this._build();
     this.loadTrace(this.trace);
+  }
+
+  /* ---------- `?lang=` per-course language selection (PLANNED.md) ---------- */
+
+  /** One URL parameter, trimmed and lower-cased; null if absent or off-DOM. */
+  _param(name) {
+    if (typeof location === 'undefined' || !location.search) return null;
+    const v = new URLSearchParams(location.search).get(name);
+    return v == null ? null : v.trim().toLowerCase();
+  }
+
+  /**
+   * Resolve which code listings are shown, and which is active, honoring `?lang=`.
+   * Returns `{ langs, active }` -- `langs` is the tab set (code.js hides the bar
+   * when it has one entry), `active` is the default listing.
+   *
+   * The five rules (PLANNED.md "Per-course language selection"):
+   *   1. `?lang=` applies ONLY when the top spec declares a `languages` array. A
+   *      multi-file program (listings keyed by filename, no `languages`) ignores it
+   *      -- `?lang=` can never fight source-file tabs.
+   *   2. Exactly one listing resolving hides the tab bar (a valid `?lang=` narrows a
+   *      multi-language file to one; a single-language file is one already). That is
+   *      the `langs.length === 1` case, applied in code.js.
+   *   3. Absent, empty, or unrecognized `?lang=` falls back to the first declared
+   *      language with the tab bar shown -- i.e. exactly today's behavior, which is
+   *      also the strict no-op for every existing ds page.
+   *   4. Composes with `?a=` in either order: `?a=` is read by nobody, `?lang=` is
+   *      read positionally by URLSearchParams, so order is irrelevant.
+   *   5. Independent of `profile`: this touches only which listing shows, nothing else.
+   */
+  _resolveLanguages() {
+    const spec = this.spec;
+    const code = (spec.panels ?? []).find(p => p.type === 'code');
+    const listings = code?.listings ?? {};
+    const allKeys = Object.keys(listings);
+    const declared = Array.isArray(spec.languages) && spec.languages.length ? spec.languages : null;
+
+    // Today's behavior, and the fallback for rules 1 and 3: every listing as a tab,
+    // in declaration order; default = the first declared language (or null -> first
+    // listing key, for a multi-file program with no `languages` array).
+    const fallback = { langs: allKeys, active: declared ? declared[0] : null };
+
+    if (!declared) return fallback;                       // rule 1: inert without `languages`
+    const req = this._param('lang');
+    if (!req || !declared.includes(req) || !listings[req]) return fallback; // rule 3
+    return { langs: [req], active: req };                 // rule 2: narrow to one, bar hides
   }
 
   /* ---------- materialisation ---------- */
@@ -249,13 +303,15 @@ export class Engine {
       const codeElReset = bodyEl.querySelector('.pac-code');
       if (codeElReset) codeElReset.style.maxHeight = '';
       code.el.style.width = 'max-content';
-      // The widest line is measured across EVERY language tab, not just the current
-      // one (master invariant): switching pseudocode/Java/C++ must not change the
-      // panel's width. pseudo may be 9 short lines while Java has a longer one -- the
-      // panel reserves the widest across all, so no variant wraps and the width never
-      // jumps on a tab switch.
+      // The widest line is measured across every SHOWN language tab, not just the
+      // current one (master invariant): switching pseudocode/Java/C++ must not change
+      // the panel's width. pseudo may be 9 short lines while Java has a longer one --
+      // the panel reserves the widest across all, so no variant wraps and the width
+      // never jumps on a tab switch. `this.langs` is the resolved tab set: for a ds
+      // page it is every listing key (unchanged), for a `?lang=`-narrowed page it is
+      // the single shown language, so a narrowed page reserves only its own width.
       const listings = code.spec.listings ?? {};
-      const langs = Object.keys(listings).length ? Object.keys(listings) : [this.lang];
+      const langs = this.langs?.length ? this.langs : (Object.keys(listings).length ? Object.keys(listings) : [this.lang]);
       for (const lang of langs) {
         code.ctx.anchors.clear();
         code.renderer.render(bodyEl, { line: null }, code.ctx, { lang, step: this.steps[0] });

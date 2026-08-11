@@ -7,7 +7,12 @@
  * been unmaintainable across ~64 files and five years. */
 
 export function mount(body, spec, ctx, tools) {
-  spec._langs = Object.keys(spec.listings);
+  // The tab set is the engine's resolved language set (`?lang=` may have narrowed
+  // it -- PLANNED.md "Per-course language selection"); it defaults to every listing
+  // key, so a ds page is unaffected. A single entry means one listing resolved, so
+  // the tab bar is not rendered at all (rule 2: a lone tab is an affordance that
+  // does nothing).
+  spec._langs = ctx.engine.langs?.length ? ctx.engine.langs : Object.keys(spec.listings);
   if (spec._langs.length > 1) {
     tools.innerHTML = `<span class="pac-lang-tabs">${spec._langs.map(l =>
       `<button class="pac-lang-tab" data-lang="${l}">${spec.labels?.[l] ?? l}</button>`
