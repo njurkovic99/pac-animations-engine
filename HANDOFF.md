@@ -53,12 +53,13 @@ estimating an animation.
 | Slider (narrow WATCH-only exception) | AUTHORING, PLANNED | YES | `sorting-timing-chart` |
 | PEGS renderer | AUTHORING | YES | `recursion-hanoi-leap` |
 | Attribution footer | AUTHORING | YES | engine-level, all animations |
+| Arrow-adjacency placement | AUTHORING | YES | `lists-insert-alpha` |
 | Race driver (lockstep generators) | AUTHORING, panel-inventory §4 | YES, but **NO USER** in the repo | intended `sorting-race-statements` |
 | **Graph layout in NODES** | panel-inventory §2 | **NO** | `graphs-representations` |
 | Loop controls (step out / run to end) | AUTHORING | NO | first loop animation |
 | THINK mode | this doc | NO | deferred in full |
 
-**Only ONE unbuilt capability remains for Phase 1: graph layout in NODES**, needed by
+**ONE unbuilt capability remains, and TWO animations need it: graph layout in NODES**, needed by
 `graphs-representations` (A13) and `graphs-bfs-dfs`. Everything else on the ds slate is
 a pure inherit. Budget those two accordingly and treat the rest as cheap.
 
@@ -156,11 +157,11 @@ heap-is-this-valid              ds      confusion-first (WATCH)   BUILT
 sorting-heapsort-dual           ds A7   array<->tree dual view
 sorting-timing-chart            ds A7   BUILT (CHART + slider)
 hashing-collision-strategies    ds A8
-pointers-address-model          ds
-lists-insert-alpha              ds A9   arrows
+pointers-address-model          ds      BUILT
+lists-insert-alpha              ds A9   BUILT   arrows
 lists-doubly-insert-order       ds A10  BUILT
-trees-bst-operations            ds A11
-trees-recursive-height          ds A12
+trees-bst-operations            ds A11  SPLIT 3 WAYS — all BUILT
+trees-recursive-height          ds A12  BUILT
 graphs-representations          ds A13
 graphs-bfs-dfs                  ds
 complexity-growth-curves        ● ds analysis (also aJava)
