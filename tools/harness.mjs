@@ -26,12 +26,16 @@
  *   5. LINK TARGETS -- every note-link href across content/*.js resolves to a file in
  *      anim/.
  *   6. FILE PAIRING -- every content/*.js has a matching anim/*.html and vice versa.
+ *   7. NO COURSE REFERENCES -- no student-facing string (title, subtitle, narration,
+ *      note) names an assignment, a course, or an assignment/course code. Scans the
+ *      LOADED spec, so code comments and CODE listings are exempt, and the
+ *      `assignment` rule fires only after the/your/this, so the CS sense is left alone.
  */
 
 import { chromium } from 'playwright';
 import http from 'node:http';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -73,6 +77,74 @@ function checkLinkTargets() {
     if (!existsSync(path.join(ROOT, 'anim', r.href)))
       fails.push(`${r.from} links to ${r.href}, which does not exist in anim/`);
   return { total: refs.length, fails };
+}
+
+// 7. NO COURSE REFERENCES -- no STUDENT-FACING string (title, subtitle, narration,
+// note) may name an assignment, a course, or an assignment/course code. An animation
+// teaches a concept and must read correctly in ANY course; a shared Phase-2 animation
+// would be wrong for at least one. Code comments and the CODE listings are
+// instructor-/code-facing and exempt, which is why this reads the LOADED spec (title,
+// subtitle, every step's narrate + note across every trace) rather than the raw file:
+// only student-facing text is ever scanned. The `assignment` rule fires only when the
+// word is preceded by the/your/this, so the CS sense ("every assignment is a reference
+// copy", "the four pointer assignments") is left alone.
+const COURSE_RULES = [
+  { name: 'assignment',   re: /\b(?:the|your|this)\s+assignments?\b/gi },
+  { name: 'ds<n> code',   re: /\bds\d+\b/gi },
+  { name: 'A<n> code',    re: /\bA\d{1,2}\b/g },
+  { name: 'project <n>',  re: /\bproject\s+\d+\b/gi },
+  { name: 'homework',     re: /\bhomework\b/gi },
+];
+
+// Flatten a narrate/note value -- a string, or a segmented array mixing strings and
+// {href,text} link objects -- to the student-facing strings inside it.
+function segStrings(v) {
+  if (v == null) return [];
+  if (typeof v === 'string') return [v];
+  if (Array.isArray(v)) return v.flatMap(segStrings);
+  if (typeof v === 'object' && typeof v.text === 'string') return [v.text];
+  return [];
+}
+
+async function checkCourseRefs() {
+  const fails = [];
+  for (const name of animations) {
+    const file = path.join(ROOT, 'content', `${name}.js`);
+    let spec;
+    try { spec = (await import(pathToFileURL(file).href)).default; }
+    catch (e) { fails.push(`${name}: could not load to scan (${e.message.split('\n')[0]})`); continue; }
+
+    const strings = [];
+    if (spec.title) strings.push(spec.title);
+    if (spec.subtitle) strings.push(spec.subtitle);
+    for (const key of Object.keys(spec.traces ?? {})) {
+      const t = spec.traces[key];
+      let steps;
+      try { steps = typeof t === 'function' ? [...t()] : []; }
+      catch { continue; }                              // a trace that needs a driver -- skip, don't crash
+      for (const s of steps) { strings.push(...segStrings(s.narrate), ...segStrings(s.note)); }
+    }
+
+    const src = readFileSync(file, 'utf8').split('\n');
+    const lineOf = txt => {                            // first raw line holding the matched phrase (for a place to look)
+      const n = txt.toLowerCase();
+      const i = src.findIndex(l => l.toLowerCase().includes(n));
+      return i < 0 ? '?' : i + 1;
+    };
+    const seen = new Set();
+    for (const str of strings) {
+      for (const rule of COURSE_RULES) {
+        rule.re.lastIndex = 0;
+        let m;
+        while ((m = rule.re.exec(str))) {
+          const key = `${m[0]}@${m.index}@${str.slice(0, 12)}`;
+          if (seen.has(key)) continue; seen.add(key);
+          fails.push(`${name}.js:${lineOf(m[0])}: student-facing text names a course/assignment: "${m[0]}" (${rule.name})`);
+        }
+      }
+    }
+  }
+  return fails;
 }
 
 /* --------------------------------------------------------------- http server */
@@ -230,6 +302,7 @@ const dedupeFirst = (arr, keyOf) => {
 async function main() {
   const pairing = checkFilePairing();
   const links = checkLinkTargets();
+  const courseRefs = await checkCourseRefs();
 
   const { server, port } = await startServer();
   const base = `http://127.0.0.1:${port}`;
@@ -257,6 +330,7 @@ async function main() {
     ['verifyHeights',    N - failedAnims(heights), N, heights],
     ['console clean',    N - failedAnims(console_), N, console_],
     ['step integrity',   N - failedAnims(integrity), N, integrity],
+    ['no course refs',   N - failedAnims(courseRefs), N, courseRefs],
   ];
 
   console.log(`\npac-animations regression harness — ${N} animations, viewport ${VIEWPORT.width}×${VIEWPORT.height}\n`);
@@ -269,6 +343,7 @@ async function main() {
     ['LAYOUT STABILITY', layout], ['verifyHeights', heights],
     ['CONSOLE', console_], ['STEP INTEGRITY', integrity],
     ['LINK TARGETS', links.fails], ['FILE PAIRING', pairing.fails],
+    ['NO COURSE REFERENCES', courseRefs],
   ].filter(([, f]) => f.length);
 
   if (allFails.length) {

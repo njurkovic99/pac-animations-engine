@@ -178,7 +178,7 @@ const LARGE_NOTE =
 const SLIDER_NOTE =
   'Sweep it and watch the RATIO column rather than either time: 67× at 5000, 181× at 15000, ' +
   '337× at 30000. A ratio that itself keeps growing is what a difference in growth RATE looks like. ' +
-  'Your assignment asks for this graph from real measurements. Your absolute numbers will differ from these ' +
+  'Build this same graph yourself from real measurements. Your absolute numbers will differ from these ' +
   '— the two shapes will not.';
 
 /* ---- the trace: eight plotted measurements, then the slider goes live ---- */
