@@ -50,6 +50,14 @@ export function render(body, data, ctx) {
   const wrap = body.querySelector('.pac-cells');
   const mode = data?.render ?? 'box';
   wrap.dataset.render = mode;
+  // Reserve every value slot to the WIDEST value this panel ever holds across the
+  // whole trace, so a cell is the same width empty, stale, or filled -- the width
+  // analogue of the reserved heights, and the AUTHORING "fixed cell sizes" rule the
+  // engine previously enforced in column mode only. Resolved ONCE per panel from the
+  // materialised trace (`--cell-cols`, read by .pac-cell-value's min-width in the
+  // stylesheet). Grid cells are a fixed size already and opt out.
+  if (mode === 'grid') wrap.style.removeProperty('--cell-cols');
+  else wrap.style.setProperty('--cell-cols', cellCols(ctx));
   wrap.innerHTML = '';
   // Vertical stack column — a distinct layout from the horizontal box/bar/row
   // modes, so it is rendered by its own path (see renderColumn below).
@@ -340,6 +348,26 @@ function colMarker(m) {
   mk.innerHTML = `<span class="pac-marker-label">${esc(m.label)}</span>` +
                  `<span class="pac-marker-caret">&#9654;</span>`;
   return mk;
+}
+
+/* The widest value (in characters) this CELLS panel holds anywhere in the trace.
+ * The cells are monospace, so a character count reserves the value slot exactly via
+ * `min-width: <n>ch`. Resolved once and cached on the ctx (the same pattern as
+ * markerReserve). `empty` cells carry no value and never widen the reservation --
+ * they INHERIT it, which is the whole point (an empty cell keeps a member's width). */
+function cellCols(ctx) {
+  const steps = ctx.engine?.steps ?? [];
+  if (!steps.length) return 0;                         // rendered before materialise (a live slider panel) -- don't cache
+  if (ctx._cellCols != null) return ctx._cellCols;
+  const id = ctx.spec?.id ?? ctx.spec?.type;
+  let cols = 0;
+  for (const s of steps)
+    for (const c of (s.panels?.[id]?.cells ?? [])) {
+      if (c.role === 'empty') continue;
+      const v = c.value == null ? '' : String(c.value);
+      cols = Math.max(cols, [...v].length);            // count glyphs (● ∅ etc. are one)
+    }
+  return (ctx._cellCols = cols);
 }
 
 const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));

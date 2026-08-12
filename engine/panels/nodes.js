@@ -48,6 +48,24 @@ const LABEL_Y = 17, META_Y0 = 30, META_LH = 11, META_PAD = 8, NH_MIN = 24;
 const plainH = metaMax =>
   metaMax > 0 ? META_Y0 + (metaMax - 1) * META_LH + META_PAD : NH_MIN;
 
+/* The most `meta` lines any plain node in this panel carries across the WHOLE trace.
+ * plainH() turns it into a fixed box height, so nodes never grow as meta appears.
+ * Resolved once, cached on the ctx. Record and graph steps are skipped: record boxes
+ * are a fixed RH and graph nodes are circles, neither sized from meta. */
+function nodeMetaMax(ctx) {
+  const steps = ctx.engine?.steps ?? [];
+  if (!steps.length) return 0;                         // rendered before materialise -- don't cache
+  if (ctx._nodeMetaMax != null) return ctx._nodeMetaMax;
+  const id = ctx.spec?.id ?? ctx.spec?.type;
+  let m = 0;
+  for (const s of steps) {
+    const d = s.panels?.[id];
+    if (!d?.nodes || d.layout === 'graph' || d.template === 'record') continue;
+    for (const n of d.nodes) m = Math.max(m, n.meta?.length ?? 0);
+  }
+  return (ctx._nodeMetaMax = m);
+}
+
 export function mount(body) {
   body.innerHTML = `<svg class="pac-nodes" xmlns="http://www.w3.org/2000/svg"></svg>`;
 }
@@ -62,8 +80,11 @@ export function render(body, data, ctx) {
   if (data.layout === 'graph') { renderGraph(svg, data, ctx); return; }
 
   const record = data.template === 'record';
-  // Box height fits the tallest node's meta stack, so meta text never clips.
-  const metaMax = Math.max(0, ...data.nodes.map(n => n.meta?.length ?? 0));
+  // Box height fits the tallest meta stack the panel EVER shows across the whole
+  // trace -- not this step's -- so a node that gains a "level 3" / "depth 2" line
+  // mid-trace does not grow the box on that step (master invariant). Meta text still
+  // never clips: the height is the trace-wide maximum, an upper bound on every step.
+  const metaMax = nodeMetaMax(ctx);
   const w = record ? RW : NW, h = record ? RH : plainH(metaMax);
   const pos = layout(data, record);
 
