@@ -1,0 +1,169 @@
+name: harness
+
+# Runs the regression harness (and the visual-baseline diff) on every push to main
+# and every PR into main, so no one has to run either locally. The harness job is a
+# required gate; the screenshots job is informational (it posts a comment and uploads
+# the rendered frames + pixel-diff overlays as an artifact, but never fails the run).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write        # to post/update the summary comments
+
+env:
+  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+jobs:
+  # ---------------------------------------------------------------- harness (gate)
+  harness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm                       # caches the npm download cache, keyed on the lockfile
+
+      - run: npm ci
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+          restore-keys: ${{ runner.os }}-playwright-
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      # Run the harness WITHOUT failing the step, so the comment below always posts;
+      # the real pass/fail gate is the "Enforce harness result" step at the end.
+      - name: Run harness
+        id: run
+        run: |
+          set +e
+          node tools/harness.mjs > harness-output.txt
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+          cat harness-output.txt
+          exit 0
+
+      - name: Post / update harness comment
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- pac-harness -->';
+            const code = '${{ steps.run.outputs.code }}';
+            const output = fs.existsSync('harness-output.txt')
+              ? fs.readFileSync('harness-output.txt', 'utf8') : '(no output captured)';
+            const header = code === '0'
+              ? '✅ Harness passed — all six checks green'
+              : `❌ Harness failed (exit ${code})`;
+            const body = [
+              marker,
+              `### ${header}`,
+              '',
+              `<sub>commit \`${context.sha.slice(0, 7)}\` · [full run](${process.env.RUN_URL})</sub>`,
+              '',
+              '```',
+              output.trim(),
+              '```',
+            ].join('\n');
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const comments = await github.paginate(github.rest.issues.listComments,
+              { owner, repo, issue_number, per_page: 100 });
+            const prev = comments.find(c => c.body && c.body.includes(marker));
+            if (prev) await github.rest.issues.updateComment({ owner, repo, comment_id: prev.id, body });
+            else await github.rest.issues.createComment({ owner, repo, issue_number, body });
+
+      # THE GATE: the job (and thus the required check) fails iff the harness exited
+      # non-zero. This is intentionally red on main today -- 79 real layout-stability
+      # failures -- and stays red until the underlying bug class is fixed. It must not
+      # be neutralised to make CI green.
+      - name: Enforce harness result
+        if: always()
+        run: |
+          echo "harness exit code: ${{ steps.run.outputs.code }}"
+          test "${{ steps.run.outputs.code }}" = "0"
+
+  # ---------------------------------------------------- screenshots (informational)
+  screenshots:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - run: npm ci
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+          restore-keys: ${{ runner.os }}-playwright-
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Diff screenshots against committed baselines
+        id: run
+        run: |
+          set +e
+          node tools/screenshots.mjs > screenshots-output.txt
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+          cat screenshots-output.txt
+          exit 0
+
+      - name: Upload rendered frames + diff overlays
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: tools/.screenshots-tmp/
+          if-no-files-found: ignore
+
+      - name: Post / update screenshots comment
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- pac-screenshots -->';
+            const code = '${{ steps.run.outputs.code }}';
+            const output = fs.existsSync('screenshots-output.txt')
+              ? fs.readFileSync('screenshots-output.txt', 'utf8') : '(no output captured)';
+            const header = code === '0'
+              ? '✅ Screenshots — every frame matches its baseline'
+              : '🖼️ Screenshots differ from the committed baselines';
+            const body = [
+              marker,
+              `### ${header}`,
+              '',
+              '<sub>Informational only — this check never fails the run. Baselines are committed from a '
+                + 'different environment than the CI runner, so font rendering alone can register diffs; '
+                + `download the **screenshots** artifact from the [run](${process.env.RUN_URL}) to eyeball them.</sub>`,
+              '',
+              '```',
+              output.trim(),
+              '```',
+            ].join('\n');
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const comments = await github.paginate(github.rest.issues.listComments,
+              { owner, repo, issue_number, per_page: 100 });
+            const prev = comments.find(c => c.body && c.body.includes(marker));
+            if (prev) await github.rest.issues.updateComment({ owner, repo, comment_id: prev.id, body });
+            else await github.rest.issues.createComment({ owner, repo, issue_number, body });

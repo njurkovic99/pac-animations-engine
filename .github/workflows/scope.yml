@@ -1,0 +1,59 @@
+name: scope
+
+# Enforces a PR's own declared scope. If the PR's title or body contains a line
+#   SCOPE: <comma-separated top-level paths>
+# then every file the PR modifies must live under one of those paths. Generated
+# preview-*.html files are always allowed. A PR with no SCOPE: line is unconstrained.
+# This replaces eyeballing `git diff --stat` before merging.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  scope:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check declared scope
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const text = `${pr.title || ''}\n${pr.body || ''}`;
+
+            // First line of the form "SCOPE: a, b, c" (case-insensitive).
+            const m = text.match(/^\s*SCOPE:\s*(.+?)\s*$/mi);
+            if (!m) {
+              core.info('No `SCOPE:` line in the PR title or body — nothing to enforce.');
+              return;
+            }
+            const scope = m[1].split(',').map(s => s.trim().replace(/\/+$/, '')).filter(Boolean);
+            core.info(`Declared scope: ${scope.join(', ')}`);
+
+            const inScope = (file) => {
+              const base = file.split('/').pop();
+              if (/^preview-.*\.html$/.test(base)) return true;    // generated, always allowed
+              return scope.some(p => file === p || file.startsWith(p + '/'));
+            };
+
+            const { owner, repo } = context.repo;
+            const files = await github.paginate(github.rest.pulls.listFiles,
+              { owner, repo, pull_number: pr.number, per_page: 100 });
+
+            const offenders = files.map(f => f.filename).filter(f => !inScope(f));
+            core.info(`Changed files: ${files.length}; offenders: ${offenders.length}`);
+
+            if (offenders.length) {
+              core.setFailed(
+                `PR declares SCOPE: ${scope.join(', ')} but modifies ${offenders.length} file(s) outside it:\n` +
+                offenders.map(f => `  - ${f}`).join('\n') +
+                `\n\nEither widen the SCOPE: line or drop these changes. ` +
+                `(preview-*.html files are exempt.)`
+              );
+            } else {
+              core.info(`All ${files.length} changed file(s) are within the declared scope. ✅`);
+            }
