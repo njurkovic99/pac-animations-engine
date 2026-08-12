@@ -423,10 +423,18 @@ body {
   min-width: 40px; text-align: center; background: var(--bg);
 }
 .pac-cell-label { display: block; font-size: 10px; color: var(--text-dim); }
-/* The value always reserves one line of height, so a cell with no value (an
- * `empty` cell) keeps the SAME dimensions as a filled one -- the X then spans a
- * full box rather than a squashed strip. */
-.pac-cell-value { display: block; min-height: 1.25em; }
+/* The value slot reserves a fixed SIZE, so a cell with no value (an `empty` cell),
+ * a stale one, and a filled one are all identical -- the X then spans a full box
+ * rather than a squashed strip. Height: a fixed line box (line-height pinned so a
+ * filled line never exceeds the reserved min-height, which is what used to let a
+ * filled cell grow ~3px taller than an empty one). Width: `--cell-cols` characters,
+ * the widest value the panel holds anywhere in the trace, resolved per panel in
+ * panels/cells.js. Both axes now hold across every step, in every render mode --
+ * previously only column mode reserved them. */
+.pac-cell-value {
+  display: block; line-height: 1.5; min-height: 1.5em;
+  min-width: calc(var(--cell-cols, 0) * 1ch);
+}
 .pac-cell[data-role="active"]   { border-color: var(--accent); background: var(--accent-soft); }
 .pac-cell[data-role="compared"] { border-color: var(--highlight); }
 .pac-cell[data-role="ok"]       { border-color: var(--ok); }
@@ -465,7 +473,11 @@ body {
 .pac-cell[data-role="stale"]    { opacity: .4; border-color: transparent; }
 
 .pac-cells[data-render="row"] .pac-cell {
-  display: flex; align-items: baseline; gap: 8px; text-align: left;
+  /* center, not baseline: a baseline-aligned row takes its cross size from where the
+   * value's text baseline sits, which SHIFTS when the value is empty (no baseline) vs
+   * filled -- so an empty cell was ~4px taller than a filled one. Centre aligns on the
+   * boxes, whose heights are already reserved, so the row height holds across steps. */
+  display: flex; align-items: center; gap: 8px; text-align: left;
 }
 .pac-cells[data-render="row"] .pac-cell-label { display: inline; }
 
@@ -497,7 +509,7 @@ body {
   min-width: 30px; min-height: 30px; padding: 4px;
   display: flex; align-items: center; justify-content: center;
 }
-.pac-matrix-cell .pac-cell-value { min-height: auto; }
+.pac-matrix-cell .pac-cell-value { min-height: auto; min-width: 0; }
 .pac-matrix-cell[data-val="F"] .pac-cell-value { color: var(--text-dim); }
 .pac-matrix-cell[data-val="T"] .pac-cell-value { color: var(--text); font-weight: 600; }
 .pac-matrix-cell[data-diagonal]:not([data-role]) { background: rgba(139, 147, 167, 0.09); }
