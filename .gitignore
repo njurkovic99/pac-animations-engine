@@ -1,7 +1,8 @@
-# Local preview tooling — not part of the engine
+# Installed dependencies — the regression harness's devDependencies (playwright,
+# pngjs, pixelmatch) are restored with `npm install`, never committed.
 node_modules/
-package.json
-package-lock.json
 
-# Scratch space for local render/screenshot scripts
+# Scratch space for local render/screenshot scripts, and the harness's throwaway
+# temp renders (tools/screenshots.mjs writes here, then diffs against tools/baseline).
 scratchpad/
+tools/.screenshots-tmp/
