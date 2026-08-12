@@ -17,98 +17,6 @@ worth keeping so it lands consistently whenever it does get built. The cost of
 
 ---
 
-## Per-course language selection — `?lang=`
-
-**Status: designed and approved. Build FIRST, before any Phase 2 animation is
-authored.** This is the one item in this file with a scheduled build; it is here
-rather than in `AUTHORING.md` only because it is not merged yet. Move it into
-`AUTHORING.md` Part 2 (CODE) the day the branch merges, and delete it here.
-
-### The problem it solves
-
-Twelve Phase-2 animations are shared across courses that are not the same
-language. `objects-constructor-init` backs bCpp A7, bJava A7 and aJava A1 — one
-C++ course and two Java courses, from one animation.
-
-That collides head-on with two rules already in force:
-
-- `AUTHORING.md` Part 2: the four programming courses get **no language toggle**;
-  tabs there mean *source files in one program*, never languages.
-- `AUTHORING.md` Part 1: filenames carry **no language suffix**, so
-  `objects-constructor-init-cpp` / `-java` twins are not available either.
-
-Both rules are right. What was missing is the thing that decides *which* listing a
-given course sees.
-
-### The resolution
-
-**The content file declares which listings exist. The course decides how many are
-shown.** A shared animation declares every language it honestly supports:
-
-```js
-languages: ['cpp', 'java'],   // order = fallback order; first is the default
-```
-
-and the per-course Canvas iframe carries the choice:
-
-```
-objects-constructor-init.html?a=bcpp-a7&lang=cpp
-objects-constructor-init.html?a=bjava-a7&lang=java
-objects-constructor-init.html?a=ajava-a1&lang=java
-```
-
-A bCpp student sees C++ and no tab bar. A bJava student sees Java and no tab bar.
-Neither can see the other language, so the "no language toggle" rule holds — it is
-now enforced by the URL, not by the content file. One build serves three courses.
-
-`?lang=` is **inert configuration in the same family as `?a=`, not a mode.** It
-selects which of several pre-written listings is displayed. It changes no step
-data, no trace, no behavior. This is the distinction that makes it acceptable
-after `?mode=` was removed: `?mode=` changed what the animation *did*.
-
-### Engine rules — exactly these, no more
-
-1. **`?lang=` applies only when the content file declares a `languages` array.**
-   A content file whose listings are keyed by filename (a multi-file program) has
-   no languages to select and ignores the parameter entirely. `?lang=` can never
-   fight source-file tabs.
-2. **Hide the tab bar whenever exactly one listing resolves** — whether because
-   `?lang=` narrowed a multi-language file to one, or because the content file
-   declared only one language to begin with. Not a disabled tab, not a lone tab: a
-   single tab is an affordance that does nothing. (This also cleans up the
-   single-language singles in Phases 3–5.)
-3. **Absent, empty, or unrecognized `?lang=` falls back to the first declared
-   language, with the tab bar shown exactly as today.** A course must never get a
-   blank code panel or an error because a URL was typed wrong.
-4. **`?lang=` composes with `?a=`** in either order, and both stay invisible to a
-   student who does not read URLs.
-5. **`?lang=` and `profile` are independent axes.** Do not couple them. A beginner
-   profile still caps panels at 3 and hides addresses regardless of language, and a
-   `standard` profile animation may still be language-narrowed.
-
-**The change must be a strict no-op for all 22 existing ds pages.** None of them
-carries `?lang=`, all declare three languages, all keep their tab bar and their
-current default. That is the review test for the branch: every ds animation looks
-and behaves identically before and after.
-
-### What it obliges elsewhere
-
-- **`courses.json` gains a course-level `"lang"`** (`"cpp"` for bCpp/aCpp,
-  `"java"` for bJava/aJava; `ds` keeps its `languages` array and gets none) so
-  that per-course iframe URLs can be emitted with the right value. Per process
-  rule 5 this rides in its own commit, never with an animation.
-- The deferred `?a=` emit machinery below becomes `?a=` **and** `?lang=` emit
-  machinery. Same deliverable, one more field.
-
-### The alternative that was rejected
-
-Emitting two thin wrapper pages in `anim/` from one content file avoids the URL
-parameter, but doubles the page count for every shared animation and puts a
-language into a filename by the back door — the exact thing the naming rule
-exists to prevent.
-
----
-
 ## THINK mode — interactive predict gates
 
 **Status: deferred in full.** Every animation ships WATCH-only. Rationale and the
@@ -214,7 +122,7 @@ misteach.
 
 Cost when it happens is low: CODE resolves `step.line` against whichever listing is
 shown, so a Python tab is only a new listing string — no step data, trace, or engine
-changes. Once `?lang=` exists, a Python tab is additionally *opt-in per course URL*
+changes. With `?lang=` now in force, a Python tab is additionally *opt-in per course URL*
 rather than something every ds student sees, which lowers the cost of the decision
 further.
 
@@ -223,7 +131,8 @@ further.
 ## Emit machinery for `?a=` and `?lang=` markers
 
 The hidden assignment marker (`...html?a=ds-a2`) is inert and instructor-only, and
-the engine correctly ignores it. `?lang=` (above) is emitted from the same place.
+the engine correctly ignores it. `?lang=` (now in force — see `AUTHORING.md` Part 2,
+CODE) is emitted from the same place.
 Two deliverables are deferred:
 
 - emitting `?a=` and `?lang=` automatically when generating per-course iframe URLs

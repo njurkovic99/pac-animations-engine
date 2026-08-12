@@ -160,6 +160,50 @@ Each trace normally addresses **its own** listing's line numbers, so listings ne
 not stay line-aligned — *except* in race mode, where aligning them to each other is
 the point (Part 6).
 
+### Per-course language selection — `?lang=` (in force; built in PR #34)
+
+A single shared animation serves courses in different languages. The **content file
+declares which listings exist**; the **per-course iframe URL decides how many are
+shown**. A shared animation declares every language it honestly supports —
+
+```js
+languages: ['cpp', 'java'],   // order = fallback order; first is the default
+```
+
+— and the per-course Canvas iframe carries the choice, e.g.
+`objects-constructor-init.html?a=bcpp-a7&lang=cpp`. A bCpp student then sees C++ and
+no tab bar; a bJava student sees Java and no tab bar. The "no language toggle for a
+single-language course" rule above is thus enforced by the URL, not by the content
+file, and one build serves three courses. `?lang=` is **inert configuration in the
+same family as `?a=`, not a mode**: it selects which pre-written listing is displayed
+and changes no step data, no trace, no behavior.
+
+The engine follows exactly these rules, no more:
+
+1. **`?lang=` applies only when the content file declares a `languages` array.** A
+   file whose listings are keyed by filename (a multi-file program) has no languages
+   to select and ignores the parameter entirely — `?lang=` can never fight
+   source-file tabs.
+2. **The tab bar is hidden whenever exactly one listing resolves** — whether because
+   `?lang=` narrowed a multi-language file to one, or because the file declared only
+   one language to begin with. Not a disabled tab, not a lone tab: a single tab is an
+   affordance that does nothing. (This also cleans up the single-language singles in
+   Phases 3–5.)
+3. **Absent, empty, or unrecognized `?lang=` falls back to the first declared
+   language**, with the tab bar shown as normal. A course never gets a blank code
+   panel or an error because a URL was typed wrong.
+4. **`?lang=` composes with `?a=`** in either order, and both stay invisible to a
+   student who does not read URLs.
+5. **`?lang=` and `profile` are independent axes** — never coupled. A `beginner`
+   profile still caps panels at 3 and hides addresses regardless of language, and a
+   `standard` animation may still be language-narrowed.
+
+> **Known gap (harmless today).** The resolved tab set follows the **listings
+> object's key order**, not the order of the `languages` array. It is harmless while
+> every declared language is present and the intended default is also the first
+> listing key, but a file whose `languages` order disagrees with its listings key
+> order would show tabs in the listings' order. Keep the two orders in agreement.
+
 ## CELLS
 
 `{render: 'box'|'bar'|'row', cells: [{value, label, role, anchor}]}`.
