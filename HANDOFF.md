@@ -23,12 +23,16 @@ build order and project-wide conventions.
 
 Built, rendered, merged to main:
 
-- `engine/` — driver, five panel renderers, arrow overlay, styles (15 tokens).
-- `content/recursion-fib-levels.js` — ds A5. Reproduces the ds5.html expected
-  trace (level sequence 0,2,4,3,1,3,2,4,3). Predict gate branches into the
-  students' real bug (`level+1` instead of `level+2`).
-- `content/lists-doubly-insert-order.js` — ds A10. Four-line doubly-linked
-  insertion; arrows fixed and merged.
+- `engine/` — driver, eight panel renderers (CODE, CELLS, NODES, STREAM, CHART,
+  PEGS, CALLSTACK, slider), the cross-panel arrow overlay, and styles.
+- **All 22 ds-slate animations** — `content/*.js` + `anim/*.html`, each rendered and
+  merged to main. `content/` is the authoritative list; count it rather than trust a
+  number written here.
+- The build is uniformly **WATCH-only**. The `?mode=` parameter and the predict-gate
+  / wrong-answer `branch` mechanism were stripped out long ago; no animation contains
+  a gate. `recursion-fib-levels` (ds A5) reproduces the ds5.html trace (level sequence
+  0,2,4,3,1,3,2,4,3) as a pure step-through — the common `level+1` bug is *narrated*
+  on a normal step, never branched into.
 
 ### Capabilities: DESIGNED vs BUILT
 
@@ -54,18 +58,26 @@ estimating an animation.
 | PEGS renderer | AUTHORING | YES | `recursion-hanoi-leap` |
 | Attribution footer | AUTHORING | YES | engine-level, all animations |
 | Arrow-adjacency placement | AUTHORING | YES | `lists-insert-alpha` |
+| Graph layout in NODES | panel-inventory §2 | YES | `graphs-representations` |
 | Race driver (lockstep generators) | AUTHORING, panel-inventory §4 | YES, but **NO USER** in the repo | intended `sorting-race-statements` |
-| **Graph layout in NODES** | panel-inventory §2 | **NO** | `graphs-representations` |
-| Loop controls (step out / run to end) | AUTHORING | NO | first loop animation |
-| THINK mode | this doc | NO | deferred in full |
+| `profile: 'beginner'` (cap 3 panels, hide addresses) | AUTHORING | YES, but **NO USER** in the repo | first beginner-profile page |
+| Filename-keyed CODE tabs (multi-file program) | AUTHORING | YES, but **NO USER** in the repo | a multi-source Phase-2 animation |
+| `?lang=` per-course language selection | AUTHORING (built PR #34) | YES, but **NO USER** in the repo | first shared Phase-2 animation |
+| Loop controls (step out / run to end) | PLANNED | NO | first loop animation |
+| THINK mode | PLANNED | NO | deferred in full |
 
-**ONE unbuilt capability remains, and TWO animations need it: graph layout in NODES**, needed by
-`graphs-representations` (A13) and `graphs-bfs-dfs`. Everything else on the ds slate is
-a pure inherit. Budget those two accordingly and treat the rest as cheap.
+> **⚠ This table reading almost-all-YES makes Phase 2 look free. It is not.** Three
+> of the YES rows — `profile: 'beginner'`, filename-keyed CODE tabs, and the race
+> driver — are BUILT but have **never run in production**: no shipped animation
+> exercises them. Phase 2 debuts all three. **"Built, no user" means untested, not
+> done** — that is exactly what made `queues-count-vs-rear` look like a
+> one-capability build when it was actually two. Budget the first Phase-2 animations
+> for shaking these out, not as a pure inherit.
 
-The race driver is built and working but nothing exercises it — `queues-count-vs-rear`
-was designed as a race and then dropped to a single representation. Treat it as
-untested in production until `sorting-race-statements`.
+The ds slate is otherwise fully built and its capabilities are all proven in
+production. Two ds items are NOT done: `graphs-bfs-dfs` is **DEFERRED** — there is no
+lecture material to base it on — and `hashing-collision-strategies` (ds A8) is the one
+ds assignment still **without a backing animation**, not yet built.
 
 Known doc conflict, unresolved: `AUTHORING.md` lists CELLS roles as
 `active, compared, ok, error, empty`; `panel-inventory.md` §2 lists
@@ -78,43 +90,6 @@ Two reversible engine decisions:
 - **The n-2 branch is evaluated first** in `recursion-fib-levels`, matching
   ds5.html. Conflicts with `recurs2.gif` (left-to-right). Both orders may be
   wanted; flagged for Neven, unresolved.
-
----
-
-## FIRST TASK — strip THINK out; make the repo uniformly WATCH-only
-
-An earlier revision added interactive "THINK" gates and a `?mode=watch|think`
-parameter. That is being **fully deferred**. This build is WATCH-only. Remove it
-so nothing is half-implemented and no future session re-introduces it.
-
-Do all of the following, then render, screenshot, confirm, commit:
-
-1. **Engine:** remove the `?mode=` URL-parameter handling and the predict-gate
-   behavior (the gate UI, the stop-on-gate, and the wrong-answer `branch`
-   mechanism). A step of `type:'predict'`, if any remain, should render as an
-   ordinary step. Keep everything else (snapshots, Back, line highlight, panels,
-   arrows).
-2. **Content — the two existing animations** (`recursion-fib-levels`,
-   `lists-doubly-insert-order`): convert their predict gates into **plain
-   narrated WATCH steps**. Do NOT delete the teaching insight — turn it into
-   narration. Where a gate asked the student to predict, the WATCH step instead
-   *states* the common mistake and then shows why it is wrong:
-   - fib: a step narrating "a common error is `fib(n-2, level+1)`; note that
-     n + level must stay constant, so it must be `level+2`," then the animation
-     proceeds correctly. (Do not execute the buggy branch.)
-   - list insertion: a step narrating "a common error is doing `temp.prev = ins`
-     first; then line 4 dereferences a pointer that isn't set yet," shown as
-     explanation, then the correct order proceeds.
-   Remove the `buggy` traces and the `branch`/`options`/`question` fields from
-   both content files.
-3. Confirm both animations play start-to-finish as pure click-through, with the
-   line highlight advancing and no gate ever stopping the student.
-
-Known issue that motivated this (for the deferred THINK work later): in the old
-THINK mode, choosing a wrong answer caused the highlight/execution to jump to the
-wrong line — i.e. the animation followed the bad advice, which is pedagogically
-backwards. That is one of the THINK-behavior problems to solve when THINK is
-eventually built.
 
 ---
 
@@ -143,32 +118,41 @@ phase, order is flexible; across phases, go in order.
 
 `●` = shared across courses (build once, reuse via the `courses.json` mapping).
 
-### Phase 1 — ds core (20) · proves every renderer
+### Phase 1 — ds core · proves every renderer
+
+All BUILT and merged except the two marked. `content/` is the source of truth for
+what exists; this is the plan it fulfilled. (`complexity-growth-curves` moved to
+Phase 2, where it is shared with aJava.)
 ```
-lists-array-insert-delete       ds A1   BUILT
-queues-count-vs-rear            ds A2   race driver + index pointer — BOTH UNBUILT
-stacks-paren-scanner            ds A3   predict/trap
-stacks-postfix-eval             ds A4
-recursion-factorial-stack       ds
-recursion-fib-levels            ds A5   BUILT
-recursion-hanoi                 ds      PEGS renderer (three disks, seven moves)  BUILT
-sorting-quicksort-partition     ds A6 KEY
-heap-is-this-valid              ds      confusion-first (WATCH)   BUILT
-sorting-heapsort-dual           ds A7   array<->tree dual view
-sorting-timing-chart            ds A7   BUILT (CHART + slider)
-hashing-collision-strategies    ds A8
-pointers-address-model          ds      BUILT
-lists-insert-alpha              ds A9   BUILT   arrows
-lists-doubly-insert-order       ds A10  BUILT
-trees-bst-operations            ds A11  SPLIT 3 WAYS — all BUILT
-trees-recursive-height          ds A12  BUILT
-graphs-representations          ds A13
-graphs-bfs-dfs                  ds
-complexity-growth-curves        ● ds analysis (also aJava)
+lists-array-insert-delete       ds A1    BUILT
+queues-count-vs-rear            ds A2    BUILT  (index pointer + stale role; NOT the race driver — dropped to one representation)
+stacks-paren-scanner            ds A3    BUILT  (vertical CELLS column)
+stacks-postfix-eval             ds A4    BUILT
+recursion-factorial-stack       ds       BUILT
+recursion-fib-levels            ds A5    BUILT
+recursion-hanoi                 ds       BUILT  (PEGS renderer)
+recursion-hanoi-leap            ds       BUILT  (Hanoi variant — split)
+sorting-quicksort-partition     ds A6    BUILT  KEY
+sorting-quicksort-worstcase     ds A6    BUILT  (A6's second backer — split)
+heap-is-this-valid              ds       BUILT  (confusion-first, WATCH)
+sorting-heapify                 ds       BUILT
+sorting-heapsort-dual           ds A7    BUILT  (array<->tree dual view)
+sorting-timing-chart            ds A7    BUILT  (CHART + slider)
+hashing-collision-strategies    ds A8    NOT BUILT — the only ds assignment with no backing animation
+pointers-address-model          ds       BUILT
+lists-insert-alpha              ds A9    BUILT  (arrows)
+lists-doubly-insert-order       ds A10   BUILT
+trees-bst-insert                ds A11   BUILT  ┐  A11 was "trees-bst-operations",
+trees-bst-traversals            ds A11   BUILT  ┤  split three ways
+trees-bst-delete                ds A11   BUILT  ┘
+trees-recursive-height          ds A12   BUILT
+graphs-representations          ds A13   BUILT  (graph layout in NODES)
+graphs-bfs-dfs                  ds       DEFERRED — no lecture material to base it on
 ```
 
-### Phase 2 — high-share animations (20) · each serves 2–3 courses
+### Phase 2 — high-share animations · each serves 2–3 courses
 ```
+complexity-growth-curves        ● ds analysis · aJava   (moved from Phase 1; shared)
 objects-constructor-init        ● bCpp A7 · bJava A7 · aJava A1
 arrays-dont-copy                ● bCpp · bJava · aJava
 functions-overload-resolution   ● bCpp A6 · aJava A1
@@ -232,7 +216,10 @@ structs-and-pointers         port struct-ptr inheritance-base-derived    port oo
                                              dispatch-vtable             A8 · port oop5
 ```
 
-**Total: 91** (two built). Phase 1 is the priority batch. Batch instruction to
+**Total: ~90 planned; 22 built** — the full ds slate except `hashing-collision-strategies`.
+The exact total drifts as animations split (A6, A7, A11, and Hanoi each became two or
+three), so treat any single number as approximate and count `content/` for what
+actually exists. Phase 1 is the priority batch. Batch instruction to
 Claude Code, e.g.: *"Build the next five Phase-1 animations from HANDOFF.md,
 following AUTHORING.md. WATCH-only — passive click-through, no gates or questions.
 Render and screenshot each before committing."*
@@ -280,12 +267,12 @@ aJava  A1 objects-constructor-init;random-pseudorandom-seed (a1-1,a1-2)
        A4 objects-aggregation;memory-reachability (a4-1,a4-2)
        A6 inheritance-super-chain            A7 dispatch-which-method-runs (KEY,direct)
        A8 gui-event-dispatch
-ds     A1 lists-array-insert-delete   A8  hashing-collision-strategies
+ds     A1 lists-array-insert-delete   A8  hashing-collision-strategies (NOT BUILT)
        A2 queues-count-vs-rear        A9  lists-insert-alpha
        A3 stacks-paren-scanner        A10 lists-doubly-insert-order
-       A4 stacks-postfix-eval         A11 trees-bst-operations
+       A4 stacks-postfix-eval         A11 trees-bst-insert;trees-bst-traversals;trees-bst-delete (a11-1,a11-2,a11-3)
        A5 recursion-fib-levels        A12 trees-recursive-height
-       A6 sorting-quicksort-partition (KEY)  A13 graphs-representations
+       A6 sorting-quicksort-partition (KEY);sorting-quicksort-worstcase (a6-1,a6-2)  A13 graphs-representations
        A7 sorting-heapsort-dual;sorting-timing-chart (a7-1,a7-2)
 ```
 KEY backers are deliberately adjacent, never the graded solution.
@@ -365,6 +352,29 @@ which sits on an unnumbered line or folds into the preamble.
 - Are the 20 aCpp animation pages actually unpublished in Canvas? (2 min.)
 - Fix the aJava schedule's malformed span (polymorphism/KEY module cell is blank).
 - `recurs2.gif` vs ds5.html evaluation-order conflict.
+
+## Tooling — regression harness and screenshot baselines
+
+`tools/harness.mjs` drives every animation headlessly and asserts the layout
+invariants (nothing resizes as steps advance); `tools/screenshots.mjs` renders each
+animation to PNG and diffs it against committed baselines in `tools/baseline/`. CI
+runs both on every PR (`.github/workflows/harness.yml`), and `.github/workflows/scope.yml`
+enforces the `SCOPE:` line declared in each PR body.
+
+**Screenshot baselines are regenerated in CI, never locally.** Font rasterization
+differs between the CI container and a Windows machine, so a local
+`tools/screenshots.mjs --update` would churn every baseline at once. Refresh baselines
+from a CI run, not from your own machine.
+
+## PROCESS RULE 8 — report in the PR, not in chat
+
+Rules 1–7 ("PROCESS RULES EARNED THE HARD WAY") live in `HANDOVER.md`; this is the
+eighth, recorded here because `HANDOVER.md` was out of scope for the pass that added it.
+
+**8. Report in the PR, not in chat.** Every finding, blocker, decision and measurement
+goes in the PR body or a PR comment. Work committed straight to main reports in the
+commit message. The chat transcript is not a durable record — nothing that matters may
+exist only there.
 
 ## What stays a chat decision, not a Claude Code one
 
