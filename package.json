@@ -1,0 +1,16 @@
+{
+  "name": "pac-animations-engine",
+  "version": "1.0.0",
+  "private": true,
+  "description": "pac-animations engine, content, and regression tooling",
+  "type": "module",
+  "scripts": {
+    "harness": "node tools/harness.mjs",
+    "screenshots": "node tools/screenshots.mjs"
+  },
+  "devDependencies": {
+    "pixelmatch": "^5.3.0",
+    "playwright": "^1.48.0",
+    "pngjs": "^7.0.0"
+  }
+}
