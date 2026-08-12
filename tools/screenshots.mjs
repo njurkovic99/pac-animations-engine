@@ -98,14 +98,17 @@ async function renderFrames(browser, base, name) {
 
 const frameName = (name, pct) => `${name}@${String(pct).padStart(3, '0')}.png`;
 
-/* Compare two PNG buffers. Returns {same, reason, diff} -- diff is the changed-pixel
- * count. Antialiasing pixels are not counted (pixelmatch default). */
+/* Compare two PNG buffers. Returns {same, reason, diff, image} -- diff is the
+ * changed-pixel count, image is a PNG buffer visualising the changed pixels (null
+ * when identical or when the sizes differ, since pixelmatch needs equal sizes).
+ * Antialiasing pixels are not counted (pixelmatch default). */
 function comparePng(aBuf, bBuf) {
   const a = PNG.sync.read(aBuf), b = PNG.sync.read(bBuf);
   if (a.width !== b.width || a.height !== b.height)
-    return { same: false, reason: `size ${a.width}x${a.height} -> ${b.width}x${b.height}`, diff: -1 };
-  const diff = pixelmatch(a.data, b.data, null, a.width, a.height, { threshold: 0.1 });
-  return { same: diff === 0, reason: `${diff}px changed`, diff };
+    return { same: false, reason: `size ${a.width}x${a.height} -> ${b.width}x${b.height}`, diff: -1, image: null };
+  const out = new PNG({ width: a.width, height: a.height });
+  const diff = pixelmatch(a.data, b.data, out.data, a.width, a.height, { threshold: 0.1 });
+  return { same: diff === 0, reason: `${diff}px changed`, diff, image: diff ? PNG.sync.write(out) : null };
 }
 
 /* ---------------------------------------------------------------------- main */
@@ -134,7 +137,12 @@ async function main() {
       const baseFile = path.join(BASELINE, file);
       if (!existsSync(baseFile)) { missing.push(file); continue; }
       const cmp = comparePng(readFileSync(baseFile), png);
-      if (!cmp.same) differing.push({ name, pct, reason: cmp.reason });
+      if (!cmp.same) {
+        differing.push({ name, pct, reason: cmp.reason });
+        // Alongside the fresh render, drop a pixel-diff overlay (magenta = changed)
+        // so the uploaded artifact shows WHERE a frame moved, not just that it did.
+        if (cmp.image) writeFileSync(path.join(tmp, `${name}@${String(pct).padStart(3, '0')}.diff.png`), cmp.image);
+      }
     }
   }
   process.stderr.write(' '.repeat(60) + '\r');
