@@ -281,12 +281,13 @@ const FIND2_NOTE =
   'per cell to turn a four-step search into a one-step one.';
 
 const FINAL_NOTE = [
-  'BB hashes to 4. Cell 4 is empty — AAB used to be there — so findProbe stops at the first empty cell and ' +
+  'BB hashes to 4. Cell 4 is empty — AAB used to be there — so the search stops at the first empty cell and ' +
   'reports NOT FOUND, while BB is sitting in plain view at cell 5. Deleting AAB broke the probe chain that ' +
-  'led to BB. This is why deletion is the hard part of the assignment: you cannot simply empty a cell, or ' +
+  'led to BB. This is why deletion is the problem this leaves you to solve: you cannot simply empty a cell, or ' +
   'every key that had to probe past it becomes unreachable. It is worse in coalesced chaining, where removing ' +
-  'a cell in the middle of a chain orphans every item linked behind it. The repair is left to you — ds8 asks ' +
-  'you to implement delete, and this failure is the reason it is not a one-liner. One more trap: next = 0 ' +
+  'a cell in the middle of a chain orphans every item linked behind it. The repair is left to you — a delete ' +
+  'that keeps every remaining key reachable is exactly that problem, and this failure is the reason it is not ' +
+  'a one-liner. One more trap: next = 0 ' +
   'means “end of chain,” yet cell 0 is a real slot, so a key that lands in cell 0 makes the marker ' +
   'ambiguous — the very problem the queue solved with a sentinel that can never be a valid index. ',
   { href: 'queues-count-vs-rear.html', text: 'See the sentinel that cannot be a real index' },
@@ -520,7 +521,7 @@ function* trace() {
 
 export default {
   title: 'Collision strategies in a hash table',
-  subtitle: 'Linear probing, coalesced chaining, and the deletion trap',
+  subtitle: 'Linear probing and coalesced chaining',
   profile: 'standard',
   columns: 2,
   languages: ['pseudo', 'java', 'cpp'],
