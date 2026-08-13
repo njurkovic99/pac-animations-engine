@@ -30,6 +30,10 @@
  *      note) names an assignment, a course, or an assignment/course code. Scans the
  *      LOADED spec, so code comments and CODE listings are exempt, and the
  *      `assignment` rule fires only after the/your/this, so the CS sense is left alone.
+ *   8. NO HORIZONTAL OVERFLOW -- the CODE panel and every STRUCTURE panel must fit
+ *      their width at every step: scrollWidth > clientWidth (a sideways scrollbar) is
+ *      a failure, reported with both pixel values. A structure never scrolls sideways,
+ *      and CODE takes all the width the other column leaves, so its widest line fits.
  */
 
 import { chromium } from 'playwright';
@@ -208,9 +212,33 @@ const SIZE_SIG = () => {
   return sig;
 };
 
+/* Horizontal overflow of the CODE panel and every STRUCTURE panel. A structure a
+ * student is reading must never scroll sideways, and the width policy (AUTHORING.md
+ * "Where panels go") gives CODE all the width the other column does not need, so its
+ * widest line must fit too. Measures the scroll containers (the panel body, plus the
+ * inner .pac-code for the code panel): scrollWidth > clientWidth is a sideways
+ * scrollbar. Book panels are exempt (the policy names structure + CODE). Runs in the
+ * page. */
+const H_OVERFLOW = () => {
+  const out = [];
+  [...document.querySelectorAll('.pac-panel')].forEach((p, pi) => {
+    const kind = p.dataset.kind;
+    if (kind !== 'code' && kind !== 'structure') return;
+    const title = (p.querySelector('.pac-panel-head span')?.textContent ?? '').trim();
+    const els = [p.querySelector('.pac-panel-body')];
+    if (kind === 'code') els.push(p.querySelector('.pac-code'));
+    for (const el of els) {
+      if (!el) continue;
+      if (el.scrollWidth - el.clientWidth > 0)
+        out.push({ key: `panel[${pi}] ${kind} "${title}"`, sw: el.scrollWidth, cw: el.clientWidth });
+    }
+  });
+  return out;
+};
+
 /* Run all per-animation browser checks. Returns a per-check pass flag + failures. */
 async function runAnimation(browser, base, name) {
-  const fails = { layout: [], heights: [], console: [], integrity: [] };
+  const fails = { layout: [], heights: [], console: [], integrity: [], overflow: [] };
   const page = await browser.newPage({ viewport: VIEWPORT });
 
   const consoleErrs = [];
@@ -236,7 +264,13 @@ async function runAnimation(browser, base, name) {
       fails.heights.push(`${name}: verifyHeights column "${row.column}" delta=${row.delta}px (${row.heights} vs content ${row.content})`);
 
     // 1. LAYOUT STABILITY -- signature at step 0, re-measured every step.
+    // 8. NO HORIZONTAL OVERFLOW -- measured at the same points.
     const ref = await page.evaluate(SIZE_SIG);
+    const recordOverflow = (arr, step) => {
+      for (const o of arr)
+        fails.overflow.push(`${name}: step ${step}: ${o.key} scrolls horizontally (scrollWidth ${o.sw}px > clientWidth ${o.cw}px)`);
+    };
+    recordOverflow(await page.evaluate(H_OVERFLOW), 0);
     for (let step = 1; step < nSteps; step++) {
       const advanced = await page.evaluate(() => {
         const btn = document.querySelector('.pac-controls [data-act="next"]');
@@ -246,6 +280,7 @@ async function runAnimation(browser, base, name) {
       });
       if (!advanced.ok) { fails.integrity.push(`${name}: ${advanced.why}`); break; }
       await page.waitForTimeout(8);
+      recordOverflow(await page.evaluate(H_OVERFLOW), step);
       const cur = await page.evaluate(SIZE_SIG);
       for (const key of Object.keys(ref)) {
         if (!(key in cur)) continue;                   // content added/removed -> not a resize
@@ -259,6 +294,8 @@ async function runAnimation(browser, base, name) {
     // dedupe layout failures (a size that drifts once tends to stay drifted for the
     // rest of the trace -- report the first occurrence of each key, not every step).
     fails.layout = dedupeFirst(fails.layout, l => l.replace(/step \d+/, 'step'));
+    // dedupe overflow the same way -- first step per panel that scrolls.
+    fails.overflow = dedupeFirst(fails.overflow, l => l.replace(/step \d+/, 'step'));
 
     // 4. STEP INTEGRITY.
     const end = await page.evaluate(() => ({ i: window.pac.i, atEnd: window.pac.atEnd, n: window.pac.steps.length }));
@@ -308,12 +345,13 @@ async function main() {
   const base = `http://127.0.0.1:${port}`;
   const browser = await chromium.launch({ executablePath: findChromium() });
 
-  const layout = [], heights = [], console_ = [], integrity = [];
+  const layout = [], heights = [], console_ = [], integrity = [], overflow = [];
   for (const name of animations) {
     process.stderr.write(`  … ${name}\r`);
     const f = await runAnimation(browser, base, name);
     layout.push(...f.layout); heights.push(...f.heights);
     console_.push(...f.console); integrity.push(...f.integrity);
+    overflow.push(...f.overflow);
   }
   process.stderr.write(' '.repeat(60) + '\r');
 
@@ -331,6 +369,7 @@ async function main() {
     ['console clean',    N - failedAnims(console_), N, console_],
     ['step integrity',   N - failedAnims(integrity), N, integrity],
     ['no course refs',   N - failedAnims(courseRefs), N, courseRefs],
+    ['no h-overflow',    N - failedAnims(overflow), N, overflow],
   ];
 
   console.log(`\npac-animations regression harness — ${N} animations, viewport ${VIEWPORT.width}×${VIEWPORT.height}\n`);
@@ -344,6 +383,7 @@ async function main() {
     ['CONSOLE', console_], ['STEP INTEGRITY', integrity],
     ['LINK TARGETS', links.fails], ['FILE PAIRING', pairing.fails],
     ['NO COURSE REFERENCES', courseRefs],
+    ['NO HORIZONTAL OVERFLOW', overflow],
   ].filter(([, f]) => f.length);
 
   if (allFails.length) {

@@ -134,14 +134,18 @@ body {
   display: flex; flex-direction: column; gap: var(--gap);
   align-items: flex-start; min-height: 0;
 }
-/* The left column sizes to its CONTENT, it does not grow to fill (item "code needs
- * a width ceiling"). If it grew, the code panel -- stretched to the column -- would
- * swallow all the slack and render a wide empty band right of every line. Sized to
- * content instead, the code takes only its longest line (capped by the engine's
- * inline max-width), the structure column packs immediately to its right, and the
- * leftover width falls at the far right of the stage, empty -- the width analogue of
- * the empty space left at the foot of the shorter column. */
-.pac-col[data-side="left"]  { flex: 0 1 auto; min-width: 0; }
+/* The left column GROWS to fill the width the right column does not need, and the
+ * code panel -- stretched to the column -- takes it. This is the documented width
+ * policy (AUTHORING.md "Where panels go — column flow and width priority": structure
+ * claims its natural width, then CODE takes what remains, down to ~60 characters). A
+ * code panel wider than its longest line shows empty space to the right of the lines,
+ * as any code editor does; that is the width analogue of the empty space left at the
+ * foot of the shorter column, and it is what guarantees the widest line -- and the
+ * vertical scrollbar a long listing needs -- always fits without a sideways scroll.
+ * (Supersedes the earlier "size to content" rule, which left the code with no
+ * horizontal slack and let a long listing's scrollbar push its widest line off the
+ * edge.) */
+.pac-col[data-side="left"]  { flex: 1 1 auto; min-width: 0; }
 .pac-col[data-side="right"] { flex: 0 0 auto; }
 .pac-col > .pac-panel { flex: 0 0 auto; }   /* panels keep their resolved heights */
 /* CODE and STREAM stretch to their COLUMN's width; the engine bounds that with an
