@@ -74,10 +74,25 @@
         ] }
     ]
   },
-  "bCpp":  { "title": "C++ Programming I",   "lang": "cpp",  "profile": "beginner", "modules": [] },
-  "bJava": { "title": "Java Programming I",  "lang": "java", "profile": "beginner", "modules": [] },
+  "bCpp":  { "title": "C++ Programming I",   "lang": "cpp",  "profile": "beginner", "modules": [
+      { "topic": "Classes — Constructors",
+        "animations": [
+          { "file": "objects-constructor-init", "backs": "A7", "built": true }
+        ] }
+    ] },
+  "bJava": { "title": "Java Programming I",  "lang": "java", "profile": "beginner", "modules": [
+      { "topic": "Classes — Constructors",
+        "animations": [
+          { "file": "objects-constructor-init", "backs": "A7", "built": true }
+        ] }
+    ] },
   "aCpp":  { "title": "C++ Programming II",  "lang": "cpp",  "profile": "standard", "modules": [] },
-  "aJava": { "title": "Java Programming II", "lang": "java", "profile": "standard", "modules": [] },
+  "aJava": { "title": "Java Programming II", "lang": "java", "profile": "standard", "modules": [
+      { "topic": "Classes — Constructors",
+        "animations": [
+          { "file": "objects-constructor-init", "backs": "A1", "built": true }
+        ] }
+    ] },
   "redirects": {
     "_comment": "Old filename -> new. Emitted as meta-refresh stubs so existing Canvas iframes keep working. Emit a stub ONLY when its target page exists — a stub pointing at an unbuilt page turns a working old animation into a 404.",
     "file1.html": "files-basic-operations.html",
