@@ -25,7 +25,8 @@
  *      step returns to the previous one; Back from step 0 is a no-op, not an error.
  *   5. LINK TARGETS -- every note-link href across content/*.js resolves to a file in
  *      anim/.
- *   6. FILE PAIRING -- every content/*.js has a matching anim/*.html and vice versa.
+ *   6. FILE PAIRING -- every content/*.js has a matching anim/*.html AND a
+ *      preview-*.html (the self-contained double-click build), and vice versa.
  *   7. NO COURSE REFERENCES -- no student-facing string (title, subtitle, narration,
  *      note) names an assignment, a course, or an assignment/course code. Scans the
  *      LOADED spec, so code comments and CODE listings are exempt, and the
@@ -52,15 +53,22 @@ const animations = readdirSync(path.join(ROOT, 'content'))
 
 /* ------------------------------------------------------- static (no browser) */
 
-// 6. FILE PAIRING
+// 6. FILE PAIRING -- every content/*.js pairs with anim/<name>.html AND with a
+// preview-<name>.html at the repo root (the self-contained double-click build), and
+// vice versa. A new animation that never got a preview (build-preview.mjs used to only
+// refresh existing ones) is caught here.
 function checkFilePairing() {
   const content = new Set(animations);
   const anim = new Set(readdirSync(path.join(ROOT, 'anim'))
     .filter(f => f.endsWith('.html')).map(f => f.replace(/\.html$/, '')));
+  const preview = new Set(readdirSync(ROOT)
+    .filter(f => /^preview-.+\.html$/.test(f)).map(f => f.replace(/^preview-/, '').replace(/\.html$/, '')));
   const fails = [];
   for (const c of content) if (!anim.has(c)) fails.push(`content/${c}.js has no anim/${c}.html`);
   for (const a of anim) if (!content.has(a)) fails.push(`anim/${a}.html has no content/${a}.js`);
-  return { total: content.size + anim.size, fails };
+  for (const c of content) if (!preview.has(c)) fails.push(`content/${c}.js has no preview-${c}.html (run: node build-preview.mjs)`);
+  for (const p of preview) if (!content.has(p)) fails.push(`preview-${p}.html has no content/${p}.js`);
+  return { total: content.size + anim.size + preview.size, fails };
 }
 
 // 5. LINK TARGETS -- every note-link href in content/*.js resolves to a real anim page.
