@@ -42,6 +42,10 @@
           { "file": "sorting-heapsort-dual", "backs": "A7",  "built": true },
           { "file": "sorting-timing-chart",  "backs": "A7",  "built": true }
         ] },
+      { "topic": "Hashing — Collisions",
+        "animations": [
+          { "file": "hashing-collision-strategies", "backs": "A8", "built": true }
+        ] },
       { "topic": "Pointers — The Address Model",
         "animations": [
           { "file": "pointers-address-model",     "backs": null,  "built": true }
