@@ -198,7 +198,7 @@ const PAYOFF_NOTE =
   'loop has finished. A non-empty stack at the end means something was opened and never closed.';
 
 const CHALLENGE_NOTE =
-  'This scanner handles ( ) and [ ]. Your assignment also allows { }. What changes in the code — and what ' +
+  'This scanner handles ( ) and [ ]. A third bracket pair, { }, is a natural extension. What changes in the code — and what ' +
   'does NOT change? Also: one error never fired in any of these three scans. MAX is 4 here, so this stack ' +
   'holds at most four unclosed symbols. What is the shortest expression that would trigger TOO_DEEP on ' +
   'line 17?';

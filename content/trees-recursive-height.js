@@ -124,7 +124,7 @@ const S_NOTE =
   'it is. Each call’s return value IS the answer its parent needs.';
 
 const FINAL_NOTE = [
-  'The assignment hint suggests a different route — carry the depth DOWN as a parameter, the way ' +
+  'A common hint points to a different route — carry the depth DOWN as a parameter, the way ' +
   'recursion-fib-levels carries level, and keep a running maximum. That works too, and it is worth writing ' +
   'both. The difference: the downward version needs an extra parameter and somewhere outside the function ' +
   'to hold the max; this one needs neither, because every call hands its answer straight to whoever asked. ' +
