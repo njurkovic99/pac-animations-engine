@@ -30,6 +30,11 @@
  *      note) names an assignment, a course, or an assignment/course code. Scans the
  *      LOADED spec, so code comments and CODE listings are exempt, and the
  *      `assignment` rule fires only after the/your/this, so the CS sense is left alone.
+ *   9. COURSES COVERAGE -- courses.json parses; every content/*.js appears exactly once
+ *      across all courses and every listed file exists; no duplicate entries; every ds
+ *      assignment A1..A13 has a backer; and the ds/programming-course schema holds
+ *      (ds has a `languages` array, each programming course a `lang` string). (Check 8,
+ *      `no horizontal overflow`, lands on the engine-code-width branch.)
  */
 
 import { chromium } from 'playwright';
@@ -144,6 +149,79 @@ async function checkCourseRefs() {
       }
     }
   }
+  return fails;
+}
+
+// 9. COURSES COVERAGE -- courses.json maps animations to course modules and assignment
+// backers, and nothing else checks it: a module can vanish (as the ds Hashing module
+// did) while every other check stays green and student links quietly break. This
+// asserts the file parses and that its coverage is complete and consistent. (Numbered
+// 9: check 8, `no horizontal overflow`, is added on the engine-code-width branch;
+// reserving its slot keeps the two from colliding when both land.)
+function checkCoursesCoverage() {
+  const fails = [];
+  const file = path.join(ROOT, 'courses.json');
+  let data;
+  try { data = JSON.parse(readFileSync(file, 'utf8')); }
+  catch (e) { return [`courses.json: does not parse — ${e.message.split('\n')[0]}`]; }
+
+  // Course objects = top-level values carrying a `modules` array (skips _comment and
+  // redirects). `ds` is the language-agnostic course; every other is a single-language
+  // programming course.
+  const courseKeys = Object.keys(data).filter(k =>
+    data[k] && typeof data[k] === 'object' && Array.isArray(data[k].modules));
+
+  // Every animation entry across every course, with where it came from.
+  const entries = [];
+  for (const ck of courseKeys)
+    for (const m of data[ck].modules)
+      for (const a of (m.animations ?? []))
+        entries.push({ file: a.file, course: ck, topic: m.topic });
+
+  const content = new Set(animations);   // content/*.js basenames
+
+  // (a) every file referenced in courses.json exists in content/.
+  for (const e of entries)
+    if (!content.has(e.file))
+      fails.push(`courses.json: ${e.course} module "${e.topic}" lists "${e.file}", which has no content/${e.file}.js`);
+
+  // (b) no duplicate entries within or across courses, and every content file appears
+  //     EXACTLY ONCE across all courses.
+  const where = {};
+  for (const e of entries) (where[e.file] ??= []).push(e.course);
+  for (const [f, cs] of Object.entries(where))
+    if (cs.length > 1)
+      fails.push(`courses.json: "${f}" appears ${cs.length} times (in ${cs.join(', ')}) — it must appear exactly once across all courses`);
+  for (const c of content)
+    if (!where[c])
+      fails.push(`courses.json: content/${c}.js appears in no course's modules — every animation must appear exactly once`);
+
+  // (c) every ds assignment A1..A13 has at least one animation whose `backs` names it.
+  const ds = data.ds;
+  if (!ds || !Array.isArray(ds.modules)) {
+    fails.push('courses.json: there is no "ds" course with a modules array');
+  } else {
+    const backed = new Set();
+    for (const m of ds.modules) for (const a of (m.animations ?? [])) if (a.backs) backed.add(a.backs);
+    for (let i = 1; i <= 13; i++)
+      if (!backed.has(`A${i}`))
+        fails.push(`courses.json: ds assignment A${i} has no backing animation (no ds entry with "backs": "A${i}")`);
+  }
+
+  // (d) schema: `ds` carries a `languages` ARRAY and no `lang`; every programming course
+  //     carries a `lang` STRING and no `languages` array. An empty `modules` array is
+  //     fine (the four programming courses are empty until Phase 2), so it is not checked.
+  for (const ck of courseKeys) {
+    const c = data[ck];
+    if (ck === 'ds') {
+      if (!Array.isArray(c.languages)) fails.push('courses.json: ds must carry a "languages" array (its student-visible tabs)');
+      if ('lang' in c) fails.push('courses.json: ds must not carry a "lang" field — it uses the "languages" array');
+    } else {
+      if (typeof c.lang !== 'string') fails.push(`courses.json: course "${ck}" must carry a "lang" string`);
+      if ('languages' in c) fails.push(`courses.json: course "${ck}" must not carry a "languages" array — it uses the single "lang" string`);
+    }
+  }
+
   return fails;
 }
 
@@ -303,6 +381,7 @@ async function main() {
   const pairing = checkFilePairing();
   const links = checkLinkTargets();
   const courseRefs = await checkCourseRefs();
+  const coursesCov = checkCoursesCoverage();
 
   const { server, port } = await startServer();
   const base = `http://127.0.0.1:${port}`;
@@ -331,6 +410,7 @@ async function main() {
     ['console clean',    N - failedAnims(console_), N, console_],
     ['step integrity',   N - failedAnims(integrity), N, integrity],
     ['no course refs',   N - failedAnims(courseRefs), N, courseRefs],
+    ['courses coverage', coursesCov.length ? 0 : 1, 1, coursesCov],
   ];
 
   console.log(`\npac-animations regression harness — ${N} animations, viewport ${VIEWPORT.width}×${VIEWPORT.height}\n`);
@@ -344,6 +424,7 @@ async function main() {
     ['CONSOLE', console_], ['STEP INTEGRITY', integrity],
     ['LINK TARGETS', links.fails], ['FILE PAIRING', pairing.fails],
     ['NO COURSE REFERENCES', courseRefs],
+    ['COURSES COVERAGE', coursesCov],
   ].filter(([, f]) => f.length);
 
   if (allFails.length) {
