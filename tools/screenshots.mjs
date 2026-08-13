@@ -2,19 +2,28 @@
 /* pac-animations visual baseline tool.
  *
  * Renders every animation to PNG at five points across its trace (0%, 25%, 50%,
- * 75%, 100% of the steps) and diffs them against committed baselines, so an engine
- * or CSS change that shifts a pixel anywhere is caught by name. Tooling only -- it
- * never touches engine/, content/, anim/ or the data; it loads each anim/<name>.html
- * over a local http server and drives the engine's own controls.
+ * 75%, 100% of the steps) and diffs them against a BASELINE SET, so an engine or CSS
+ * change that shifts a pixel anywhere is caught by name. Tooling only -- it never
+ * touches engine/, content/, anim/ or the data; it loads each anim/<name>.html over a
+ * local http server and drives the engine's own controls.
  *
- *   node tools/screenshots.mjs            # render to a temp dir, diff vs tools/baseline
- *   node tools/screenshots.mjs --update   # (re)write the baselines in tools/baseline
+ * Baselines are NOT committed. A baseline PNG set is a large binary blob that inflates
+ * every diff and collides across branches; instead the baseline is the PREVIOUS CI
+ * run's rendered frames, downloaded from its `screenshots` artifact and pointed at with
+ * --baseline (or PAC_BASELINE_DIR). Each run renders fresh frames to the out dir (which
+ * CI uploads as this run's artifact) and diffs them against that baseline dir.
  *
- * Default mode exits 0 iff every frame matches its baseline; otherwise it prints the
- * animations that differ (with the frame and the changed-pixel count) and exits 1.
- * Update mode always exits 0. The viewport is fixed, transitions are disabled and
- * only the .pac-stage element is captured, so a frame is deterministic run to run.
- */
+ *   node tools/screenshots.mjs                         # capture-only: render frames, no diff
+ *   node tools/screenshots.mjs --baseline <dir>        # diff fresh frames vs <dir>
+ *   PAC_BASELINE_DIR=<dir> node tools/screenshots.mjs  # same, via env (how CI passes it)
+ *   node tools/screenshots.mjs --out <dir>             # where fresh frames are written
+ *
+ * With a baseline it exits 0 iff every frame matches; otherwise it prints the animations
+ * that differ (frame + changed-pixel count) and exits 1. With NO baseline it is
+ * capture-only: it writes the frames and exits 0 (nothing to compare against yet -- the
+ * first run, or before CI wires the previous artifact in). The viewport is fixed,
+ * transitions are disabled and only the .pac-stage element is captured, so a frame is
+ * deterministic run to run. */
 
 import { chromium } from 'playwright';
 import http from 'node:http';
@@ -25,10 +34,25 @@ import { PNG } from 'pngjs';
 import pixelmatch from 'pixelmatch';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const BASELINE = path.join(ROOT, 'tools', 'baseline');
 const VIEWPORT = { width: 1600, height: 1000 };   // fixed, so frames are deterministic
 const PCTS = [0, 25, 50, 75, 100];                // where in the trace to capture
-const UPDATE = process.argv.includes('--update');
+
+// A flag's value: `--baseline dir` or `--baseline=dir`.
+const argVal = (flag) => {
+  const i = process.argv.indexOf(flag);
+  if (i >= 0 && process.argv[i + 1] && !process.argv[i + 1].startsWith('-')) return process.argv[i + 1];
+  const eq = process.argv.find(a => a.startsWith(`${flag}=`));
+  return eq ? eq.slice(flag.length + 1) : undefined;
+};
+
+// Where the previous run's frames live (the baseline). No committed default -- when
+// absent, the tool is capture-only.
+const BASELINE = argVal('--baseline') ?? process.env.PAC_BASELINE_DIR ?? '';
+// Where this run's frames are written. Defaults to the temp dir CI uploads as the
+// `screenshots` artifact, so a bare `node tools/screenshots.mjs` in CI just works.
+const OUT = argVal('--out') ?? path.join(ROOT, 'tools', '.screenshots-tmp');
+const hasBaseline = BASELINE && existsSync(BASELINE) &&
+  readdirSync(BASELINE).some(f => f.endsWith('.png'));
 
 const animations = readdirSync(path.join(ROOT, 'content'))
   .filter(f => f.endsWith('.js')).map(f => f.replace(/\.js$/, '')).sort();
@@ -118,12 +142,13 @@ async function main() {
   const base = `http://127.0.0.1:${port}`;
   const browser = await chromium.launch({ executablePath: findChromium() });
 
-  if (UPDATE) mkdirSync(BASELINE, { recursive: true });
-  const tmp = path.join(ROOT, 'tools', '.screenshots-tmp');
-  if (!UPDATE) { rmSync(tmp, { recursive: true, force: true }); mkdirSync(tmp, { recursive: true }); }
+  // Fresh renders always go to OUT (CI uploads it as this run's artifact). Clear it so
+  // stale frames from a previous local run never linger.
+  rmSync(OUT, { recursive: true, force: true });
+  mkdirSync(OUT, { recursive: true });
 
   const differing = [];      // {name, pct, reason}
-  const missing = [];        // frames with no baseline to compare against
+  const missing = [];        // frames present now but absent from the baseline set
   let frames = 0;
 
   for (const name of animations) {
@@ -132,8 +157,8 @@ async function main() {
     for (const { pct, png } of rendered) {
       frames++;
       const file = frameName(name, pct);
-      if (UPDATE) { writeFileSync(path.join(BASELINE, file), png); continue; }
-      writeFileSync(path.join(tmp, file), png);
+      writeFileSync(path.join(OUT, file), png);       // this run's frame -> artifact
+      if (!hasBaseline) continue;                     // capture-only: nothing to diff
       const baseFile = path.join(BASELINE, file);
       if (!existsSync(baseFile)) { missing.push(file); continue; }
       const cmp = comparePng(readFileSync(baseFile), png);
@@ -141,7 +166,7 @@ async function main() {
         differing.push({ name, pct, reason: cmp.reason });
         // Alongside the fresh render, drop a pixel-diff overlay (magenta = changed)
         // so the uploaded artifact shows WHERE a frame moved, not just that it did.
-        if (cmp.image) writeFileSync(path.join(tmp, `${name}@${String(pct).padStart(3, '0')}.diff.png`), cmp.image);
+        if (cmp.image) writeFileSync(path.join(OUT, `${name}@${String(pct).padStart(3, '0')}.diff.png`), cmp.image);
       }
     }
   }
@@ -149,17 +174,26 @@ async function main() {
   await browser.close();
   server.close();
 
-  if (UPDATE) {
-    console.log(`\nscreenshots — wrote ${frames} baseline frame(s) for ${animations.length} animations to tools/baseline/`);
+  const outRel = path.relative(ROOT, OUT);
+  console.log(`\npac-animations screenshots — ${animations.length} animations, ${frames} frames, viewport ${VIEWPORT.width}×${VIEWPORT.height}\n`);
+
+  // No baseline: capture-only. This is the first run, or CI has not yet wired the
+  // previous run's `screenshots` artifact in via --baseline. Frames are written for
+  // the NEXT run to compare against; there is nothing to fail on.
+  if (!hasBaseline) {
+    console.log(`  captured ${frames} frame(s) to ${outRel}/ — no baseline set given, so no diff was run.`);
+    console.log(`  (pass a previous run's frames with --baseline <dir> or PAC_BASELINE_DIR to diff.)`);
+    console.log(`\nPASS — capture-only (no baseline to compare against).`);
     process.exit(0);
   }
 
   const changedAnims = new Set(differing.map(d => d.name));
-  console.log(`\npac-animations screenshots — ${animations.length} animations, ${frames} frames, viewport ${VIEWPORT.width}×${VIEWPORT.height}\n`);
+  const baseRel = path.relative(ROOT, path.resolve(BASELINE));
+  console.log(`  baseline  ${baseRel}/`);
   console.log(`  matched   ${animations.length - changedAnims.size - new Set(missing.map(m => m.split('@')[0])).size}/${animations.length} animations`);
 
   if (missing.length) {
-    console.log(`\n  NO BASELINE (run with --update to create):`);
+    console.log(`\n  NOT IN BASELINE (a new animation, or a baseline predating it):`);
     for (const m of missing) console.log(`    - ${m}`);
   }
   if (differing.length) {
@@ -168,10 +202,10 @@ async function main() {
     for (const d of differing) (byName[d.name] ??= []).push(`${d.pct}% (${d.reason})`);
     for (const name of Object.keys(byName).sort())
       console.log(`  ${name}: ${byName[name].join(', ')}`);
-    console.log(`\n${differing.length} frame(s) across ${changedAnims.size} animation(s) differ. Temp renders in tools/.screenshots-tmp/.`);
+    console.log(`\n${differing.length} frame(s) across ${changedAnims.size} animation(s) differ. Fresh renders in ${outRel}/.`);
     process.exit(1);
   }
-  if (missing.length) { console.log(`\n${missing.length} frame(s) had no baseline.`); process.exit(1); }
+  if (missing.length) { console.log(`\n${missing.length} frame(s) had no baseline counterpart.`); process.exit(1); }
   console.log(`\nPASS — every frame matches its baseline.`);
   process.exit(0);
 }
