@@ -25,17 +25,30 @@
  *      step returns to the previous one; Back from step 0 is a no-op, not an error.
  *   5. LINK TARGETS -- every note-link href across content/*.js resolves to a file in
  *      anim/.
- *   6. FILE PAIRING -- every content/*.js has a matching anim/*.html and vice versa.
+ *   6. FILE PAIRING -- every content/*.js has a matching anim/*.html AND a
+ *      preview-*.html, and vice versa. Previews are generated artifacts (gitignored,
+ *      not committed), so the harness BUILDS them first (node build-preview.mjs) and
+ *      then asserts the pairing -- which verifies build-preview covers every animation,
+ *      the guarantee this check exists for.
  *   7. NO COURSE REFERENCES -- no student-facing string (title, subtitle, narration,
  *      note) names an assignment, a course, or an assignment/course code. Scans the
  *      LOADED spec, so code comments and CODE listings are exempt, and the
  *      `assignment` rule fires only after the/your/this, so the CS sense is left alone.
+ *   8. NO HORIZONTAL OVERFLOW -- the CODE panel and every STRUCTURE panel must fit
+ *      their width at every step: scrollWidth > clientWidth (a sideways scrollbar) is
+ *      a failure, reported with both pixel values. A structure never scrolls sideways,
+ *      and CODE takes all the width the other column leaves, so its widest line fits.
+ *   9. COURSES COVERAGE -- courses.json parses; every content/*.js appears exactly once
+ *      across all courses and every listed file exists; no duplicate entries; every ds
+ *      assignment A1..A13 has a backer; and the ds/programming-course schema holds
+ *      (ds has a `languages` array, each programming course a `lang` string).
  */
 
 import { chromium } from 'playwright';
 import http from 'node:http';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -52,15 +65,39 @@ const animations = readdirSync(path.join(ROOT, 'content'))
 
 /* ------------------------------------------------------- static (no browser) */
 
-// 6. FILE PAIRING
-function checkFilePairing() {
+// Previews (preview-<name>.html at the repo root) are GENERATED artifacts -- gitignored
+// and never committed, because a committed preview is a 4000-line bundle that makes
+// every diff unreadable and collides across branches. So the harness builds them itself
+// before the pairing check, exactly as a developer would (`node build-preview.mjs`). A
+// fresh checkout has zero previews; this fills them in, and the pairing check then
+// verifies build-preview produced one for every animation.
+function buildPreviews() {
+  try {
+    execFileSync('node', ['build-preview.mjs'], { cwd: ROOT, stdio: 'pipe' });
+  } catch (e) {
+    // A build failure is itself a signal -- surface it as a pairing failure, not a crash.
+    return `build-preview.mjs failed: ${(e.stderr?.toString() || e.message).split('\n')[0]}`;
+  }
+  return null;
+}
+
+// 6. FILE PAIRING -- every content/*.js pairs with anim/<name>.html AND with a freshly
+// built preview-<name>.html, and vice versa. The preview direction verifies
+// build-preview.mjs covers every animation (a new animation that never got a preview is
+// caught here); previews are built by buildPreviews() just above the harness run.
+function checkFilePairing(buildErr) {
   const content = new Set(animations);
   const anim = new Set(readdirSync(path.join(ROOT, 'anim'))
     .filter(f => f.endsWith('.html')).map(f => f.replace(/\.html$/, '')));
+  const preview = new Set(readdirSync(ROOT)
+    .filter(f => /^preview-.+\.html$/.test(f)).map(f => f.replace(/^preview-/, '').replace(/\.html$/, '')));
   const fails = [];
+  if (buildErr) fails.push(buildErr);
   for (const c of content) if (!anim.has(c)) fails.push(`content/${c}.js has no anim/${c}.html`);
   for (const a of anim) if (!content.has(a)) fails.push(`anim/${a}.html has no content/${a}.js`);
-  return { total: content.size + anim.size, fails };
+  for (const c of content) if (!preview.has(c)) fails.push(`content/${c}.js has no preview-${c}.html (run: node build-preview.mjs)`);
+  for (const p of preview) if (!content.has(p)) fails.push(`preview-${p}.html has no content/${p}.js`);
+  return { total: content.size + anim.size + preview.size, fails };
 }
 
 // 5. LINK TARGETS -- every note-link href in content/*.js resolves to a real anim page.
@@ -147,6 +184,77 @@ async function checkCourseRefs() {
   return fails;
 }
 
+// 9. COURSES COVERAGE -- courses.json maps animations to course modules and assignment
+// backers, and nothing else checks it: a module can vanish (as the ds Hashing module
+// did) while every other check stays green and student links quietly break. This
+// asserts the file parses and that its coverage is complete and consistent.
+function checkCoursesCoverage() {
+  const fails = [];
+  const file = path.join(ROOT, 'courses.json');
+  let data;
+  try { data = JSON.parse(readFileSync(file, 'utf8')); }
+  catch (e) { return [`courses.json: does not parse — ${e.message.split('\n')[0]}`]; }
+
+  // Course objects = top-level values carrying a `modules` array (skips _comment and
+  // redirects). `ds` is the language-agnostic course; every other is a single-language
+  // programming course.
+  const courseKeys = Object.keys(data).filter(k =>
+    data[k] && typeof data[k] === 'object' && Array.isArray(data[k].modules));
+
+  // Every animation entry across every course, with where it came from.
+  const entries = [];
+  for (const ck of courseKeys)
+    for (const m of data[ck].modules)
+      for (const a of (m.animations ?? []))
+        entries.push({ file: a.file, course: ck, topic: m.topic });
+
+  const content = new Set(animations);   // content/*.js basenames
+
+  // (a) every file referenced in courses.json exists in content/.
+  for (const e of entries)
+    if (!content.has(e.file))
+      fails.push(`courses.json: ${e.course} module "${e.topic}" lists "${e.file}", which has no content/${e.file}.js`);
+
+  // (b) no duplicate entries within or across courses, and every content file appears
+  //     EXACTLY ONCE across all courses.
+  const where = {};
+  for (const e of entries) (where[e.file] ??= []).push(e.course);
+  for (const [f, cs] of Object.entries(where))
+    if (cs.length > 1)
+      fails.push(`courses.json: "${f}" appears ${cs.length} times (in ${cs.join(', ')}) — it must appear exactly once across all courses`);
+  for (const c of content)
+    if (!where[c])
+      fails.push(`courses.json: content/${c}.js appears in no course's modules — every animation must appear exactly once`);
+
+  // (c) every ds assignment A1..A13 has at least one animation whose `backs` names it.
+  const ds = data.ds;
+  if (!ds || !Array.isArray(ds.modules)) {
+    fails.push('courses.json: there is no "ds" course with a modules array');
+  } else {
+    const backed = new Set();
+    for (const m of ds.modules) for (const a of (m.animations ?? [])) if (a.backs) backed.add(a.backs);
+    for (let i = 1; i <= 13; i++)
+      if (!backed.has(`A${i}`))
+        fails.push(`courses.json: ds assignment A${i} has no backing animation (no ds entry with "backs": "A${i}")`);
+  }
+
+  // (d) schema: `ds` carries a `languages` ARRAY and no `lang`; every programming course
+  //     carries a `lang` STRING and no `languages` array. An empty `modules` array is
+  //     fine (the four programming courses are empty until Phase 2), so it is not checked.
+  for (const ck of courseKeys) {
+    const c = data[ck];
+    if (ck === 'ds') {
+      if (!Array.isArray(c.languages)) fails.push('courses.json: ds must carry a "languages" array (its student-visible tabs)');
+      if ('lang' in c) fails.push('courses.json: ds must not carry a "lang" field — it uses the "languages" array');
+    } else {
+      if (typeof c.lang !== 'string') fails.push(`courses.json: course "${ck}" must carry a "lang" string`);
+      if ('languages' in c) fails.push(`courses.json: course "${ck}" must not carry a "languages" array — it uses the single "lang" string`);
+    }
+  }
+
+  return fails;
+}
+
 /* --------------------------------------------------------------- http server */
 
 const MIME = {
@@ -208,9 +316,33 @@ const SIZE_SIG = () => {
   return sig;
 };
 
+/* Horizontal overflow of the CODE panel and every STRUCTURE panel. A structure a
+ * student is reading must never scroll sideways, and the width policy (AUTHORING.md
+ * "Where panels go") gives CODE all the width the other column does not need, so its
+ * widest line must fit too. Measures the scroll containers (the panel body, plus the
+ * inner .pac-code for the code panel): scrollWidth > clientWidth is a sideways
+ * scrollbar. Book panels are exempt (the policy names structure + CODE). Runs in the
+ * page. */
+const H_OVERFLOW = () => {
+  const out = [];
+  [...document.querySelectorAll('.pac-panel')].forEach((p, pi) => {
+    const kind = p.dataset.kind;
+    if (kind !== 'code' && kind !== 'structure') return;
+    const title = (p.querySelector('.pac-panel-head span')?.textContent ?? '').trim();
+    const els = [p.querySelector('.pac-panel-body')];
+    if (kind === 'code') els.push(p.querySelector('.pac-code'));
+    for (const el of els) {
+      if (!el) continue;
+      if (el.scrollWidth - el.clientWidth > 0)
+        out.push({ key: `panel[${pi}] ${kind} "${title}"`, sw: el.scrollWidth, cw: el.clientWidth });
+    }
+  });
+  return out;
+};
+
 /* Run all per-animation browser checks. Returns a per-check pass flag + failures. */
 async function runAnimation(browser, base, name) {
-  const fails = { layout: [], heights: [], console: [], integrity: [] };
+  const fails = { layout: [], heights: [], console: [], integrity: [], overflow: [] };
   const page = await browser.newPage({ viewport: VIEWPORT });
 
   const consoleErrs = [];
@@ -236,7 +368,13 @@ async function runAnimation(browser, base, name) {
       fails.heights.push(`${name}: verifyHeights column "${row.column}" delta=${row.delta}px (${row.heights} vs content ${row.content})`);
 
     // 1. LAYOUT STABILITY -- signature at step 0, re-measured every step.
+    // 8. NO HORIZONTAL OVERFLOW -- measured at the same points.
     const ref = await page.evaluate(SIZE_SIG);
+    const recordOverflow = (arr, step) => {
+      for (const o of arr)
+        fails.overflow.push(`${name}: step ${step}: ${o.key} scrolls horizontally (scrollWidth ${o.sw}px > clientWidth ${o.cw}px)`);
+    };
+    recordOverflow(await page.evaluate(H_OVERFLOW), 0);
     for (let step = 1; step < nSteps; step++) {
       const advanced = await page.evaluate(() => {
         const btn = document.querySelector('.pac-controls [data-act="next"]');
@@ -246,6 +384,7 @@ async function runAnimation(browser, base, name) {
       });
       if (!advanced.ok) { fails.integrity.push(`${name}: ${advanced.why}`); break; }
       await page.waitForTimeout(8);
+      recordOverflow(await page.evaluate(H_OVERFLOW), step);
       const cur = await page.evaluate(SIZE_SIG);
       for (const key of Object.keys(ref)) {
         if (!(key in cur)) continue;                   // content added/removed -> not a resize
@@ -259,6 +398,8 @@ async function runAnimation(browser, base, name) {
     // dedupe layout failures (a size that drifts once tends to stay drifted for the
     // rest of the trace -- report the first occurrence of each key, not every step).
     fails.layout = dedupeFirst(fails.layout, l => l.replace(/step \d+/, 'step'));
+    // dedupe overflow the same way -- first step per panel that scrolls.
+    fails.overflow = dedupeFirst(fails.overflow, l => l.replace(/step \d+/, 'step'));
 
     // 4. STEP INTEGRITY.
     const end = await page.evaluate(() => ({ i: window.pac.i, atEnd: window.pac.atEnd, n: window.pac.steps.length }));
@@ -300,20 +441,23 @@ const dedupeFirst = (arr, keyOf) => {
 /* ---------------------------------------------------------------------- main */
 
 async function main() {
-  const pairing = checkFilePairing();
+  const buildErr = buildPreviews();               // generate previews (gitignored) before pairing
+  const pairing = checkFilePairing(buildErr);
   const links = checkLinkTargets();
   const courseRefs = await checkCourseRefs();
+  const coursesCov = checkCoursesCoverage();
 
   const { server, port } = await startServer();
   const base = `http://127.0.0.1:${port}`;
   const browser = await chromium.launch({ executablePath: findChromium() });
 
-  const layout = [], heights = [], console_ = [], integrity = [];
+  const layout = [], heights = [], console_ = [], integrity = [], overflow = [];
   for (const name of animations) {
     process.stderr.write(`  … ${name}\r`);
     const f = await runAnimation(browser, base, name);
     layout.push(...f.layout); heights.push(...f.heights);
     console_.push(...f.console); integrity.push(...f.integrity);
+    overflow.push(...f.overflow);
   }
   process.stderr.write(' '.repeat(60) + '\r');
 
@@ -331,6 +475,8 @@ async function main() {
     ['console clean',    N - failedAnims(console_), N, console_],
     ['step integrity',   N - failedAnims(integrity), N, integrity],
     ['no course refs',   N - failedAnims(courseRefs), N, courseRefs],
+    ['no h-overflow',    N - failedAnims(overflow), N, overflow],
+    ['courses coverage', coursesCov.length ? 0 : 1, 1, coursesCov],
   ];
 
   console.log(`\npac-animations regression harness — ${N} animations, viewport ${VIEWPORT.width}×${VIEWPORT.height}\n`);
@@ -344,6 +490,8 @@ async function main() {
     ['CONSOLE', console_], ['STEP INTEGRITY', integrity],
     ['LINK TARGETS', links.fails], ['FILE PAIRING', pairing.fails],
     ['NO COURSE REFERENCES', courseRefs],
+    ['NO HORIZONTAL OVERFLOW', overflow],
+    ['COURSES COVERAGE', coursesCov],
   ].filter(([, f]) => f.length);
 
   if (allFails.length) {

@@ -2,7 +2,18 @@
 # pngjs, pixelmatch) are restored with `npm install`, never committed.
 node_modules/
 
-# Scratch space for local render/screenshot scripts, and the harness's throwaway
-# temp renders (tools/screenshots.mjs writes here, then diffs against tools/baseline).
+# Scratch space for local render/screenshot scripts, and the screenshot tool's
+# throwaway renders (tools/screenshots.mjs writes this run's frames here; CI uploads
+# it as the `screenshots` artifact and diffs the next run against it).
 scratchpad/
 tools/.screenshots-tmp/
+tools/.screenshots-out/
+
+# Generated artifacts, never committed. Both are large binary/HTML blobs that inflate
+# every diff and collide across branches, so they live outside version control:
+#   - tools/baseline/ : the old committed screenshot PNGs (now the previous CI run's
+#     `screenshots` artifact serves as the baseline instead).
+#   - preview-*.html  : the self-contained double-click builds. Regenerate on demand
+#     with `node build-preview.mjs`, then open the file. The harness rebuilds them too.
+tools/baseline/
+preview-*.html

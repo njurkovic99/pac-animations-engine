@@ -655,30 +655,27 @@ export class Engine {
     // ---- apply WIDTHS from SIZE_POLICY.width, one rule per class, no per-panel
     // branches. 'natural' panels (structure, strips, callstack) take their full
     // content width and left-align -- never compressed, never horizontally scrolled.
-    // 'column' (stream) fills its column via CSS. 'content' (code) is bounded on BOTH
-    // sides: min-width >= codeMinW (the char floor) and max-width = codeContentW (its
-    // widest line + allowance), so it stretches to fill its column but never past its
-    // longest line -- leftover column width stays empty to its right, mirroring the
-    // empty rows the height ceiling leaves below it. ----
+    // 'column' (stream) fills its column via CSS. 'content' (code) TAKES WHAT REMAINS:
+    // the left column grows to fill the width the right column does not need (see
+    // styles.css) and the code panel stretches to it, floored at codeMinW (~60 chars)
+    // and with NO ceiling -- "what remains" is the ceiling (AUTHORING.md "Where panels
+    // go — column flow and width priority"). A wide stage therefore leaves the code
+    // room to spare, so its widest line, and the vertical scrollbar a long listing
+    // needs, always fit without a sideways scroll. Resolved once here, so the width
+    // never changes as steps advance. ----
     for (const p of [...structure, ...book]) {
       const w = SIZE_POLICY[this._sizeClass(p)].width;
       p.el.style.width = w === 'column' ? '' : `${Math.round(p.contentW)}px`;
     }
     if (code) {
       code.el.style.minWidth = `${codeMinW}px`;
-      code.el.style.maxWidth = `${codeContentW}px`;
+      code.el.style.maxWidth = '';                     // no ceiling: CODE takes the remaining width
     }
-    // STREAM reads as a continuation of the code beneath it, so when it sits in the
-    // SAME column it matches the code's width -- capped at codeContentW too, never
-    // wider than the code it continues. (A stream balanced into the other column
-    // keeps its own column width; it is not tied to the code there.) This is the
-    // 'column' rule refined by placement, not a per-animation clamp.
+    // STREAM beneath the code shares its column and stretches to the same width, so it
+    // needs no explicit cap -- the column bounds both. (A stream balanced into the
+    // other column keeps that column's width; still no cap.)
     if (code) for (const p of book) {
-      if (p.spec.type === 'stream' && p.el.parentElement === code.el.parentElement) {
-        p.el.style.maxWidth = `${codeContentW}px`;
-      } else if (p.spec.type === 'stream') {
-        p.el.style.maxWidth = '';
-      }
+      if (p.spec.type === 'stream') p.el.style.maxWidth = '';
     }
 
     // CONTENT-PROBLEM check (item "the animation is too wide"): the single-column
