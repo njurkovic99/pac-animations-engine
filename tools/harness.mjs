@@ -38,10 +38,11 @@
  *      their width at every step: scrollWidth > clientWidth (a sideways scrollbar) is
  *      a failure, reported with both pixel values. A structure never scrolls sideways,
  *      and CODE takes all the width the other column leaves, so its widest line fits.
- *   9. COURSES COVERAGE -- courses.json parses; every content/*.js appears exactly once
- *      across all courses and every listed file exists; no duplicate entries; every ds
- *      assignment A1..A13 has a backer; and the ds/programming-course schema holds
- *      (ds has a `languages` array, each programming course a `lang` string).
+ *   9. COURSES COVERAGE -- courses.json parses; every content/*.js appears in at least
+ *      one course and at most once per course (a shared Phase-2 animation may serve
+ *      several courses) and every listed file exists; every ds assignment A1..A13 has a
+ *      backer; and the ds/programming-course schema holds (ds has a `languages` array,
+ *      each programming course a `lang` string).
  */
 
 import { chromium } from 'playwright';
@@ -187,7 +188,9 @@ async function checkCourseRefs() {
 // 9. COURSES COVERAGE -- courses.json maps animations to course modules and assignment
 // backers, and nothing else checks it: a module can vanish (as the ds Hashing module
 // did) while every other check stays green and student links quietly break. This
-// asserts the file parses and that its coverage is complete and consistent.
+// asserts the file parses and that its coverage is complete and consistent -- every
+// file appears in at least one course and at most once per course (a shared Phase-2
+// animation may back several courses off one build).
 function checkCoursesCoverage() {
   const fails = [];
   const file = path.join(ROOT, 'courses.json');
@@ -215,16 +218,23 @@ function checkCoursesCoverage() {
     if (!content.has(e.file))
       fails.push(`courses.json: ${e.course} module "${e.topic}" lists "${e.file}", which has no content/${e.file}.js`);
 
-  // (b) no duplicate entries within or across courses, and every content file appears
-  //     EXACTLY ONCE across all courses.
+  // (b) A content file may appear in MULTIPLE courses but at most ONCE PER COURSE.
+  //     Phase 2 is built on shared animations: one build serves 2-3 courses through
+  //     per-course `?a=`/`?lang=` iframe URLs (objects-constructor-init backs bCpp A7,
+  //     bJava A7 and aJava A1 off a single content file). So appearing in more than one
+  //     course is correct, not a duplicate; a duplicate is the SAME file listed twice
+  //     within ONE course, which is a real authoring mistake. Every content file must
+  //     still appear in at least one course.
   const where = {};
   for (const e of entries) (where[e.file] ??= []).push(e.course);
-  for (const [f, cs] of Object.entries(where))
-    if (cs.length > 1)
-      fails.push(`courses.json: "${f}" appears ${cs.length} times (in ${cs.join(', ')}) — it must appear exactly once across all courses`);
+  for (const [f, cs] of Object.entries(where)) {
+    const dup = cs.find((c, i) => cs.indexOf(c) !== i);   // a course this file is listed in twice
+    if (dup)
+      fails.push(`courses.json: "${f}" appears more than once in course "${dup}" — a file may serve multiple courses, but at most once per course`);
+  }
   for (const c of content)
     if (!where[c])
-      fails.push(`courses.json: content/${c}.js appears in no course's modules — every animation must appear exactly once`);
+      fails.push(`courses.json: content/${c}.js appears in no course's modules — every animation must appear in at least one course`);
 
   // (c) every ds assignment A1..A13 has at least one animation whose `backs` names it.
   const ds = data.ds;
