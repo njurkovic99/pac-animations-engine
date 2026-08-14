@@ -655,13 +655,22 @@ export class Engine {
     // ---- apply WIDTHS from SIZE_POLICY.width, one rule per class, no per-panel
     // branches. 'natural' panels (structure, strips, callstack) take their full
     // content width and left-align -- never compressed, never horizontally scrolled.
-    // 'column' (stream) fills its column via CSS. 'content' (code) TAKES WHAT REMAINS:
-    // the left column grows to fill the width the right column does not need (see
-    // styles.css) and the code panel stretches to it, floored at codeMinW (~60 chars)
-    // and with NO ceiling -- "what remains" is the ceiling (AUTHORING.md "Where panels
-    // go — column flow and width priority"). A wide stage therefore leaves the code
-    // room to spare, so its widest line, and the vertical scrollbar a long listing
-    // needs, always fit without a sideways scroll. Resolved once here, so the width
+    // 'column' (stream) fills its column via CSS. 'content' (code) is bounded on BOTH
+    // sides: a CEILING at its widest line (codeContentW) and a FLOOR at codeMinW =
+    // min(widest line, ~60 chars). The ceiling is the fix for the code panel demanding
+    // more width than any line can use: without it the left column grew to fill the
+    // width the right column did not need and the code panel stretched to that, leaving
+    // a permanent dead band to the right of the widest line on every step. minCh is a
+    // limit on SHRINKING (it stops a greedy structure compressing the code below ~60
+    // chars, and only bites when the listing actually has lines that long), never a
+    // demand for space -- so a listing narrower than 60 chars now demands only its
+    // widest line and the leftover column width stays EMPTY, exactly as the code's
+    // 'listing' height ceiling leaves empty rows below a short listing (item 39). A
+    // listing WIDER than 60 chars is unchanged: it demands its widest line and refuses
+    // compression below 60. codeContentW already carries a one-character allowance past
+    // the widest line so the last glyph never touches the border, and the widest line
+    // is measured across every SHOWN language tab, so a `?lang=`-narrowed page reserves
+    // only the width of the single listing it shows. Resolved once here, so the width
     // never changes as steps advance. ----
     for (const p of [...structure, ...book]) {
       const w = SIZE_POLICY[this._sizeClass(p)].width;
@@ -669,7 +678,7 @@ export class Engine {
     }
     if (code) {
       code.el.style.minWidth = `${codeMinW}px`;
-      code.el.style.maxWidth = '';                     // no ceiling: CODE takes the remaining width
+      code.el.style.maxWidth = `${codeContentW}px`;    // ceiling: never wider than its widest line; leftover column width stays empty
     }
     // STREAM beneath the code shares its column and stretches to the same width, so it
     // needs no explicit cap -- the column bounds both. (A stream balanced into the
