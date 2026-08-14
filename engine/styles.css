@@ -125,33 +125,34 @@ body {
 }
 /* A column is a vertical stack of panels. Width rules (AUTHORING.md "Width
  * rules"): height is scarce, width is not. Every panel takes its NATURAL content
- * width and LEFT-aligns (align-items: flex-start), leftover width at the right
- * stays empty -- the engine pins each panel's width to its per-run maximum. The
- * RIGHT column sizes to its widest panel; the LEFT column takes the rest and the
- * code panel fills it (the one panel that genuinely benefits from extra width).
- * Overflow is visible so a panel wider than its column is never clipped. */
+ * width and LEFT-aligns (align-items: flex-start). NEITHER column grows to fill the
+ * row: each sizes to its widest panel, and the leftover horizontal width is left
+ * UNUSED at the stage's right edge (the stage is justify-content: flex-start) -- not
+ * absorbed into a gap, not redistributed. Overflow is visible so a panel wider than
+ * its column is never clipped. */
 .pac-col {
   display: flex; flex-direction: column; gap: var(--gap);
   align-items: flex-start; min-height: 0;
 }
-/* The left column GROWS to fill the width the right column does not need, but the code
- * panel is CAPPED at its widest line (the engine's inline max-width, below) rather than
- * stretching to fill that column: structure claims its natural width, then CODE takes
- * only as much as its longest line needs and the leftover column width stays empty to
- * its right -- the width analogue of the empty space left at the foot of the shorter
- * column. The cap includes a scrollbar reserve, so the widest line -- and the vertical
- * scrollbar a long listing needs -- always fit without a sideways scroll. (An earlier
- * bare "size to content" rule capped with NO such reserve and let a long listing's
- * scrollbar push its widest line off the edge; the reserve is what fixes that, so the
- * panel can hug its content without the regression -- and without the large dead band
- * that filling the whole column left to the right of the code on every step.) */
-.pac-col[data-side="left"]  { flex: 1 1 auto; min-width: 0; }
+/* NEITHER column grows (flex-grow 0). The code panel is given a DEFINITE width by the
+ * engine -- its widest line plus the scrollbar reserve, and no more (min(codeCeilW,
+ * the width the row leaves after the right column takes its natural width), floored at
+ * ~60 chars) -- so the left column hugs that width instead of stretching to fill the
+ * row. The right column hugs its widest panel. Whatever width is left over sits UNUSED
+ * to the right of both columns, rather than inflating the left column and opening a gap
+ * between the code and the right column (which is what growing the left column did).
+ * The left column may still SHRINK (flex-shrink 1) if a viewport is narrower than the
+ * content; the code's min-width is its compression floor. The code's width includes a
+ * scrollbar reserve, so a long listing's vertical scrollbar -- and its widest line --
+ * always fit without a sideways scroll. (An earlier bare "size to content" rule capped
+ * with NO such reserve and let a classic scrollbar push the widest line off the edge.) */
+.pac-col[data-side="left"]  { flex: 0 1 auto; min-width: 0; }
 .pac-col[data-side="right"] { flex: 0 0 auto; }
 .pac-col > .pac-panel { flex: 0 0 auto; }   /* panels keep their resolved heights */
-/* CODE and STREAM stretch to their COLUMN's width; the engine bounds that with an
- * inline max-width (= the code's longest line) so neither grows past it. Code so a
- * long line never wraps; STREAM because output has no predictable width and, sitting
- * beneath the code, matches its width so the two read as one column. (AUTHORING.md
+/* STREAM stretches to its COLUMN's width (matching the code above it so the two read
+ * as one column); the code panel is given a definite width by the engine (above), so
+ * its own align-self:stretch never exceeds that. A long code line never wraps
+ * (white-space: pre); it fits because the engine sized the panel to it. (AUTHORING.md
  * "Width rules".) */
 .pac-col > .pac-panel[data-kind="code"],
 .pac-col > .pac-panel[data-type="stream"] { align-self: stretch; }

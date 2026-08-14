@@ -722,7 +722,7 @@ important structural rule in this document, and it was learned the expensive way
 
 | Panel | Floor | Ceiling | Beyond ceiling |
 |---|---|---|---|
-| CODE | 15 rows; ~60 chars wide | listing length; longest line | scroll |
+| CODE | 15 rows; ~60 chars wide (a floor against *squeezing*, not a demand) | listing length; longest line + scrollbar reserve | scroll |
 | CALLSTACK | 2 rows | min(deepest stack, 6 frames) | scroll, active frame in view |
 | STREAM | 2 rows | 8 rows | scroll, newest line in view |
 | structure (CELLS/NODES) | content | two-thirds of the stage (height only) | scroll vertically; **never horizontally** |
@@ -812,7 +812,11 @@ content. Do NOT hardcode to a screen resolution.
   9-row panel — it does NOT pad to 15. (An earlier revision of this document said
   "pads to 15"; that was wrong and produced a 9-line listing in a 15-row box.)
   **Whole rows only** — never a half-height row clipped at an edge. Width is
-  `min(longest line across ALL language tabs, available)`, floor ~60 characters.
+  `min(longest line across ALL language tabs + scrollbar reserve, available)`, with the
+  ~60-character floor applying only when the listing has lines that long (it stops a
+  greedy structure *squeezing* the code, and is never a demand to fill leftover width).
+  The panel is **exactly this wide and no wider** — the leftover width in the row is
+  left unused (see "Where panels go" below), not filled.
   **Resolve on load, hold constant**: switching language tabs or advancing steps must
   not change either dimension.
   The highlighted line auto-scrolls into view, holding roughly the middle with context
@@ -849,9 +853,20 @@ the OTHER column's content and stretched to 37 rows, 22 of them dead.
 horizontally.** A student reading a data structure must see its shape; a horizontally
 scrolled structure teaches nothing.
 
-- **Resolution order (width):** structure panels claim their natural width → fixed-
-  content panels claim theirs → CODE takes what remains, down to ~60 characters →
-  STREAM matches its column.
+- **Resolution order (width):** structure panels and fixed-content panels claim their
+  natural width → **CODE is sized to its own widest line plus the scrollbar reserve, and
+  NO MORE** — `min(widest line + SCROLLBAR, the width the row leaves after the other
+  panels)`, floored at ~60 characters *only when the listing actually has lines that
+  long* → STREAM matches its column. CODE does **not** "take what remains": the
+  ~60-character figure is a floor against being *squeezed* by a greedy structure, never
+  a demand to fill leftover width. (This replaces the earlier "CODE takes what remains,
+  down to ~60 characters" wording, which read as a demand to fill and made the code
+  panel's left column stretch across the row.)
+- **Leftover horizontal width is left UNUSED**, at the row's right edge. No panel and no
+  column stretches to absorb it; nothing is centred or redistributed — it is simply
+  left. The left column hugs the code's width (it does not grow to fill the row), so the
+  empty space sits at the far right, never as a gap between the code and the panels to
+  its right. A code panel rendered wider than its content is a defect.
 - **The sum of a row's widths plus gaps never exceeds the viewport.** No panel may be
   positioned partly outside it. Off-screen content is unreachable, which is strictly
   worse than any amount of wasted space.
