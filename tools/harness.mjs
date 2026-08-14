@@ -35,9 +35,15 @@
  *      LOADED spec, so code comments and CODE listings are exempt, and the
  *      `assignment` rule fires only after the/your/this, so the CS sense is left alone.
  *   8. NO HORIZONTAL OVERFLOW -- the CODE panel and every STRUCTURE panel must fit
- *      their width at every step: scrollWidth > clientWidth (a sideways scrollbar) is
- *      a failure, reported with both pixel values. A structure never scrolls sideways,
- *      and CODE takes all the width the other column leaves, so its widest line fits.
+ *      their width at every step, INCLUDING the width a classic scrollbar would steal.
+ *      A panel that scrolls vertically loses ~17px to its scrollbar on Windows (where
+ *      every student and the instructor run these), but CI's headless Chromium renders
+ *      0px OVERLAY scrollbars and never sees that loss -- so a raw scrollWidth >
+ *      clientWidth test is blind to it (it passed while #51 shipped a 16px clearance
+ *      that overflowed on Windows). This measures the UNCLAMPED content width and, for a
+ *      vertically-scrolling panel, requires it to fit within clientWidth - SCROLLBAR;
+ *      a non-scrolling panel keeps the plain clientWidth limit. A structure never
+ *      scrolls sideways, and CODE takes all the width the other column leaves.
  *   9. COURSES COVERAGE -- courses.json parses; every content/*.js appears in at least
  *      one course and at most once per course (a shared Phase-2 animation may serve
  *      several courses) and every listed file exists; every ds assignment A1..A13 has a
@@ -56,6 +62,17 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const VIEWPORT = { width: 1600, height: 1000 };   // fixed, so results are deterministic
 const EPS = 0.5;                                  // sub-pixel tolerance for layout drift
 const px = n => (Math.round(n * 10) / 10);        // 1-decimal, so a real change never prints as "32->32"
+// Classic (Windows) scrollbar width, in px. A panel that scrolls VERTICALLY shows a
+// scrollbar that, on Windows -- where every student and the instructor actually run
+// these -- eats this many px of the content width. CI's headless Chromium renders 0px
+// OVERLAY scrollbars, so it never observes that loss; check 8 therefore models it
+// ARITHMETICALLY (subtract SCROLLBAR from the available width for a scrolling panel)
+// rather than measuring it. This MUST equal the engine's own reserve -- the constant
+// `SCROLLBAR` in engine/engine.js (layoutStage), which widens the code panel by the same
+// 17px so its widest line clears the scrollbar -- so the check and the engine agree by
+// construction: the check flags exactly the clearance the engine is built to leave.
+// Change one, change the other.
+const SCROLLBAR = 17;
 
 /* ------------------------------------------------------------------ discovery */
 
@@ -326,14 +343,38 @@ const SIZE_SIG = () => {
   return sig;
 };
 
-/* Horizontal overflow of the CODE panel and every STRUCTURE panel. A structure a
- * student is reading must never scroll sideways, and the width policy (AUTHORING.md
- * "Where panels go") gives CODE all the width the other column does not need, so its
- * widest line must fit too. Measures the scroll containers (the panel body, plus the
- * inner .pac-code for the code panel): scrollWidth > clientWidth is a sideways
- * scrollbar. Book panels are exempt (the policy names structure + CODE). Runs in the
- * page. */
-const H_OVERFLOW = () => {
+/* Horizontal overflow of the CODE panel and every STRUCTURE panel -- INCLUDING the
+ * overflow a classic scrollbar would cause but CI's 0px overlay scrollbar hides. A
+ * student reading a structure must never scroll it sideways, and the width policy
+ * (AUTHORING.md "Where panels go") gives CODE all the width the other column does not
+ * need, so its widest line must fit too.
+ *
+ * The naive test is scrollWidth > clientWidth. Two problems it does NOT catch:
+ *   - scrollWidth CLAMPS to clientWidth the moment content fits, so it cannot tell a
+ *     panel with 1px to spare from one with 200px; and
+ *   - a panel that scrolls VERTICALLY loses `scrollbar` px to its scrollbar on Windows,
+ *     which CI (0px overlay scrollbars) never renders.
+ * So this measures the UNCLAMPED content width (the rightmost leaf-element edge --
+ * scrollWidth is exact only while it overflows) and, for a vertically-scrolling panel,
+ * requires that width to fit within clientWidth - `scrollbar`. A non-scrolling panel
+ * keeps the plain clientWidth limit. Book panels are exempt (the policy names structure
+ * + CODE). Runs in the page. */
+const H_OVERFLOW = (scrollbar) => {
+  // Unclamped content width: the rightmost LEAF-element edge relative to the scroller's
+  // content-box left. scrollWidth would report clientWidth back once content fits;
+  // measuring leaves (elements with no element children) skips the wrappers that stretch
+  // to fill the scroller -- a code line, a flex row -- which are what make scrollWidth
+  // clamp, and reads the actual text/box extent underneath them.
+  const contentWidth = el => {
+    const base = el.getBoundingClientRect().left + el.clientLeft - el.scrollLeft;
+    let max = 0;
+    for (const c of el.querySelectorAll('*')) {
+      if (c.firstElementChild) continue;                 // leaves only
+      const r = c.getBoundingClientRect();
+      if (r.width || r.height) max = Math.max(max, r.right - base);
+    }
+    return max;
+  };
   const out = [];
   [...document.querySelectorAll('.pac-panel')].forEach((p, pi) => {
     const kind = p.dataset.kind;
@@ -343,8 +384,11 @@ const H_OVERFLOW = () => {
     if (kind === 'code') els.push(p.querySelector('.pac-code'));
     for (const el of els) {
       if (!el) continue;
-      if (el.scrollWidth - el.clientWidth > 0)
-        out.push({ key: `panel[${pi}] ${kind} "${title}"`, sw: el.scrollWidth, cw: el.clientWidth });
+      const vScroll = el.scrollHeight - el.clientHeight > 1;     // a vertical scrollbar will be present on Windows
+      const limit   = el.clientWidth - (vScroll ? scrollbar : 0);
+      const content = el.scrollWidth > el.clientWidth ? el.scrollWidth : contentWidth(el);
+      if (content > limit + 0.5)                                 // +0.5: ignore sub-pixel measurement noise
+        out.push({ key: `panel[${pi}] ${kind} "${title}"`, content, cw: el.clientWidth, limit, vScroll });
     }
   });
   return out;
@@ -382,9 +426,10 @@ async function runAnimation(browser, base, name) {
     const ref = await page.evaluate(SIZE_SIG);
     const recordOverflow = (arr, step) => {
       for (const o of arr)
-        fails.overflow.push(`${name}: step ${step}: ${o.key} scrolls horizontally (scrollWidth ${o.sw}px > clientWidth ${o.cw}px)`);
+        fails.overflow.push(`${name}: step ${step}: ${o.key} overflows horizontally: content ${px(o.content)}px > ${px(o.limit)}px available` +
+          (o.vScroll ? ` (clientWidth ${px(o.cw)}px − ${SCROLLBAR}px classic scrollbar)` : ` (clientWidth ${px(o.cw)}px)`));
     };
-    recordOverflow(await page.evaluate(H_OVERFLOW), 0);
+    recordOverflow(await page.evaluate(H_OVERFLOW, SCROLLBAR), 0);
     for (let step = 1; step < nSteps; step++) {
       const advanced = await page.evaluate(() => {
         const btn = document.querySelector('.pac-controls [data-act="next"]');
@@ -394,7 +439,7 @@ async function runAnimation(browser, base, name) {
       });
       if (!advanced.ok) { fails.integrity.push(`${name}: ${advanced.why}`); break; }
       await page.waitForTimeout(8);
-      recordOverflow(await page.evaluate(H_OVERFLOW), step);
+      recordOverflow(await page.evaluate(H_OVERFLOW, SCROLLBAR), step);
       const cur = await page.evaluate(SIZE_SIG);
       for (const key of Object.keys(ref)) {
         if (!(key in cur)) continue;                   // content added/removed -> not a resize
