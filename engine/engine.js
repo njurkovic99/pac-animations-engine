@@ -206,6 +206,14 @@ export class Engine {
     const lineH   = parseFloat(cs.getPropertyValue('--code-line-h')) || 20.6;
     const bodyPad = parseFloat(cs.getPropertyValue('--body-pad')) || 22;
     const BORDER  = 2;                          // a panel's 1px top + bottom border
+    // Horizontal room the code panel keeps to the RIGHT of its widest line, so a long
+    // listing's vertical scrollbar never overlaps that line and forces a sideways
+    // scroll. This is the slack the old "code fills the column" behaviour provided for
+    // free and the earlier bare "size to content" rule dropped -- reserving it
+    // explicitly is what lets the panel hug its widest line without that regression.
+    // A classic scrollbar is ~17px; the CI/headless overlay scrollbar is 0px, so this
+    // reserve is invisible to the harness and must be a constant, not a measurement.
+    const SCROLLBAR = 17;
     // Floor/ceiling values come from SIZE_POLICY (data), never inline literals.
     const floorPx = cls => SIZE_POLICY[cls].floorRows * lineH + bodyPad;
 
@@ -333,13 +341,21 @@ export class Engine {
       const num = codeEl?.querySelector('.pac-code-num');
       if (num) codeGutterW = num.getBoundingClientRect().width + (parseFloat(getComputedStyle(num).marginRight) || 12);
     }
-    // Code's CEILING width (item "code needs a width ceiling"): its widest line plus
-    // a small right-hand allowance so the last glyph never touches the border. This
-    // is the MAX the panel ever takes -- like the 'listing' height ceiling caps its
-    // rows, this caps its columns, so on a wide stage the panel is exactly as wide as
-    // its longest line and the leftover stays EMPTY to its right (not distributed,
-    // not handed to the structure -- that would undo item 39).
+    // Code's CONTENT width: its widest line plus a one-character allowance so the last
+    // glyph never touches the border. This is the basis of the FLOOR (codeMinW below);
+    // the scrollbar reserve is deliberately NOT folded in here, so a borderline ~60-char
+    // listing is not nudged past the minCh floor and made wider than it was.
     const codeContentW = code ? Math.round(codeWidestW + Math.ceil(codeCharW)) : 0;
+    // Code's CEILING width (item "code needs a width ceiling"): the content width plus a
+    // SCROLLBAR reserve, so a long listing's vertical scrollbar sits to the RIGHT of the
+    // widest line rather than over it. This is the MAX the panel ever takes -- like the
+    // 'listing' height ceiling caps its rows, this caps its columns, so on a wide stage
+    // the panel is exactly as wide as its longest line (plus that reserve) and the
+    // leftover column width stays EMPTY to its right (not distributed, not handed to the
+    // structure -- that would undo item 39). The reserve is why capping here does NOT
+    // reintroduce the sideways-scroll the bare "size to content" rule caused: the widest
+    // line always clears the scrollbar.
+    const codeCeilW = code ? codeContentW + SCROLLBAR : 0;
     // Code's FLOOR width: its widest line uncompressed, but never DEMANDING more than
     // `minCh` characters -- a short listing needs only its own width (structure gets
     // the rest); a listing with lines longer than minCh is held at minCh and scrolls,
@@ -504,7 +520,7 @@ export class Engine {
       const blocks = [];
       for (const p of this.panels.values()) {
         if (p.kind === 'code') {
-          blocks.push({ el: code.el, w: codeContentW, h: codeSingleH, floor: codeFloor, kind: 'code' });
+          blocks.push({ el: code.el, w: codeCeilW, h: codeSingleH, floor: codeFloor, kind: 'code' });
         } else if (p.kind === 'structure') {
           const nat = outer(p, p.contentH);
           blocks.push({ el: p.el, w: p.contentW, h: nat, floor: Math.min(nat, structFloor), kind: 'structure', p });
@@ -561,7 +577,7 @@ export class Engine {
       for (const row of rows) for (const blk of row.blocks) {
         if (blk.kind === 'code') {
           code.el.style.minWidth = ''; code.el.style.maxWidth = '';
-          code.el.style.width = `${Math.round(codeContentW)}px`;
+          code.el.style.width = `${Math.round(codeCeilW)}px`;
           const body = code.el.querySelector('.pac-panel-body');
           body.style.height = `${Math.round(row.h - code.headerH - BORDER)}px`;
           const codeEl = body.querySelector('.pac-code');
@@ -656,29 +672,32 @@ export class Engine {
     // branches. 'natural' panels (structure, strips, callstack) take their full
     // content width and left-align -- never compressed, never horizontally scrolled.
     // 'column' (stream) fills its column via CSS. 'content' (code) is bounded on BOTH
-    // sides: a CEILING at its widest line (codeContentW) and a FLOOR at codeMinW =
-    // min(widest line, ~60 chars). The ceiling is the fix for the code panel demanding
-    // more width than any line can use: without it the left column grew to fill the
-    // width the right column did not need and the code panel stretched to that, leaving
-    // a permanent dead band to the right of the widest line on every step. minCh is a
-    // limit on SHRINKING (it stops a greedy structure compressing the code below ~60
-    // chars, and only bites when the listing actually has lines that long), never a
-    // demand for space -- so a listing narrower than 60 chars now demands only its
-    // widest line and the leftover column width stays EMPTY, exactly as the code's
-    // 'listing' height ceiling leaves empty rows below a short listing (item 39). A
-    // listing WIDER than 60 chars is unchanged: it demands its widest line and refuses
-    // compression below 60. codeContentW already carries a one-character allowance past
-    // the widest line so the last glyph never touches the border, and the widest line
-    // is measured across every SHOWN language tab, so a `?lang=`-narrowed page reserves
-    // only the width of the single listing it shows. Resolved once here, so the width
-    // never changes as steps advance. ----
+    // sides: a CEILING at codeCeilW (its widest line + a scrollbar reserve) and a FLOOR
+    // at codeMinW = min(widest line, ~60 chars). The ceiling is the fix for the code
+    // panel demanding more width than any line can use: without it the left column grew
+    // to fill the width the right column did not need and the code panel stretched to
+    // that, leaving a permanent dead band to the right of the widest line on every step.
+    // minCh is a limit on SHRINKING (it stops a greedy structure compressing the code
+    // below ~60 chars, and only bites when the listing actually has lines that long),
+    // never a demand for space -- so a listing narrower than 60 chars now takes only its
+    // widest line (plus the scrollbar reserve) and the leftover column width stays EMPTY,
+    // exactly as the code's 'listing' height ceiling leaves empty rows below a short
+    // listing (item 39). A listing WIDER than 60 chars is unchanged: it takes its widest
+    // line and refuses compression below 60. The scrollbar reserve in codeCeilW keeps a
+    // long listing's vertical scrollbar to the right of that line instead of over it --
+    // the slack the old column-fill gave for free, which is why capping here does not
+    // bring back the sideways-scroll the bare "size to content" rule caused. The reserve
+    // is NOT in codeMinW, so a borderline ~60-char listing is not nudged wider than it
+    // was. The widest line is measured across every SHOWN
+    // language tab, so a `?lang=`-narrowed page reserves only the width of the single
+    // listing it shows. Resolved once here, so the width never changes as steps advance. ----
     for (const p of [...structure, ...book]) {
       const w = SIZE_POLICY[this._sizeClass(p)].width;
       p.el.style.width = w === 'column' ? '' : `${Math.round(p.contentW)}px`;
     }
     if (code) {
       code.el.style.minWidth = `${codeMinW}px`;
-      code.el.style.maxWidth = `${codeContentW}px`;    // ceiling: never wider than its widest line; leftover column width stays empty
+      code.el.style.maxWidth = `${codeCeilW}px`;       // ceiling: widest line + scrollbar reserve; leftover column width stays empty
     }
     // STREAM beneath the code shares its column and stretches to the same width, so it
     // needs no explicit cap -- the column bounds both. (A stream balanced into the
