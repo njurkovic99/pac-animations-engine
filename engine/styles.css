@@ -134,17 +134,17 @@ body {
   display: flex; flex-direction: column; gap: var(--gap);
   align-items: flex-start; min-height: 0;
 }
-/* The left column GROWS to fill the width the right column does not need, and the
- * code panel -- stretched to the column -- takes it. This is the documented width
- * policy (AUTHORING.md "Where panels go — column flow and width priority": structure
- * claims its natural width, then CODE takes what remains, down to ~60 characters). A
- * code panel wider than its longest line shows empty space to the right of the lines,
- * as any code editor does; that is the width analogue of the empty space left at the
- * foot of the shorter column, and it is what guarantees the widest line -- and the
- * vertical scrollbar a long listing needs -- always fits without a sideways scroll.
- * (Supersedes the earlier "size to content" rule, which left the code with no
- * horizontal slack and let a long listing's scrollbar push its widest line off the
- * edge.) */
+/* The left column GROWS to fill the width the right column does not need, but the code
+ * panel is CAPPED at its widest line (the engine's inline max-width, below) rather than
+ * stretching to fill that column: structure claims its natural width, then CODE takes
+ * only as much as its longest line needs and the leftover column width stays empty to
+ * its right -- the width analogue of the empty space left at the foot of the shorter
+ * column. The cap includes a scrollbar reserve, so the widest line -- and the vertical
+ * scrollbar a long listing needs -- always fit without a sideways scroll. (An earlier
+ * bare "size to content" rule capped with NO such reserve and let a long listing's
+ * scrollbar push its widest line off the edge; the reserve is what fixes that, so the
+ * panel can hug its content without the regression -- and without the large dead band
+ * that filling the whole column left to the right of the code on every step.) */
 .pac-col[data-side="left"]  { flex: 1 1 auto; min-width: 0; }
 .pac-col[data-side="right"] { flex: 0 0 auto; }
 .pac-col > .pac-panel { flex: 0 0 auto; }   /* panels keep their resolved heights */
